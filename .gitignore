@@ -1,0 +1,17 @@
+node_modules/
+speech/
+.setup-cache/
+dist/
+out/
+*.lnk
+*.log
+.env
+.env.*
+*.enc
+settings.json
+conversations.json
+assistant-data.json
+provider-health.json
+kokoro-cache/
+.DS_Store
+Thumbs.db
