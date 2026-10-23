@@ -207,7 +207,7 @@ function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText
   return new Promise((resolve, reject) => {
     let output = '', sessionId = '', stdoutLines = '';
     let errors = '';
-    const decode = require('./assistant-core').createDecoder(provider, onText, activity=>{const current=jobContext.getStore();if(current){current.events.push({...activity,at:Date.now()});current.events=current.events.slice(-100);emitJobs();}});
+    const decode = require('./assistant-core').createDecoder(provider, onText, activity=>{const current=jobContext.getStore();if(current){current.events.push({...activity,provider,at:Date.now()});current.events=current.events.slice(-100);emitJobs();}});
     let timedOut = false;
     const child = spawn(executable, args, { cwd, windowsHide: true, shell: false, env, stdio: [input === null ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     if (input !== null) {
@@ -330,7 +330,7 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   if(job){job.interrupt=()=>controller.abort();if(job.stopped)controller.abort();}
   reportProviderProgress('codex','Codex connected · working');
   try{return await codexConnection.run({prompt,cwd,settings,sessionId:previousSessionId,onText,signal:controller.signal,
-    onSession:id=>{if(job)job.sessionId=id;},activity:event=>{if(job){job.events.push({...event,at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}});}
+    onSession:id=>{if(job)job.sessionId=id;},activity:event=>{if(job){job.events.push({...event,provider:'codex',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}});}
   finally{job?.signal?.removeEventListener('abort',abortParent);if(job)job.interrupt=previousInterrupt||null;}
 
 }
@@ -420,7 +420,7 @@ async function startCollaboration(event, input) {
     let exceeded=false;
     const timer=setTimeout(()=>{exceeded=true;controller.abort();},request.maxRuntimeSeconds*1000-usedMs);
     const heartbeat=setInterval(()=>{persistJobs();emitJobs();},5000);heartbeat.unref();
-    const announce=status=>{if(job.stopped||controller.signal.aborted)throw Error(exceeded?'Task runtime budget reached.':'Collaboration stopped.');job.statusText=status;emitJobs();if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status,workspaceId:job.workspaceId});};
+    const announce=status=>{if(job.stopped||controller.signal.aborted)throw Error(exceeded?'Task runtime budget reached.':'Collaboration stopped.');job.statusText=status;job.events.push({kind:'stage',text:status,at:Date.now()});job.events=job.events.slice(-100);emitJobs();if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status,workspaceId:job.workspaceId});};
     try{
       const project=previous?.projectSnapshot||await workspace().profile(request.profileId);job.projectSnapshot=project;
       const attachmentContext=await workspace().attachmentContext(request.attachments);

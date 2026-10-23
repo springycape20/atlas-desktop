@@ -29,13 +29,14 @@
   `;
   style.textContent += '.colab-chat-main{height:calc(100vh - 155px);min-height:0;overflow:hidden}.colab-chat-header,.colab-composer{flex-shrink:0;max-height:42vh;overflow:auto}.colab-transcript{flex:1 1 0;min-height:0}.colab-config{flex-shrink:0;max-height:30vh;overflow:auto}@media(max-width:750px){.colab-chat-main{height:75vh;min-height:0}}';
   style.textContent += '.colab-config[open]{max-height:24vh;flex-shrink:1;min-height:40px}.colab-composer{flex:0 1 auto;min-height:160px;max-height:42vh;overflow:auto}.colab-composer .attachment-bar{margin:3px 0}.colab-composer .attachment-bar p{margin:4px 0}.colab-composer textarea{min-height:60px}.colab-compose-footer{position:sticky;bottom:0;background:#0c171e;padding:6px 0}';
+  style.textContent += '.colab-composer{min-height:0;max-height:46vh}.colab-composer textarea{box-sizing:border-box;min-height:48px;height:48px;max-height:180px;resize:none;overflow-y:hidden;padding:12px 14px}.colab-work{margin:12px 0 18px;border:1px solid #28434d;border-radius:10px;padding:10px 12px;color:#92b2bd}.colab-work summary{cursor:pointer;font:12px/1.6 Segoe UI,sans-serif}.colab-work-list{max-height:24vh;overflow:auto;margin-top:8px}.colab-work-step{border-top:1px solid #213840;padding:8px 0;font:11px/1.6 Segoe UI,sans-serif}.colab-work-step pre{font:11px/1.6 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0;color:#bed4dd}.colab-work-step[data-status=failed]{color:#edb88c}.colab-work-note{font:10px/1.5 Segoe UI,sans-serif;color:#7897a3;margin:6px 0 0}';
   document.head.append(style);
   const panel = document.createElement('section'); panel.className = 'colab-workspace'; panel.hidden = true; panel.setAttribute('aria-label', 'Colab chat workspace');
   panel.innerHTML = `<aside class="colab-chats" aria-label="Colab conversations"><button class="quiet-button" id="colabNewChat" type="button">＋ New Colab chat</button><div class="colab-chat-list" id="colabChats"></div></aside>
     <div class="colab-chat-main"><header class="colab-chat-header"><div><h1>Colab</h1><p>Codex + Claude · one task, one shared result</p></div><span class="session-chip">PRIVATE COLLABORATION</span></header>
     <details class="colab-config" id="colabConfig"><summary>Models, effort and working folder</summary><div class="colab-config-grid"><label class="field"><span>Codex model</span><select id="colabCodexModel"></select></label><label class="field"><span>Claude model</span><select id="colabClaudeModel"></select></label><label class="field"><span>Shared effort</span><select id="colabEffort"><option value="low">Low · faster</option><option value="medium">Medium · balanced</option><option value="high">High · deeper review</option><option value="xhigh">Extra high</option><option value="max">Maximum</option></select></label></div><div class="colab-folder-row"><button class="quiet-button" type="button" id="colabChooseFolder">Choose folder</button><span id="colabFolder"></span></div></details>
     <div class="colab-transcript" id="colabTranscript" role="log" aria-label="Colab messages" aria-live="polite"></div>
-    <form class="colab-composer" id="colabForm"><label class="sr-only" for="colabTask">Message Colab</label><textarea id="colabTask" rows="3" maxlength="20000" aria-label="Message Colab" placeholder="Give Codex and Claude a task, or ask a follow-up…"></textarea><div class="colab-compose-footer"><span id="colabStatus" role="status" aria-live="polite"></span><button class="quiet-button" id="colabStop" type="button" hidden>Stop</button><button class="primary-button" id="colabStart" type="submit">Send to Colab</button></div></form></div>`;
+    <form class="colab-composer" id="colabForm"><label class="sr-only" for="colabTask">Message Colab</label><textarea id="colabTask" rows="1" maxlength="20000" aria-label="Message Colab" placeholder="Give Codex and Claude a task, or ask a follow-up…"></textarea><div class="colab-compose-footer"><span id="colabStatus" role="status" aria-live="polite"></span><button class="quiet-button" id="colabStop" type="button" hidden>Stop</button><button class="primary-button" id="colabStart" type="submit">Send to Colab</button></div></form></div>`;
   document.querySelector('.layout').append(panel);
   const search=document.createElement('input');search.id='colabSearch';search.className='history-search';search.placeholder='Search Colab chats…';search.setAttribute('aria-label','Search Colab chats');panel.querySelector('#colabChats').before(search);search.oninput=()=>render();
   const controls=document.createElement('div');controls.className='colab-config-grid';controls.innerHTML='<label class="field">Mode<select id="colabMode"><option value="build">Build and review</option><option value="plan">Plan · read-only</option><option value="debug">Debug</option><option value="compare">Compare approaches · read-only</option></select></label><label class="field">Maximum runtime (minutes)<input id="colabMinutes" type="number" min="1" max="120" value="15"></label><label class="field">Maximum provider passes<input id="colabPasses" type="number" min="1" max="6" value="3"></label><label class="toggle-row"><span>Review edits in an isolated Git worktree</span><input id="colabIsolated" type="checkbox" checked></label>';panel.querySelector('#colabConfig').append(controls);
@@ -90,6 +91,37 @@
     el('colabFolder').textContent = chat.cwd || 'Choose a working folder'; el('colabFolder').title = chat.cwd || '';
     el('colabChooseFolder').disabled = chat.busy;
   }
+  function sizeComposer(){
+    const input=el('colabTask'),limit=Math.max(48,Math.min(180,Math.floor(window.innerHeight*.24)));
+    input.style.height='auto';input.style.height=Math.max(48,Math.min(limit,input.scrollHeight))+'px';input.style.overflowY=input.scrollHeight>limit?'auto':'hidden';
+  }
+  window.addEventListener('resize',sizeComposer);
+  function captureActivity(chat,job){
+    chat.activityRuns ||= [];let run=chat.activityRuns.find(run=>run.id===job.id);
+    if(!run){run={id:job.id,status:job.status,expanded:job.status==='running',events:[]};chat.activityRuns.push(run);}
+    if(run.status==='running'&&job.status!=='running')run.expanded=false;
+    run.status=job.status;
+    if(Array.isArray(job.events)){
+      const steps=new Map();for(const event of job.events.slice(-100)){
+        const text=String(event.text||'').slice(0,800);if(!text)continue;
+        const key=event.id?event.provider+':'+event.id:event.kind+':'+text;
+        steps.set(key,{kind:String(event.kind||'activity'),text,provider:event.provider||'',status:event.status||'',at:Number(event.at)||job.startedAt||0,...(Number.isInteger(event.exitCode)?{exitCode:event.exitCode}:{})});
+      }run.events=[...steps.values()].slice(-60);
+    }
+    chat.activityRuns=chat.activityRuns.slice(-6);
+  }
+  function activityView(run){
+    const details=document.createElement('details');details.className='colab-work';details.dataset.jobId=run.id;details.open=run.expanded===true;
+    const summary=document.createElement('summary'),list=document.createElement('div'),note=document.createElement('p');
+    summary.textContent=(run.status==='running'?'Working':run.status==='completed'?'Work completed':run.status==='paused'?'Work paused':run.status==='failed'?'Work interrupted':'Work stopped')+' · '+run.events.length+' reported steps';
+    list.className='colab-work-list';list.setAttribute('aria-label','Reported task activity');
+    for(const event of run.events){const row=document.createElement('div'),label=document.createElement('div'),text=document.createElement('pre');row.className='colab-work-step';row.dataset.status=event.status;
+      label.textContent=[event.provider?.toUpperCase(),event.kind==='command'?'Command':event.kind==='files'?'Files':event.kind==='plan'?'Plan':'Progress',event.status,event.exitCode!==undefined?'exit '+event.exitCode:''].filter(Boolean).join(' · ');
+      text.textContent=event.text;row.append(label,text);list.append(row);
+    }
+    note.className='colab-work-note';note.textContent='Recent provider-reported actions and progress summaries.';details.append(summary,list,note);
+    details.addEventListener('toggle',()=>{if(details.isConnected){run.expanded=details.open;save();}});return details;
+  }
   function render() {
     const chat = current(), list = el('colabChats'), transcript = el('colabTranscript');
     list.replaceChildren();
@@ -100,17 +132,23 @@
       button.append(title, detail); button.onclick = () => { selected = item.id; save(); render(); }; list.append(button);
     }
     const atBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
+    const activityScroll=new Map([...transcript.querySelectorAll('.colab-work')].map(details=>{const list=details.querySelector('.colab-work-list');return [details.dataset.jobId,{top:list.scrollTop,atBottom:list.scrollHeight-list.scrollTop-list.clientHeight<30}];}));
     transcript.replaceChildren();
     if (!chat.messages.length) {
       const empty = document.createElement('div'); empty.className = 'colab-empty'; const title = document.createElement('strong'); title.textContent = 'Two perspectives. One conversation.';
       empty.append(title, document.createTextNode('Describe your task. Codex works, Claude reviews, and you receive their final summary here.')); transcript.append(empty);
     }
+    const shownRuns=new Set();
     for (const message of chat.messages) {
+      const run=message.role==='assistant'&&(chat.activityRuns||[]).find(run=>run.id===message.jobId);
+      if(run&&!shownRuns.has(run.id)){transcript.append(activityView(run));shownRuns.add(run.id);}
       const article = document.createElement('article'); article.className = 'colab-message ' + (message.error ? 'error' : message.role === 'user' ? 'user' : 'assistant');
       const label = document.createElement('strong'), content = document.createElement('p'); label.textContent = message.role === 'user' ? 'You' : message.error ? 'Could not complete this task' : 'Colab · Codex + Claude'; content.textContent = message.content; article.append(label, content); transcript.append(article);
     }
+    for(const run of chat.activityRuns||[])if(!shownRuns.has(run.id))transcript.append(activityView(run));
+    for(const details of transcript.querySelectorAll('.colab-work')){const list=details.querySelector('.colab-work-list'),prior=activityScroll.get(details.dataset.jobId);list.scrollTop=!prior||prior.atBottom?list.scrollHeight:prior.top;}
     if (atBottom) transcript.scrollTop = transcript.scrollHeight;
-    el('colabTask').value = chat.draft || '';
+    if(el('colabTask').value!==(chat.draft||''))el('colabTask').value=chat.draft||'';sizeComposer();
     el('colabStart').disabled = chat.busy || chat.preparing; el('colabStop').hidden = !chat.busy; el('colabStop').disabled = !chat.jobId;
     el('colabStatus').textContent = chat.status || 'Only the final summary appears when both models finish.';
     el('colabPin').textContent=chat.pinned?'Unpin':'Pin';
@@ -120,7 +158,7 @@
     window.dispatchEvent(new Event('atlas-colab-chat-change'));
   }
   el('colabNewChat').onclick = () => { makeChat(); save(); render(); el('colabConfig').open = true; el('colabTask').focus(); };
-  el('colabTask').oninput = () => { current().draft = el('colabTask').value; save(); };
+  el('colabTask').oninput = () => { current().draft = el('colabTask').value; sizeComposer(); save(); };
   el('colabTask').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); if (!current().busy) el('colabForm').requestSubmit(); } };
   for (const [id, key] of [['colabCodexModel', 'codexModel'], ['colabClaudeModel', 'claudeModel'], ['colabEffort', 'effort']]) el(id).onchange = () => { current()[key] = el(id).value; save(); };
   el('colabChooseFolder').onclick = async () => {
@@ -152,12 +190,13 @@
     if (typeof value.result === 'string' || value.error) {
       chat.busy = false; chat.finishedJob = value.id;
       chat.finishedJobs = [...(chat.finishedJobs || []), value.id].slice(-100);
-      chat.messages.push({ role: 'assistant', content: String(value.result || value.error).slice(0, 30000), ...(value.error ? { error: true } : {}) });
+      const run=(chat.activityRuns||[]).find(run=>run.id===value.id);if(run){run.status=value.error?'failed':'completed';run.expanded=false;}
+      chat.messages.push({ role: 'assistant', jobId:value.id, content: String(value.result || value.error).slice(0, 30000), ...(value.error ? { error: true } : {}) });
     } else chat.busy = true;
     save(); render();
   }
   function reconcile(jobs) {
-    for(const job of [...jobs].sort((a,b)=>(a.startedAt||0)-(b.startedAt||0))){const chat=chats.find(chat=>job.collaboration&&chat.id===job.colabChatId);if(!chat||(chat.lastJob?.startedAt||0)>(job.startedAt||0))continue;chat.lastJob={id:job.id,status:job.status,startedAt:job.startedAt,budget:job.budget,checkpointCount:job.checkpoints?.length||0,canResume:Boolean(job.request&&['paused','failed','cancelled'].includes(job.status))};if(job.workspaceId)chat.workspaceId=job.workspaceId;if(job.result?.usage)chat.usage=job.result.usage;}
+    for(const job of [...jobs].sort((a,b)=>(a.startedAt||0)-(b.startedAt||0))){const chat=chats.find(chat=>job.collaboration&&chat.id===job.colabChatId);if(!chat||(chat.lastJob?.startedAt||0)>(job.startedAt||0))continue;captureActivity(chat,job);chat.lastJob={id:job.id,status:job.status,startedAt:job.startedAt,budget:job.budget,checkpointCount:job.checkpoints?.length||0,canResume:Boolean(job.request&&['paused','failed','cancelled'].includes(job.status))};if(job.workspaceId)chat.workspaceId=job.workspaceId;if(job.result?.usage)chat.usage=job.result.usage;}
 
     for (const job of jobs.filter(job => job.collaboration && !chats.some(chat=>chat.id===job.colabChatId && (chat.lastJob?.startedAt||0)>(job.startedAt||0)))) update({ id: job.id, chatId: job.colabChatId, status: job.statusText, ...(job.status === 'completed' ? { result: job.result?.output || 'Both providers finished.' } : job.status !== 'running' ? { error: job.error || 'Collaboration stopped. Send a follow-up to continue.' } : {}) });
     save(); render();

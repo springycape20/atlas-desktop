@@ -76,7 +76,12 @@ class CodexConnection {
       t.lastItem=p.item.id;t.messages.set(p.item.id,p.item.text||old);
       if(p.item.phase==='final_answer')t.final=p.item.text;
     }
-    if(message.method==='item/started'&&p.item?.type!=='agentMessage')t.activity({kind:p.item?.type||'work',text:p.item?.command||'Working'});
+    if(['item/started','item/completed'].includes(message.method)&&p.item&& !['agentMessage','reasoning'].includes(p.item.type)){
+      const item=p.item,completed=message.method==='item/completed';
+      const text=item.type==='commandExecution'?item.command:item.type==='fileChange'?(item.changes||[]).map(change=>(change.kind?.type||change.kind||'Changed')+': '+change.path).join('\n'):item.type==='mcpToolCall'?'Tool: '+[item.server,item.tool].filter(Boolean).join(' / '):item.type==='webSearch'?'Search: '+(item.query||item.action?.query||'Web search'):item.type;
+      t.activity({id:p.threadId+':'+item.id,kind:item.type==='commandExecution'?'command':item.type==='fileChange'?'files':'activity',text:String(text||item.type).slice(0,1200),status:completed?(item.status==='failed'||(Number.isInteger(item.exitCode)&&item.exitCode!==0)?'failed':'completed'):'running',...(Number.isInteger(item.exitCode)?{exitCode:item.exitCode}:{})});
+    }
+    if(message.method==='turn/plan/updated')t.activity({kind:'plan',text:(p.plan||[]).map(step=>(step.status==='completed'?'Done: ':'Next: ')+step.step).join('\n').slice(0,1200)});
     if(message.method==='turn/completed'){
       const turn=p.turn;
       if(t.cancelled||turn.status==='interrupted')t.finish(Error('Job cancelled or paused.'));
