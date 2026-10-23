@@ -66,13 +66,13 @@ test('Colab resumes completed stages and aggregates only reported usage', async 
   assert.equal(saved.length, 1);
   calls=[];
   const resumed=createCollaboration({progress(){},runProvider:async(provider,prompt)=>{calls.push(provider);assert.match(prompt,/Completed implementation/);assert.match(prompt,/partial changes/);return {output:'Verified'};}});
-  const result=await resumed({task:'Build',settings:{},checkpoints:saved});
+  const result=await resumed({task:'Build',settings:{},checkpoints:saved,maxRounds:3});
   assert.deepEqual(calls,['claude','codex']);assert.equal(result.usage.inputTokens,10);assert.equal(result.usage.costReported,false);
 });
 test('comparison is read-only and its second perspective is independent', async () => {
   const calls=[];
   const run=createCollaboration({progress(){},runProvider:async(provider,prompt,cwd,settings)=>{calls.push({prompt,settings});return {output:'Unique perspective '+calls.length};}});
-  await run({task:'Compare',mode:'compare',settings:{permissionBypass:true}});
+  await run({task:'Compare',mode:'compare',maxRounds:3,settings:{permissionBypass:true}});
   assert.ok(calls.every(call=>call.settings.readOnly&&call.settings.codexSandbox==='read-only'&&!call.settings.permissionBypass));
   assert.ok(!calls[1].prompt.includes('Unique perspective 1'));
   assert.ok(calls[2].prompt.includes('Unique perspective 1'));
