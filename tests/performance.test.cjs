@@ -95,24 +95,57 @@ test('speech cancellation skips queued jobs and suppresses an in-flight result',
   assert.equal(generated.length, 2, 'short replies retain the warm cache');
 });
 
-async function mainHarness(t) {
-  const dir = await temporary(t), events = new Map(), updates = [];
+async function mainHarness(t, options = {}) {
+  const dir = await temporary(t), events = new Map(), updates = [], handlers = new Map();
+  const paths = { appData: path.join(dir, 'Roaming'), userData: path.join(dir, 'Roaming', 'ATLAS') };
   let finished; const quit = new Promise(resolve => { finished = resolve; });
   const localRequire = createRequire(path.join(root, 'main.js'));
   const electron = {
-    app: { on: (name, fn) => events.set(name, fn), whenReady: () => ({ then() {} }), getPath: () => dir, setPath() {}, setAppUserModelId() {}, quit: () => finished() },
+    app: { on: (name, fn) => events.set(name, fn), whenReady: () => ({ then() {} }), getPath: name => paths[name] || dir, setPath(name, value) { paths[name] = value; }, setAppUserModelId() {}, quit: () => finished() },
+    ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
     protocol: { registerSchemesAsPrivileged() {} }
   };
-  const context = vm.createContext({ console, Buffer, process, URL, setTimeout, clearTimeout, setInterval, clearInterval, structuredClone,
-    __dirname: root, require: name => name === 'electron' ? electron : localRequire(name), updates });
+  const fakeProcess = { platform: 'win32', env: { ...process.env, LOCALAPPDATA: path.join(dir, 'Local'), CODEX_EXECUTABLE: path.join(root, 'main.js') } };
+  const context = vm.createContext({ console, Buffer, process: fakeProcess, URL, setTimeout, clearTimeout, setInterval, clearInterval, structuredClone,
+    __dirname: root, require: name => name === 'electron' ? electron : options.modules?.[name] || localRequire(name), updates });
   const code = await fs.readFile(path.join(root, 'main.js'), 'utf8');
   vm.runInContext(code + `
     mainWindow = { isDestroyed: () => false, webContents: { send: (_event, patch) => updates.push(patch) } };
     assistantService = require('./assistant-service').createService({ directory: app.getPath('userData'), notify() {} });
-    globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs };
+    globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, setupIpc, sender: mainWindow.webContents };
   `, context);
-  return { ...context.harness, updates, events, quit, dir };
+  return { ...context.harness, updates, events, quit, dir, paths, handlers };
 }
+
+test('migration finds original package data despite the new product name', async t => {
+  const h = await mainHarness(t);
+  const legacy = path.join(h.paths.appData, 'atlas-local-desktop');
+  await fs.mkdir(legacy, { recursive: true });
+  await fs.mkdir(h.paths.userData, { recursive: true });
+  await fs.writeFile(path.join(legacy, 'settings.json'), '{"codexModel":"saved-model"}');
+  await fs.writeFile(path.join(legacy, 'conversations.json'), '[{"id":"saved-chat","turns":[]}]');
+  await fs.writeFile(path.join(h.paths.userData, 'settings.json'), '{"codexModel":"new-model"}');
+  await h.migrateLegacyUserData();
+  assert.equal(JSON.parse(await fs.readFile(path.join(h.paths.userData, 'settings.json'))).codexModel, 'new-model');
+  assert.equal(JSON.parse(await fs.readFile(path.join(h.paths.userData, 'conversations.json')))[0].id, 'saved-chat');
+});
+
+test('model catalog initializes a fresh connection before requesting models', async t => {
+  let connected = false;
+  class ColdConnection {
+    async connect() { connected = true; }
+    async request(method) {
+      assert.equal(connected, true, 'catalog requires an initialized app-server');
+      assert.equal(method, 'model/list');
+      return { data: [{ id: 'available-model', displayName: 'Available model' }] };
+    }
+  }
+  const h = await mainHarness(t, { modules: { './codex-connection': { CodexConnection: ColdConnection } } });
+  h.setupIpc();
+  const models = await h.handlers.get('atlas:model-catalog')({ sender: h.sender, senderFrame: { url: 'atlas://app/index.html' } }, 'codex');
+  assert.equal(models.length, 1);
+  assert.equal(models[0].id, 'available-model');
+});
 
 test('job retention preserves active/paused jobs and IPC emits only changes', async t => {
   const h = await mainHarness(t);
@@ -154,7 +187,7 @@ test('shutdown waits for finishing jobs and flushes their latest state', async t
   h.events.get('before-quit')({ preventDefault() { prevented = true; } });
   await h.quit;
   assert.equal(prevented, true);
-  const saved = JSON.parse(await fs.readFile(path.join(h.dir, 'assistant-data.json')));
+  const saved = JSON.parse(await fs.readFile(path.join(h.paths.userData, 'assistant-data.json')));
   assert.equal(saved.jobs[0].status, 'paused');
   assert.equal(saved.memories[0].text, 'Persist on exit');
 });

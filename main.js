@@ -9,7 +9,8 @@ const { pathToFileURL } = require('node:url');
 const APP_ID = 'com.springycape.atlas';
 app.setAppUserModelId(APP_ID);
 const appResourcesPath = app.isPackaged ? process.resourcesPath : __dirname;
-const legacyUserDataPath = app.getPath('userData');
+// Use the original package name: productName now changes Electron's default path.
+const legacyUserDataPath = path.join(app.getPath('appData'), 'atlas-local-desktop');
 const localUserDataPath = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'ATLAS');
 const migrateToLocalAppData = process.platform === 'win32' && path.resolve(legacyUserDataPath).toLowerCase() !== path.resolve(localUserDataPath).toLowerCase();
 if (migrateToLocalAppData) app.setPath('userData', localUserDataPath);
@@ -441,6 +442,7 @@ function setupIpc() {
     if (!executable) return [];
     try {
       codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);
+      await codexConnection.connect();
       const catalog = await codexConnection.request('model/list', { limit: 100 });
       return (catalog?.data || []).filter(item => typeof item?.id === 'string' && modelIdPattern.test(item.id))
         .map(item => ({ id: item.id, name: typeof item.displayName === 'string' ? item.displayName : item.id }));
