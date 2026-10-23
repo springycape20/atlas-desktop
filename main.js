@@ -70,10 +70,39 @@ function sanitizeSettings(value) {
   };
 }
 
+const whisperService = new (require('./whisper-service').WhisperService)(path.join(__dirname, 'speech', 'whisper', 'Release', 'whisper-server.exe'));
 let voiceWorker=null,voiceRequestCounter=0;const voiceRequests=new Map();
 function ensureVoiceWorker(){if(voiceWorker)return voiceWorker;const {Worker}=require('node:worker_threads');const worker=new Worker(path.join(__dirname,'voice-worker.cjs'),{workerData:{userData:app.getPath('userData')}});voiceWorker=worker;worker.on('message',result=>{const entry=voiceRequests.get(result.id);if(!entry)return;voiceRequests.delete(result.id);clearTimeout(entry.timer);result.error?entry.reject(Error(result.error)):entry.resolve(result.audio)});function failed(error){if(voiceWorker===worker)voiceWorker=null;for(const [id,entry]of voiceRequests){if(entry.worker===worker){clearTimeout(entry.timer);entry.reject(error);voiceRequests.delete(id)}}}worker.on('error',failed);worker.on('exit',code=>failed(Error('Local voice worker stopped ('+code+').')));return worker;}
 function kokoroSpeak(text,voice){const worker=ensureVoiceWorker(),id=++voiceRequestCounter;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{voiceRequests.delete(id);reject(Error('Local speech generation timed out.'));void worker.terminate()},90000);voiceRequests.set(id,{resolve,reject,timer,worker});worker.postMessage({id,text,voice})})}
-app.on('before-quit',()=>{codexConnection?.close();if(voiceWorker)void voiceWorker.terminate()});
+function cancelVoiceRequests() {
+  const ids = [...voiceRequests.keys()];
+  for (const entry of voiceRequests.values()) { clearTimeout(entry.timer); entry.reject(Error('Speech cancelled.')); }
+  voiceRequests.clear();
+  if (voiceWorker && ids.length) voiceWorker.postMessage({ type: 'cancel', ids });
+}
+let quitting = false;
+app.on('before-quit', event => {
+  if (quitting) return;
+  event.preventDefault(); quitting = true;
+  const finishing = [];
+  for (const job of activeJobs.values()) if (job.status === 'running') {
+    job.stopped = 'paused'; job.statusText = 'Stopping for shutdown';
+    if (job.interrupt) job.interrupt(); else job.child?.kill();
+    if (job.promise) finishing.push(job.promise);
+  }
+  codexConnection?.close(); providerHistory.close(); cancelVoiceRequests(); clearTimeout(jobsEmitTimer);
+  void (async () => {
+    let timer;
+    try { await Promise.race([Promise.allSettled(finishing), new Promise(resolve => { timer = setTimeout(resolve, 5000); })]); }
+    finally { clearTimeout(timer); }
+    for (const job of activeJobs.values()) if (job.status === 'running') job.status = 'paused';
+    persistJobs();
+    const results = await Promise.allSettled([whisperService.close(), voiceWorker?.terminate(), historyWriteQueue,
+      assistantService?.flush(), providerHealth?.flush()]);
+    for (const result of results) if (result.status === 'rejected') console.error('Shutdown save failed:', result.reason);
+    app.quit();
+  })();
+});
 function elevenKeyPath() { return path.join(app.getPath('userData'), 'elevenlabs-key.enc'); }
 async function readElevenKey() {
   const file = elevenKeyPath();
@@ -137,14 +166,27 @@ function reportProviderProgress(provider, status) {
   }
 }
 
-function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText = () => {}) {
+function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText = () => {}, env = process.env) {
   return new Promise((resolve, reject) => {
     let output = '', sessionId = '', stdoutLines = '';
     let errors = '';
     const decode = require('./assistant-core').createDecoder(provider, onText, activity=>{const current=jobContext.getStore();if(current){current.events.push({...activity,at:Date.now()});current.events=current.events.slice(-100);emitJobs();}});
     let timedOut = false;
-    const child = spawn(executable, args, { cwd, windowsHide: true, shell: false, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
-    const job=jobContext.getStore();if(job){job.child=child;if(job.stopped)child.kill();}
+    const child = spawn(executable, args, { cwd, windowsHide: true, shell: false, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const job=jobContext.getStore();
+    let abortChild;
+    if(job){
+      job.child=child;
+      const signal=job.signal;
+      abortChild=()=>{
+        if(process.platform==='win32'&&child.pid){
+          const killer=spawn('taskkill.exe',['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});
+          killer.once('error',()=>child.kill());
+        }else child.kill();
+      };
+      if(signal){if(signal.aborted)abortChild();else signal.addEventListener('abort',abortChild,{once:true});}
+      if(job.stopped)abortChild();
+    }
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', part => {
@@ -170,9 +212,10 @@ function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText
       reportProviderProgress(provider, `${provider === 'codex' ? 'Codex' : 'Claude Code'} is processing`);
     });
     const timeout = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
-    child.once('error', error => { clearTimeout(timeout); reject(new Error(`Could not start ${path.basename(executable)}: ${error.message}`)); });
+    child.once('error', error => { clearTimeout(timeout);if(job?.signal&&abortChild)job.signal.removeEventListener('abort',abortChild);reject(new Error(`Could not start ${path.basename(executable)}: ${error.message}`)); });
     child.once('close', code => {
       clearTimeout(timeout);
+      if(job?.signal&&abortChild)job.signal.removeEventListener('abort',abortChild);
       decode.finish();
       if(job){job.child=null;if(job.stopped)return reject(new Error(job.stopped==='paused'?'Job paused.':'Job cancelled.'));}
       if (timedOut) return reject(new Error(`${provider === 'codex' ? 'Codex' : 'Claude Code'} timed out after ${Math.round(timeoutMs / 60_000)} minutes. You can retry or choose the other provider explicitly.`));
@@ -187,10 +230,13 @@ function isUsageLimitError(error) {
 }
 
 function atlasHistoryPath() { return path.join(app.getPath('userData'), 'conversations.json'); }
+let atlasHistoryCache;
 async function readAtlasHistory() {
+  if (atlasHistoryCache) return structuredClone(atlasHistoryCache);
   try {
     const parsed = JSON.parse(await readFile(atlasHistoryPath(), 'utf8'));
-    return Array.isArray(parsed) ? parsed.filter(item => item && typeof item.id === 'string' && Array.isArray(item.turns)).slice(-100) : [];
+    atlasHistoryCache = Array.isArray(parsed) ? parsed.filter(item => item && typeof item.id === 'string' && Array.isArray(item.turns)).slice(-100) : [];
+    return structuredClone(atlasHistoryCache);
   } catch { return []; }
 }
 let historyWriteQueue=Promise.resolve();
@@ -205,112 +251,16 @@ async function persistAtlasHistory(items) {
   const file = atlasHistoryPath(), temp = `${file}.${randomUUID()}.tmp`;
   await writeFile(temp, JSON.stringify(trimmed), 'utf8');
   await require('node:fs/promises').rename(temp, file);
-  return trimmed;
+  atlasHistoryCache = trimmed;
+  return structuredClone(trimmed);
 }
-function transcriptText(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content.filter(part => part && typeof part === 'object' && typeof part.text === 'string' && (!part.type || /text/i.test(part.type))).map(part => part.text).join('\n');
-}
-function providerFiles(provider, limit = 20) {
-  const root = path.join(os.homedir(), provider === 'codex' ? '.codex' : '.claude', provider === 'codex' ? 'sessions' : 'projects');
-  if (!existsSync(root)) return [];
-  const files = [], queue = [{ dir: root, depth: 0 }];
-  while (queue.length && files.length < 1000) {
-    const { dir, depth } = queue.shift(); if (depth > 6) continue;
-    let entries; try { entries = readdirSync(dir, { withFileTypes: true }); } catch { continue; }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) queue.push({ dir: full, depth: depth + 1 });
-      else if (entry.isFile() && (entry.name.endsWith('.jsonl') || entry.name.endsWith('.jsonl.zst'))) { try { files.push({ file: full, modified: statSync(full).mtimeMs }); } catch {} }
-    }
-  }
-  return files.sort((a, b) => b.modified - a.modified).slice(0, limit);
-}
-function parseProviderTranscript(provider, file) {
-  const base = path.resolve(os.homedir(), provider === 'codex' ? '.codex/sessions' : '.claude/projects');
-  const resolved = path.resolve(file);
-  if (!resolved.startsWith(base + path.sep) || !existsSync(resolved)) throw new Error('Transcript is outside the provider history folder.');
-  const stat = statSync(resolved); if (!stat.isFile() || stat.size > 8_000_000) throw new Error('Transcript is too large to open.');
-  const bytes = require('node:fs').readFileSync(resolved);
-  let raw;
-  if (resolved.endsWith('.zst')) {
-    const zlib = require('node:zlib');
-    if (!zlib.zstdDecompressSync) throw new Error('This Electron runtime cannot read compressed Codex archives.');
-    raw = zlib.zstdDecompressSync(bytes, { maxOutputLength: 32_000_000 }).toString('utf8');
-  } else raw = bytes.toString('utf8');
-  const turns = []; let cwd = '', sessionId = '', updatedAt = stat.mtimeMs;
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line || line.length > 1_000_000) continue;
-    let row; try { row = JSON.parse(line); } catch { continue; }
-    let role = '', content = '';
-    if (provider === 'codex') {
-      if (row.type === 'session_meta') { cwd = row.payload?.cwd || cwd; sessionId = row.payload?.session_id || row.payload?.id || sessionId; updatedAt = Date.parse(row.payload?.timestamp || row.timestamp) || updatedAt; }
-      if (row.type === 'response_item' && ['user', 'assistant'].includes(row.payload?.role) && (row.payload.role !== 'assistant' || !row.payload.phase || row.payload.phase === 'final_answer')) { role = row.payload.role; content = transcriptText(row.payload.content); }
-    } else {
-      if (!cwd && typeof row.cwd === 'string') cwd = row.cwd;
-      if (typeof row.sessionId === 'string') sessionId = row.sessionId;
-      if (['user', 'assistant'].includes(row.type) && !row.isSidechain && row.message) { role = row.type; content = transcriptText(row.message.content); }
-    }
-    if (role && content.trim() && !/^(?:<environment_context\b|<system-reminder\b|the following is the codex agent history)/i.test(content.trim()) && !/^\[(?:typing|blank_audio)\]/i.test(content.trim())) turns.push({ role, content: content.slice(0, 12000) });
-  }
-  return { id: createHash('sha256').update(resolved).digest('hex'), sessionId, title: turns.find(turn => turn.role === 'user')?.content.replace(/\s+/g, ' ').slice(0, 76) || 'Untitled conversation', provider, cwd, updatedAt, turns: turns.slice(-50) };
-}
-function listProviderHistory(provider) {
-  return providerFiles(provider).map(({ file }) => { try { const item = parseProviderTranscript(provider, file); return { id: item.id, title: item.title, provider, cwd: item.cwd, updatedAt: item.updatedAt, turnCount: item.turns.length, sessionId: item.sessionId, searchText: item.turns.map(turn => turn.content).join(' ').slice(-2500) }; } catch { return null; } }).filter(item => item && item.turnCount);
-}
+const providerHistory = new (require('./history-client').HistoryClient)();
 function historyLookupRequested(prompt) {
   return /\b(?:previous|earlier|past|older|last|another|specific|saved|local|old)\b.{0,100}\b(?:chat|conversation|thread|session|history)\b/i.test(prompt)
     || /\b(?:chat|conversation|thread|session|history)\b.{0,100}\b(?:previous|earlier|past|older|last|another|specific|saved|local|old)\b/i.test(prompt)
     || /\b(?:find|search|look(?:\s+at|\s+up)?|open|read|review|access|recall)\b.{0,100}\b(?:chat|conversation|thread|session|history)\b/i.test(prompt);
 }
-async function findReferencedProviderHistory(prompt) {
-  const ignored = new Set(['able', 'about', 'after', 'also', 'another', 'asked', 'chat', 'chats', 'claude', 'codex', 'conversation', 'conversations', 'could', 'earlier', 'find', 'from', 'history', 'last', 'local', 'look', 'old', 'older', 'past', 'please', 'previous', 'read', 'saved', 'session', 'sessions', 'specific', 'thread', 'threads', 'that', 'their', 'this', 'what', 'when', 'where', 'which', 'with']);
-  const terms = [...new Set((prompt.toLowerCase().match(/[a-z0-9][a-z0-9_-]{2,}/g) || []).filter(term => !ignored.has(term)))].slice(0, 18);
-  const quoted = [...prompt.matchAll(/["“]([^"”]{3,100})["”]/g)].map(match => match[1].toLowerCase());
-  const candidates = [];
-  for (const provider of ['codex', 'claude']) {
-    let bytesRead = 0, inspected = 0;
-    for (const { file } of providerFiles(provider, 250)) {
-      if (inspected >= 180 || bytesRead >= 48_000_000) break;
-      let stat; try { stat = statSync(file); } catch { continue; }
-      if (!stat.isFile() || stat.size > 8_000_000 || bytesRead + stat.size > 48_000_000) continue;
-      inspected++; bytesRead += stat.size;
-      try {
-        const item = parseProviderTranscript(provider, file);
-        if (!item.turns.length) continue;
-        const title = item.title.toLowerCase();
-        const body = item.turns.map(turn => turn.content).join('\n').toLowerCase();
-        if (terms.length && !terms.some(term => title.includes(term) || body.includes(term))) continue;
-        let score = 0;
-        for (const term of terms) {
-          if (title.includes(term)) score += 8;
-          const occurrences = body.split(term).length - 1;
-          score += Math.min(occurrences, 6) * 2;
-        }
-        for (const phrase of quoted) {
-          if (title.includes(phrase)) score += 30;
-          else if (body.includes(phrase)) score += 12;
-        }
-        if (!terms.length) score = item.updatedAt / 1e12;
-        candidates.push({ item, score });
-      } catch {}
-    }
-  }
-  candidates.sort((a, b) => b.score - a.score || b.item.updatedAt - a.item.updatedAt);
-  return candidates.slice(0, terms.length ? 2 : 3).map(({ item }) => {
-    const termSet = terms.filter(term => item.title.toLowerCase().includes(term) || item.turns.some(turn => turn.content.toLowerCase().includes(term)));
-    let selected = item.turns.map((turn, index) => ({ turn, index, score: termSet.reduce((sum, term) => sum + (turn.content.toLowerCase().includes(term) ? 1 : 0), 0) })).filter(entry => entry.score > 0);
-    if (!selected.length) selected = item.turns.slice(-8).map((turn, index) => ({ turn, index: item.turns.length - Math.min(8, item.turns.length) + index }));
-    const picked = new Set();
-    for (const entry of selected.slice(-5)) { picked.add(entry.index); if (entry.index > 0) picked.add(entry.index - 1); }
-    const excerpt = [...picked].sort((a, b) => a - b).slice(-8).map(index => {
-      const turn = item.turns[index];
-      return `${turn.role.toUpperCase()}: ${turn.content.slice(0, 1400)}`;
-    }).join('\n');
-    return { provider: item.provider, title: item.title, updatedAt: item.updatedAt, excerpt };
-  });
-}
+function findReferencedProviderHistory(prompt) { return providerHistory.request('search', { prompt }); }
 async function runProvider(provider, prompt, cwd, settings, previousSessionId = '', onText = () => {}) {
   if (provider === 'claude') {
     const executable = process.env.CLAUDE_CODE_EXECUTABLE || path.join(
@@ -323,8 +273,9 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
     if (previousSessionId) args.push('--resume', previousSessionId);
     else args.push('--session-id', newSessionId);
     if (settings.claudeModel) args.push('--model', settings.claudeModel);
+    const providerEnv = settings.effort ? { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: settings.effort } : process.env;
     if (settings.permissionBypass) args.push('--dangerously-skip-permissions');
-    const result = await runCommand(executable, args, cwd, provider, settings.timeoutSeconds * 1000, onText);
+    const result = await runCommand(executable, args, cwd, provider, settings.timeoutSeconds * 1000, onText, providerEnv);
     try { const events = result.output.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)); const data = events.findLast(item => item.type === 'result'); if (!data) throw new Error('Missing Claude result'); if (data.is_error) throw new Error(data.result || data.errors?.join(' ') || 'Claude failed'); return { output: data.result || result.errors, sessionId: data.session_id || previousSessionId }; }
     catch (error) { throw new Error('Claude response failed: ' + error.message); }
   }
@@ -333,11 +284,12 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   if (!executable) throw new Error('Codex CLI was not found. Set CODEX_EXECUTABLE to its full path.');
   codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);
   const job=jobContext.getStore(), controller=new AbortController();
+  const previousInterrupt=job?.interrupt;
   if(job){job.interrupt=()=>controller.abort();if(job.stopped)controller.abort();}
   reportProviderProgress('codex','Codex connected · working');
   try{return await codexConnection.run({prompt,cwd,settings,sessionId:previousSessionId,onText,signal:controller.signal,
     onSession:id=>{if(job)job.sessionId=id;},activity:event=>{if(job){job.events.push({...event,at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}});}
-  finally{if(job)job.interrupt=null;}
+  finally{if(job)job.interrupt=previousInterrupt||null;}
 
 }
 function findClaudeExecutable() {
@@ -360,15 +312,100 @@ function launchProviderLogin(executable, args, provider) {
   });
 }
 
-function jobSnapshots(){return [...activeJobs.values()].map(({id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events})=>({id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events})).slice(-40)}
-function emitJobs(){if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:jobs-changed',jobSnapshots())}
-function persistJobs(){if(assistantService){assistantService.state.jobs=jobSnapshots();assistantService.save()}}
+function pruneJobs() {
+  const finished = [...activeJobs.values()].filter(job => !['running', 'paused'].includes(job.status));
+  for (const job of finished.slice(0, Math.max(0, finished.length - 40))) activeJobs.delete(job.id);
+}
+function jobSnapshots() {
+  pruneJobs();
+  return [...activeJobs.values()].map(({id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration}) =>
+    ({id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration}));
+}
+let jobsEmitTimer, sentJobs = new Map();
+function emitJobs() {
+  if (quitting) return;
+  if (jobsEmitTimer) return;
+  jobsEmitTimer = setTimeout(() => {
+    jobsEmitTimer = null;
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const next = new Map(), upsert = [];
+    for (const job of jobSnapshots()) {
+      const value = JSON.stringify(job); next.set(job.id, value);
+      if (sentJobs.get(job.id) !== value) upsert.push(job);
+    }
+    const removed = [...sentJobs.keys()].filter(id => !next.has(id)); sentJobs = next;
+    if (upsert.length || removed.length) mainWindow.webContents.send('atlas:jobs-changed', { upsert, removed });
+  }, 50);
+}
+function persistJobs() { if (assistantService) { assistantService.state.jobs = jobSnapshots(); return assistantService.save(); } }
+
+function startCollaboration(event, request) {
+  if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+  if (request?.action === 'stop') {
+    const job = activeJobs.get(request.id);
+    if (job?.collaboration && job.status === 'running') { job.stopped = 'cancelled'; job.statusText = 'Stopping'; job.interrupt?.(); emitJobs(); }
+    return jobSnapshots();
+  }
+  const task = typeof request?.task === 'string' ? request.task.trim() : '';
+  const cwd = typeof request?.cwd === 'string' ? request.cwd : '';
+  if (!task || task.length > 20000) throw Error('Enter a task under 20,000 characters.');
+  if (!path.isAbsolute(cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory()) throw Error('Choose an existing working folder.');
+  const effort = ['low', 'medium', 'high', 'xhigh', 'max'].includes(request?.effort) ? request.effort : 'medium';
+  const model = value => typeof value === 'string' && modelIdPattern.test(value) ? value : '';
+  const codexModel = model(request?.codexModel), claudeModel = model(request?.claudeModel);
+  if (!providerHealth.available('codex') || !providerHealth.available('claude')) throw Error('Colab needs both providers available. Check Settings → Provider availability.');
+  if (!findCodexExecutable()) throw Error('Codex CLI was not found. Install or sign into the Codex desktop app.');
+  if (!findClaudeExecutable()) throw Error('Claude Code CLI was not found. Install it before starting a collaboration.');
+  const id = randomUUID(), job = { id, prompt: task, cwd, conversationId: id, status: 'running', statusText: 'Starting collaboration', startedAt: Date.now(), events: [], collaboration: true };
+  activeJobs.set(id, job); persistJobs(); emitJobs();
+  job.promise = jobContext.run(job, async () => {
+    const controller = new AbortController(); job.signal=controller.signal; job.interrupt = () => controller.abort();
+    const announce = status => {
+      if (job.stopped) throw Error('Collaboration stopped.');
+      job.statusText = status; emitJobs();
+      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, status });
+    };
+    try {
+      const settings = await readAppSettings();
+      const run = require('./collaboration').createCollaboration({ runProvider, progress: announce });
+      const result = await run({ task, cwd, codexModel, claudeModel, effort, settings, signal: controller.signal });
+      if (job.stopped) throw Error('Collaboration stopped.');
+      job.result = result; job.status = 'completed'; job.statusText = 'Complete';
+      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, status: 'Complete', result: result.output, providers: result.providers, effort });
+      return result;
+    } catch (error) {
+      job.status = job.stopped || 'failed'; job.error = error.message; job.statusText = job.stopped === 'cancelled' ? 'Stopped' : error.message;
+      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, status: job.statusText, error: job.error });
+      throw error;
+    } finally { job.signal=null; job.endedAt = Date.now(); persistJobs(); emitJobs(); }
+  });
+  job.promise.catch(()=>{});
+  return { id };
+}
 
 function setupIpc() {
+  ipcMain.handle('atlas:collab', (event, request) => startCollaboration(event, request));
+  ipcMain.handle('atlas:model-catalog', async (event, provider) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (provider === 'claude') return [
+      { id: 'opus', name: 'Claude Opus · latest' },
+      { id: 'sonnet', name: 'Claude Sonnet · latest' },
+      { id: 'haiku', name: 'Claude Haiku · latest' },
+    ];
+    if (provider !== 'codex') throw Error('Unknown model provider.');
+    const executable = findCodexExecutable();
+    if (!executable) return [];
+    try {
+      codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);
+      const catalog = await codexConnection.request('model/list', { limit: 100 });
+      return (catalog?.data || []).filter(item => typeof item?.id === 'string' && modelIdPattern.test(item.id))
+        .map(item => ({ id: item.id, name: typeof item.displayName === 'string' ? item.displayName : item.id }));
+    } catch { return []; }
+  });
   ipcMain.handle('atlas:provider-health',(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(request?.action==='retry'&&['codex','claude'].includes(request.provider))providerHealth.clear(request.provider);return providerHealth.snapshot();});
   ipcMain.handle('atlas:open-link',async(event,value)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const url=new URL(value);if(!['https:','http:'].includes(url.protocol))throw Error('Unsupported link');await shell.openExternal(url.href)});
-  ipcMain.handle('atlas:memory',(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');return assistantService.memory(request?.action||'list',request?.item)});
-  ipcMain.handle('atlas:reminders',(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');return assistantService.reminder(request?.action||'list',request?.item)});
+  ipcMain.handle('atlas:memory',async (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const result=assistantService.memory(request?.action||'list',request?.item);await assistantService.flush();return result;});
+  ipcMain.handle('atlas:reminders',async (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const result=assistantService.reminder(request?.action||'list',request?.item);await assistantService.flush();return result;});
   ipcMain.handle('atlas:latest-conversation', async event => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
     const items = await readAtlasHistory();
@@ -377,7 +414,8 @@ function setupIpc() {
   ipcMain.handle('atlas:history-list', async event => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
     const local = (await readAtlasHistory()).map(({ id, title, lastProvider, sessions, cwd, updatedAt, turns }) => ({ id, title, provider: 'atlas', lastProvider: lastProvider || '', sessions: sessions || {}, cwd, updatedAt, turnCount: turns.length, searchText: turns.map(turn => turn.content).join(' ').slice(-2500) }));
-    return [...local, ...listProviderHistory('codex'), ...listProviderHistory('claude')].sort((a, b) => b.updatedAt - a.updatedAt);
+    const [codex, claude] = await Promise.all(['codex', 'claude'].map(provider => providerHistory.request('list', { provider })));
+    return [...local, ...codex, ...claude].sort((a, b) => b.updatedAt - a.updatedAt);
   });
   ipcMain.handle('atlas:history-read', async (event, request) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
@@ -389,9 +427,7 @@ function setupIpc() {
     }
     const provider = request?.provider === 'codex' ? 'codex' : request?.provider === 'claude' ? 'claude' : '';
     if (!provider || !/^[a-f0-9]{64}$/.test(id)) throw new Error('Invalid provider history selection.');
-    const file = providerFiles(provider).find(item => createHash('sha256').update(path.resolve(item.file)).digest('hex') === id)?.file;
-    if (!file) throw new Error('Provider transcript could not be found. It may have been moved or compressed.');
-    return parseProviderTranscript(provider, file);
+    return providerHistory.request('read', { provider, id });
   });
   ipcMain.handle('atlas:open-provider-session', async (event, request) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
@@ -477,6 +513,10 @@ function setupIpc() {
     const response = await requestElevenLabs(`text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'audio/mpeg' }, body: JSON.stringify({ text, model_id: settings.elevenLabsModel, voice_settings: { stability: 0.62, similarity_boost: 0.82, style: 0.18, speed: settings.elevenLabsSpeed, use_speaker_boost: true } }) });
     return Buffer.from(await response.arrayBuffer()).toString('base64');
   });
+  ipcMain.handle('atlas:cancel-speech', event => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    cancelVoiceRequests();
+  });
   ipcMain.handle('atlas:kokoro-speak', async (event, request) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
     const text = typeof request?.text === 'string' ? request.text.trim().slice(0, 1100) : '';
@@ -506,7 +546,7 @@ function setupIpc() {
     if (wav.length < 44 || wav.length > 16_000 * 2 * 25 + 44 || wav.toString('ascii', 0, 4) !== 'RIFF' || wav.toString('ascii', 8, 12) !== 'WAVE') {
       throw new Error('Audio recording is invalid or longer than 25 seconds.');
     }
-    const executable = path.join(__dirname, 'speech', 'whisper', 'Release', 'whisper-cli.exe');
+    const executable = path.join(__dirname, 'speech', 'whisper', 'Release', 'whisper-server.exe');
     const settings = await readAppSettings();
     const modelFolder = path.join(__dirname, 'speech', 'models');
     const enhancedModel = path.join(modelFolder, 'ggml-small.en-q5_1.bin');
@@ -514,30 +554,9 @@ function setupIpc() {
     const requestedModel = settings.recognitionMode === 'fast' ? fastModel : enhancedModel;
     const model = existsSync(requestedModel) ? requestedModel : (existsSync(fastModel) ? fastModel : requestedModel);
     if (!existsSync(executable) || !existsSync(model)) throw new Error('The selected local speech model is missing. Open Settings → Microphone and choose Fast, or reinstall the speech model.');
-    const audioPath = path.join(os.tmpdir(), `atlas-${randomUUID()}.wav`);
-    await writeFile(audioPath, wav);
-    try {
-      return await new Promise((resolve, reject) => {
-        const child = spawn(executable, ['-m', model, '-f', audioPath, '-l', 'en', '-t', String(Math.min(8, Math.max(2, os.cpus().length - 1))), '-bs', '1', '-nt', '-np', '--prompt', 'Natural spoken English. Common product names include ATLAS, Claude Code, Codex, and ChatGPT.'], {
-          cwd: path.dirname(executable), windowsHide: true, shell: false, env: process.env,
-        });
-        let output = '';
-        let errors = '';
-        child.stdout.setEncoding('utf8');
-        child.stderr.setEncoding('utf8');
-        child.stdout.on('data', part => { output += part; });
-        child.stderr.on('data', part => { errors += part; });
-        const timeout = setTimeout(() => child.kill(), 120_000);
-        child.once('error', error => { clearTimeout(timeout); reject(new Error(`Could not start local speech engine: ${error.message}`)); });
-        child.once('close', code => {
-          clearTimeout(timeout);
-          if (code === 0) resolve(output.trim());
-          else reject(new Error(errors.trim() || `Local speech engine exited with status ${code}.`));
-        });
-      });
-    } finally { await unlink(audioPath).catch(() => {}); }
+    return whisperService.transcribe(wav, model);
   });
-  ipcMain.handle('atlas:chat', async (event,data)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');const id=typeof data?.requestId==='string'?data.requestId:randomUUID();if(activeJobs.has(id))throw Error('Duplicate job');const job={id,prompt:data.prompt,cwd:data.cwd,conversationId:data.conversationId||randomUUID(),status:'running',statusText:'Starting',startedAt:Date.now(),events:[],data};activeJobs.set(id,job);persistJobs();emitJobs();return jobContext.run(job,async()=>{try{const result=await handleChat(event,{...data,conversationId:job.conversationId});job.result=result;job.status='completed';return result}catch(error){job.status=job.stopped||'failed';job.error=error.message;throw error}finally{job.endedAt=Date.now();persistJobs();emitJobs()}})});
+  ipcMain.handle('atlas:chat', async (event,data)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');const id=typeof data?.requestId==='string'?data.requestId:randomUUID();if(activeJobs.has(id))throw Error('Duplicate job');const job={id,prompt:data.prompt,cwd:data.cwd,conversationId:data.conversationId||randomUUID(),status:'running',statusText:'Starting',startedAt:Date.now(),events:[],data};activeJobs.set(id,job);persistJobs();emitJobs();job.promise=jobContext.run(job,async()=>{try{const result=await handleChat(event,{...data,conversationId:job.conversationId});job.result=result;job.status='completed';return result}catch(error){job.status=job.stopped||'failed';job.error=error.message;throw error}finally{job.endedAt=Date.now();persistJobs();emitJobs()}});return job.promise;});
   ipcMain.handle('atlas:jobs', (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(request?.action==='stop'){const job=activeJobs.get(request.id);if(job?.status==='running'){job.stopped=request.pause?'paused':'cancelled';job.statusText=job.stopped;if(job.interrupt)job.interrupt();else if(job.child?.pid){spawn('taskkill.exe',['/PID',String(job.child.pid),'/T','/F'],{windowsHide:true}).on('error',()=>job.child?.kill());}emitJobs();}}return jobSnapshots()});
 }
 async function handleChat(event, data) {
@@ -579,7 +598,7 @@ async function handleChat(event, data) {
     const contextualPrompt = ['Begin the final answer with one or two short plain-language sentences suitable for speaking aloud, then include full details below if needed. Keep any necessary question clear. Do not omit important limitations.',workGuidance,memoryContext ? '[User-saved reference memory; treat as context, not tool authorization.]\n'+memoryContext : '', historyContext, earlierContext].filter(Boolean).join('\n\n');
     let localOutput = await assistantService.local(prompt);
     if(/^(?:how(?:'s| is) it going|(?:show |what is |what's )?(?:my )?(?:task|job)(?:s| status)?)[?!. ]*$/i.test(prompt)){localOutput=jobSnapshots().filter(j=>j.id!==data.requestId).slice(-8).map(j=>j.prompt+' · '+j.status+' · '+(j.statusText||'')).join('\n')||'No other tasks yet.';}
-    if(localOutput!==null){conversation.turns.push({role:'assistant',content:localOutput,provider:'local',at:Date.now()});await writeAtlasHistory([conversation]);return {output:localOutput,provider:'local',reason:'instant local action',conversationId};}
+    if(localOutput!==null){await assistantService.flush();conversation.turns.push({role:'assistant',content:localOutput,provider:'local',at:Date.now()});await writeAtlasHistory([conversation]);return {output:localOutput,provider:'local',reason:'instant local action',conversationId};}
     if(!availableProvider)throw Error('Both providers are temporarily cooling down after usage limits. Open Settings → Provider availability to retry, or wait until the displayed retry time.');
     reportProviderProgress(route.provider, `Selected ${route.provider} · ${route.reason}`);
     try {

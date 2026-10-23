@@ -3,6 +3,9 @@ contextBridge.exposeInMainWorld('atlas', {
   onResponseText: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('atlas:response-text', listener); return () => ipcRenderer.removeListener('atlas:response-text', listener); },
   providerHealth: request=>ipcRenderer.invoke('atlas:provider-health',request),
   jobs: request => ipcRenderer.invoke('atlas:jobs',request),
+  collaborate: request => ipcRenderer.invoke('atlas:collab', request),
+  modelCatalog: provider => ipcRenderer.invoke('atlas:model-catalog', provider),
+  onCollaborationStatus: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('atlas:collab-status', listener); return () => ipcRenderer.removeListener('atlas:collab-status', listener); },
   onJobs: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:jobs-changed',listener);return()=>ipcRenderer.removeListener('atlas:jobs-changed',listener)},
   memory: request=>ipcRenderer.invoke('atlas:memory',request),
   reminders: request=>ipcRenderer.invoke('atlas:reminders',request),
@@ -22,6 +25,7 @@ contextBridge.exposeInMainWorld('atlas', {
   clearElevenLabsKey: () => ipcRenderer.invoke('atlas:elevenlabs-clear-key'),
   getElevenLabsVoices: () => ipcRenderer.invoke('atlas:elevenlabs-voices'),
   elevenLabsSpeak: request => ipcRenderer.invoke('atlas:elevenlabs-speak', request),
+  cancelSpeech: () => ipcRenderer.invoke('atlas:cancel-speech'),
   kokoroSpeak: request => ipcRenderer.invoke('atlas:kokoro-speak', request),
   onVoiceProgress: callback => {
     const listener = (_event, message) => callback(message);

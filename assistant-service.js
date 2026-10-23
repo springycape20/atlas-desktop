@@ -6,7 +6,8 @@ function createService({ directory, launchApp, volume, notify, now = () => Date.
   const file = path.join(directory, 'assistant-data.json');
   let state = { memories: [], reminders: [], jobs: [] };
   if (fs.existsSync(file)) state = { ...state, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
-  function save() { fs.mkdirSync(directory, { recursive: true }); fs.writeFileSync(file + '.tmp', JSON.stringify(state, null, 2)); fs.renameSync(file + '.tmp', file); }
+  const store = require('./atomic-store').createAtomicStore(file);
+  function save() { return store.save(state); }
   function memory(action, item = {}) {
     if (action === 'list') return state.memories;
     if (action === 'delete') state.memories = state.memories.filter(m => m.id !== item.id);
@@ -57,6 +58,6 @@ function createService({ directory, launchApp, volume, notify, now = () => Date.
     const terms = new Set((prompt + ' ' + cwd).toLowerCase().match(/[a-z0-9]{3,}/g) || []);
     return state.memories.map(m=>({m,score:m.category==='preference'?2:0,...{}})).map(x=>({...x,score:x.score+[...terms].filter(t=>x.m.text.toLowerCase().includes(t)).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(x=>`[${x.m.category}] ${x.m.text}`).join('\n');
   }
-  return { memory, reminder, tick, local, context, state, save };
+  return { memory, reminder, tick, local, context, state, save, flush: store.flush };
 }
 module.exports = { createService };

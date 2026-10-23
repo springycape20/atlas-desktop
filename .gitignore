@@ -3,7 +3,6 @@ speech/
 .setup-cache/
 dist/
 out/
-*.lnk
 *.log
 .env
 .env.*

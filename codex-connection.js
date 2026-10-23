@@ -95,7 +95,7 @@ class CodexConnection {
       const timer=setTimeout(()=>{abort();t.finish(Error('Codex response timed out. The turn was interrupted.'));},settings.timeoutSeconds*1000);
       t.finish=(error,value)=>{if(this.turns.get(threadId)!==t)return;clearTimeout(timer);signal?.removeEventListener('abort',abort);this.turns.delete(threadId);error?reject(error):resolve(value);};
       this.turns.set(threadId,t);signal?.addEventListener('abort',abort,{once:true});
-      this.request('turn/start',{threadId,cwd,approvalPolicy:'never',sandboxPolicy:settings.permissionBypass?{type:'dangerFullAccess'}:settings.codexSandbox==='read-only'?{type:'readOnly'}:{type:'workspaceWrite',writableRoots:[cwd]},...(settings.codexModel?{model:settings.codexModel}:{}),input:[{type:'text',text:prompt}]}).then(result=>{t.turnId=result.turn.id;if(t.cancelled)abort();},error=>t.finish(error));
+      this.request('turn/start',{threadId,cwd,approvalPolicy:'never',sandboxPolicy:settings.permissionBypass?{type:'dangerFullAccess'}:settings.codexSandbox==='read-only'?{type:'readOnly'}:{type:'workspaceWrite',writableRoots:[cwd]},...(settings.codexModel?{model:settings.codexModel}:{}),...(settings.effort?{effort:settings.effort}:{}),input:[{type:'text',text:prompt}]}).then(result=>{t.turnId=result.turn.id;if(t.cancelled)abort();},error=>t.finish(error));
     });
   }
 }

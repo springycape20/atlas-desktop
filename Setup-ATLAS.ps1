@@ -12,7 +12,7 @@ $cache = Join-Path $PSScriptRoot '.setup-cache'
 $runtime = Join-Path $PSScriptRoot 'speech/whisper/Release'
 $models = Join-Path $PSScriptRoot 'speech/models'
 New-Item -ItemType Directory -Force $cache, $runtime, $models | Out-Null
-if (-not (Test-Path -LiteralPath (Join-Path $runtime 'whisper-cli.exe'))) {
+if (-not (Test-Path -LiteralPath (Join-Path $runtime 'whisper-server.exe'))) {
     $archive = Join-Path $cache 'whisper-v1.8.7-x64.zip'
     Write-Host 'Downloading the official whisper.cpp Windows runtime...'
     Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.7/whisper-bin-x64.zip' -OutFile $archive

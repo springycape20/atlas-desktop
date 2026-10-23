@@ -5,7 +5,8 @@
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "test": "node --test tests/performance.test.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0"
