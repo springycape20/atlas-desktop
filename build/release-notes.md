@@ -1,13 +1,8 @@
-ATLAS 0.6.0 adds project workflows and easier setup for Codex and Claude.
+ATLAS 0.6.1 fixes the app layout overflowing the desktop window.
 
-- Project profiles, file/screenshot attachments, isolated Git review, recoverable Colab passes, four collaboration modes, task budgets, diagnostics, and searchable/exportable chat history.
-- Compact composer that grows as you type, a + attachment menu, and live task activity that collapses when work ends.
-- Unlimited Colab passes by default, with an optional pass limit. Colab finishes when both providers confirm completion; runtime limits and Stop remain available.
-- Official download links for missing provider CLIs, Git, and GitHub CLI.
-- New Colab projects can create a local Git repository and initial snapshot after confirmation.
-- Settings, Colab, and profiles discover available models from the installed provider CLIs; refresh at launch or manually, with cached choices offline.
-- Installed Windows apps check GitHub Releases at launch. Download updates in Settings, then restart and install when ready. Running tasks block an update restart.
+- The outer app fits the available window height without a page scrollbar.
+- Assistant and Colab keep the composer, Send button, navigation, and footer visible.
+- Long conversations, activity logs, and expanded panels scroll within their own areas.
+- Startup window dimensions fit the current monitor's usable area, including smaller displays and Windows scaling.
 
-Windows x64. Install ATLAS-Setup-0.6.0.exe over an existing installation to keep local data. Older versions need this installer once to gain in-app updates. Source checkouts check release availability but update through Git or the installer.
-
-The installer is unsigned; Windows may show SmartScreen. See README installation/unblock guidance. Image support depends on provider tools. No live paid collaboration request was used during validation.
+Install over the existing version to keep local data, or use Settings → App updates in ATLAS 0.6.0. Windows x64; the installer remains unsigned.

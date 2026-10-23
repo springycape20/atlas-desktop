@@ -20,7 +20,39 @@ body[data-state=listening] .orb{transform:scale(calc(1 + var(--input-level)*.3))
 @media(max-width:1200px){.layout,.layout.inspecting{grid-template-columns:110px minmax(0,1fr)}.workspace-drawer{grid-column:2;position:static;max-height:none;border:1px solid #263c44;border-radius:12px;padding:18px}.foot{margin-left:134px}}
 @media(max-width:750px){.app{padding:12px}.layout,.layout.inspecting{display:flex;flex-direction:column;gap:12px;padding-top:12px}.workspace-nav{position:static;flex-direction:row;width:100%;padding:0}.nav-item{justify-content:center;font-size:10px;padding:10px 6px;gap:6px}.nav-item svg{width:15px;height:15px}.core{padding:16px;min-height:calc(100vh - 200px);border-radius:12px}.workspace-drawer{width:100%}.presence{margin-top:22px}.hello{font-size:24px}.foot{margin-left:0;gap:5px}.corehead #wakeIndicator{font-size:8px}.workspace-bar{flex-direction:row;align-items:center}.workspace-copy{display:block}.answer{max-height:50vh}.voice-hint{font-size:9px}.brand-sub{display:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
-</style><style>@media(max-width:1200px){.workspace-drawer{position:fixed;top:90px;right:24px;bottom:24px;width:340px;max-height:calc(100vh - 114px);z-index:8;overflow:auto;background:#0e1c23;box-shadow:0 20px 70px #000b;border:1px solid #36515b;padding:20px;border-radius:14px}}@media(max-width:750px){.workspace-drawer{right:12px;width:calc(100vw - 24px);max-width:400px}}</style></head>
+</style><style>@media(max-width:1200px){.workspace-drawer{position:fixed;top:90px;right:24px;bottom:24px;width:340px;max-height:calc(100vh - 114px);z-index:8;overflow:auto;background:#0e1c23;box-shadow:0 20px 70px #000b;border:1px solid #36515b;padding:20px;border-radius:14px}}@media(max-width:750px){.workspace-drawer{right:12px;width:calc(100vw - 24px);max-width:400px}}</style><style id="viewportLayout">
+html,body{height:100%;min-height:0;overflow:hidden}
+body>.app{height:100dvh;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:16px 22px 10px}
+.app>.top{height:54px;min-height:0}
+.app>.layout{min-height:0;height:100%;grid-template-rows:minmax(0,1fr);align-items:stretch;padding-top:16px;overflow:hidden}
+.app>.foot{min-height:0;margin:8px 0 0 162px;line-height:14px;flex-wrap:wrap;justify-content:space-between;gap:16px}
+.layout>.workspace-nav{position:static;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.layout>.core{height:100%;min-height:0;max-height:100%;padding:18px 24px;overflow:hidden}
+.core>.corehead{flex-shrink:0}
+.core>.presence{flex:0 1 auto;min-height:0;margin:clamp(8px,3vh,28px) 0 10px}
+.core .orbwrap{height:clamp(58px,14vh,110px)}
+.has-conversation .core>.presence{margin:10px 0 14px;flex-shrink:0}
+.has-conversation .core .orbwrap{height:54px;width:54px}
+.core>.empty-state{min-height:0;flex:1 1 0;overflow:auto;padding:6px 0}
+.core>.response.show{display:flex;flex-direction:column;flex:1 1 0;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;margin:0 0 8px}
+.core .response>.answer{min-height:0;max-height:none;overflow:visible;flex-shrink:0}
+.core .response>.user-turn,.core .response>.followup{flex-shrink:0}
+.core>.composer{flex:0 0 auto;min-height:0;max-height:48%;overflow:auto;padding-top:8px}
+.composer .attachment-chips,.colab-composer .attachment-chips{max-height:64px;overflow:auto}
+.layout>.workspace-drawer{min-height:0;height:100%;max-height:100%;overflow:auto;position:static}
+.layout>.colab-workspace{height:100%;min-height:0;max-height:100%;overflow:hidden}
+.colab-workspace>.colab-chats{min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.colab-workspace .colab-chat-list{min-height:0;max-height:none;flex:1 1 0;overflow:auto}
+.colab-workspace>.colab-chat-main{height:100%;min-height:0;max-height:100%;padding:18px 22px;overflow:hidden}
+.colab-chat-main>.colab-transcript{min-height:0;max-height:none;flex:1 1 0;overscroll-behavior:contain;padding:16px 2px}
+.colab-chat-main>.colab-composer{min-height:0;max-height:44%;flex:0 1 auto}
+.colab-chat-main>.colab-recovery{max-height:60px;overflow:auto;margin:6px 0}
+.colab-chat-main>.colab-config[open]{max-height:min(24vh,180px)}
+@media(max-width:1200px){.layout>.workspace-drawer{position:fixed;top:86px;right:16px;bottom:16px;height:auto;width:min(340px,calc(100vw - 32px));max-height:calc(100dvh - 102px)}}
+@media(max-height:720px){body>.app{padding:10px 16px 8px}.app>.top{height:46px;padding-bottom:10px}.app>.layout{padding-top:10px;gap:16px}.layout>.core,.colab-workspace>.colab-chat-main{padding:12px 16px}.core .hello{font-size:22px}.core .orbwrap{height:64px}.core .orb{width:56px;height:56px}.core>.presence{margin:8px 0}.has-conversation .core>.presence{margin:6px 0 10px}.core .voice-bar{min-height:38px;padding:3px 0}.core .inputrow{min-height:48px}.core .workspace-bar{padding-top:5px}.layout>.workspace-nav .nav-item{padding-top:9px;padding-bottom:9px}.colab-chat-main>.colab-config{margin-top:10px;padding-bottom:8px}.colab-chat-main>.colab-transcript{padding-top:10px;padding-bottom:10px}.colab-composer .colab-compose-footer{margin-top:6px}}
+@media(max-width:750px){body>.app{padding:10px}.app>.layout,.app>.layout.inspecting{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:8px;padding-top:8px}.layout>.workspace-nav{grid-row:1;display:flex;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:0;gap:4px}.workspace-nav>.nav-item{width:auto;flex:0 0 auto;padding:8px}.workspace-nav>.workspace-divider{display:none}.layout>.core,.layout>.colab-workspace{grid-row:2}.app>.foot{margin-left:0;flex-direction:row;gap:8px;font-size:8px}.layout>.colab-workspace{display:flex;flex-direction:column;width:100%}.colab-workspace>.colab-chats{flex:0 0 auto;max-height:100px;padding:8px}.colab-workspace>.colab-chat-main{flex:1 1 0;height:auto;padding:12px}.colab-chats>#colabNewChat{margin-bottom:4px}.colab-chats>#colabSearch{padding:5px;margin:0 0 4px}.colab-chats>.colab-chat-list{flex:0 1 auto;flex-direction:row;max-height:40px}.colab-chat-list>.colab-chat-item{padding:5px 8px;min-width:110px}.colab-chat-item>small{display:none}.core .voice-hint{font-size:9px}.core .presence-copy .hello{font-size:20px}}
+</style>
+</head>
 <body><div class="grid"></div><main class="app">
 <header class="top"><div class="brand"><div class="sigil"></div><div>ATLAS <span class="brand-sub">PERSONAL AI</span></div></div><div class="topright"><span class="live" id="connection">READY</span><button class="icon-button" id="historyOpen" aria-label="Open conversations" title="Conversations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12a9 9 0 1 0 2.7-6.4L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></button><button class="icon-button" id="settingsOpen" aria-label="Open settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 2.94-.08-.03a1.7 1.7 0 0 0-1.8.26 1.7 1.7 0 0 0-.65 1.55V22h-3.4l-.02-.11a1.7 1.7 0 0 0-1.2-1.36 1.7 1.7 0 0 0-1.8.44l-.08.08-2.94-1.7.03-.1a1.7 1.7 0 0 0-.27-1.78 1.7 1.7 0 0 0-1.54-.65H4v-3.4l.1-.02a1.7 1.7 0 0 0 1.36-1.2 1.7 1.7 0 0 0-.44-1.8l-.08-.08 1.7-2.94.1.03a1.7 1.7 0 0 0 1.78-.27 1.7 1.7 0 0 0 .65-1.54V5h3.4l.02.1a1.7 1.7 0 0 0 1.2 1.36 1.7 1.7 0 0 0 1.8-.44l.08-.08 2.94 1.7-.03.1a1.7 1.7 0 0 0 .27 1.78 1.7 1.7 0 0 0 1.54.65H20v3.4l-.1.02a1.7 1.7 0 0 0-.5 1.41Z"/></svg></button></div></header>
 <div class="layout"><section class="panel core">

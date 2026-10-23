@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, protocol, session, safeStorage, shell, clipboard } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, protocol, session, safeStorage, shell, clipboard, screen } = require('electron');
 const { spawn } = require('node:child_process');
 const { existsSync, statSync, readdirSync } = require('node:fs');
 const { readFile, writeFile, unlink, mkdir, rename, cp, readdir } = require('node:fs/promises');
@@ -719,11 +719,11 @@ async function createWindow() {
     });
   });
 
+  const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const width=Math.min(1440,area.width),height=Math.min(920,area.height);
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 920,
-    minWidth: 800,
-    minHeight: 650,
+    width,height,x:area.x+Math.floor((area.width-width)/2),y:area.y+Math.floor((area.height-height)/2),
+    minWidth:Math.min(800,width),minHeight:Math.min(600,height),
     title: 'ATLAS · Local Intelligence',
     backgroundColor: '#060a10',
     autoHideMenuBar: true,
