@@ -100,7 +100,7 @@ async function mainHarness(t) {
   let finished; const quit = new Promise(resolve => { finished = resolve; });
   const localRequire = createRequire(path.join(root, 'main.js'));
   const electron = {
-    app: { on: (name, fn) => events.set(name, fn), whenReady: () => ({ then() {} }), getPath: () => dir, quit: () => finished() },
+    app: { on: (name, fn) => events.set(name, fn), whenReady: () => ({ then() {} }), getPath: () => dir, setPath() {}, setAppUserModelId() {}, quit: () => finished() },
     protocol: { registerSchemesAsPrivileged() {} }
   };
   const context = vm.createContext({ console, Buffer, process, URL, setTimeout, clearTimeout, setInterval, clearInterval, structuredClone,
