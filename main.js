@@ -329,18 +329,26 @@ function findClaudeExecutable() {
 }
 function launchProviderLogin(executable, args, provider) {
   if (!executable) throw new Error('Provider CLI was not found.');
-  const quote = value => `'${String(value).replace(/'/g, "''")}'`;
-  const title = `ATLAS - ${provider === 'codex' ? 'Codex' : 'Claude Code'} sign-in`;
-  const command = `$Host.UI.RawUI.WindowTitle = ${quote(title)}; & ${[executable, ...args].map(quote).join(' ')}`;
+  const quote = value => "'" + String(value).replace(/'/g, "''") + "'";
+  const title = 'ATLAS - ' + (provider === 'codex' ? 'Codex' : 'Claude Code') + ' sign-in';
+  const command = '$Host.UI.RawUI.WindowTitle = ' + quote(title) + '; & ' + [executable, ...args].map(quote).join(' ');
   const terminal = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  if (!existsSync(terminal)) throw new Error('Windows PowerShell was not found. Open a terminal and sign into the provider CLI manually.');
+  if (!existsSync(terminal)) throw new Error('Windows PowerShell was not found.');
+  const encoded = Buffer.from(command, 'utf16le').toString('base64');
+  const loginEnv = { ...process.env };
+  for (const key of Object.keys(loginEnv)) if (key.toLowerCase() === 'psmodulepath') delete loginEnv[key];
+  loginEnv.PSModulePath = path.join(path.dirname(terminal), 'Modules');
+  // Start-Process allocates an interactive console instead of inheriting Node's NUL stdin.
+  const launcher = "$ErrorActionPreference = 'Stop'; $console = Start-Process -FilePath " + quote(terminal) + " -ArgumentList '-NoLogo -NoProfile -NoExit -EncodedCommand " + encoded + "' -WorkingDirectory " + quote(app.getPath('home')) + " -WindowStyle Normal -PassThru; Start-Sleep -Milliseconds 700; if ($console.HasExited) { throw 'The sign-in window closed immediately.' }";
   return new Promise((resolve, reject) => {
-    const child = spawn(terminal, ['-NoLogo', '-NoProfile', '-NoExit', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], {
-      cwd: app.getPath('home'), detached: true, windowsHide: false, shell: false,
-      stdio: 'ignore', env: process.env,
+    const child = spawn(terminal, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(launcher, 'utf16le').toString('base64')], {
+      cwd: app.getPath('home'), windowsHide: true, shell: false, stdio: ['ignore', 'ignore', 'pipe'], env: loginEnv,
     });
-    child.once('error', reject);
-    child.once('spawn', () => { child.unref(); resolve(); });
+    let errors = '';
+    child.stderr.on('data', data => { errors = (errors + data).slice(-4000); });
+    const timer = setTimeout(() => { child.kill(); reject(new Error('Opening the sign-in window timed out.')); }, 15000);
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+    child.once('close', code => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(errors.trim() || 'Could not open the sign-in window.')); });
   });
 }
 
