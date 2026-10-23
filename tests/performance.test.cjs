@@ -225,3 +225,12 @@ test('request timeout defaults and legacy settings migrate to unlimited',async t
   await fs.writeFile(file,JSON.stringify({timeoutSeconds:60,timeoutPolicyVersion:1}));
   assert.equal((await h.readAppSettings()).timeoutSeconds,60);
 });
+
+test('saved Assistant turns keep attachment references without storing image bytes',async t=>{
+  const h=await mainHarness(t);
+  await h.writeAtlasHistory([{id:'photo-chat',turns:[{role:'user',content:'Inspect this photo',attachments:[{id:'photo1',name:'Screenshot.png',type:'image',size:123,preview:'data:image/png;base64,private',bytes:[1,2,3]}]},{role:'user',content:'Next question'}]}]);
+  const data=JSON.parse(await fs.readFile(path.join(h.paths.userData,'conversations.json')));
+  assert.deepEqual(data[0].turns[0].attachments,[{id:'photo1',name:'Screenshot.png',type:'image',size:123}]);
+  assert.deepEqual(data[0].turns[1].attachments,[]);
+  assert(!JSON.stringify(data).includes('base64'));
+});
