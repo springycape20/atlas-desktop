@@ -34,6 +34,13 @@
     for(const [label,action]of [['Attach files',()=>addAttachments(scope,()=>api.attachments())],['Paste screenshot',()=>addAttachments(scope,()=>api.attachments({action:'clipboard'}))],['Project profiles',showProjects]]){
       const item=button(label,async()=>{menu.hidePopover?.();await action();},menu);item.setAttribute('role','menuitem');
     }
+    composer.addEventListener('paste',event=>{
+      const clipboard=event.clipboardData;
+      const hasImage=[...(clipboard?.items||[]),...(clipboard?.files||[])].some(item=>item.type?.startsWith('image/'));
+      if(!hasImage)return;
+      event.preventDefault();
+      void addAttachments(scope,()=>api.attachments({action:'clipboard'}));
+    });
     composer.addEventListener('dragover',event=>{if(event.dataTransfer?.types?.includes('Files'))event.preventDefault();});
     composer.addEventListener('drop',event=>{if(!event.dataTransfer?.files?.length)return;event.preventDefault();void addAttachments(scope,()=>api.droppedFiles([...event.dataTransfer.files]));});
   }
