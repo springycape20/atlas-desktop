@@ -3,6 +3,8 @@ speech/
 .setup-cache/
 dist/
 out/
+*.lnk
+!ATLAS.lnk
 *.log
 .env
 .env.*

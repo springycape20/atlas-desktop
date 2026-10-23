@@ -31,4 +31,10 @@ foreach ($model in @('ggml-tiny.en.bin', 'ggml-small.en-q5_1.bin')) {
         Move-Item -LiteralPath "$destination.partial" -Destination $destination
     }
 }
-Write-Host 'Setup complete. Sign into your provider CLIs, then run Start-ATLAS.cmd.'
+$shortcutPath = Join-Path $PSScriptRoot 'ATLAS.lnk'
+$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
+$shortcut.TargetPath = Join-Path $PSScriptRoot 'Start-ATLAS.cmd'
+$shortcut.WorkingDirectory = $PSScriptRoot
+$shortcut.Description = 'Launch ATLAS desktop assistant'
+$shortcut.Save()
+Write-Host 'Setup complete. Sign into your provider CLIs, then run ATLAS.lnk or Start-ATLAS.cmd.'

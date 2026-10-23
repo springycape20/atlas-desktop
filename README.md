@@ -18,9 +18,9 @@ Currently supported: **Windows x64**. This repository is source code, not a host
    Alternatively, download and extract the repository ZIP, then run the setup script from that folder.
 
 3. Install Codex and/or Claude Code using their official installers and sign into your own account. ATLAS normally finds the Codex desktop app's bundled CLI and the npm Claude Code executable. If your installation differs, set `CODEX_EXECUTABLE` and `CLAUDE_CODE_EXECUTABLE` to the full executable paths before launching.
-4. Double-click **Start-ATLAS.cmd**, choose a working folder, then configure your microphone and voice in Settings. The included **ATLAS.lnk** is a convenience shortcut for the checkout it was created in; after cloning to another folder, use **Start-ATLAS.cmd** or create a new shortcut to it.
+4. Setup creates **ATLAS.lnk** for the folder where you installed ATLAS. Double-click it or **Start-ATLAS.cmd**, choose a working folder, then configure your microphone and voice in Settings. Run setup again after moving the folder so the shortcut is refreshed.
 
-   If Windows blocks a downloaded **ATLAS.lnk**, right-click it, choose **Properties**, select **Unblock** on the **General** tab, then click **Apply**. If SmartScreen appears when you launch it, choose **More info** and **Run anyway**. Only unblock and run the shortcut when you have downloaded ATLAS from a source you trust. You can always launch **Start-ATLAS.cmd** from the project folder instead.
+   If Windows blocks a downloaded **ATLAS.lnk**, right-click it, choose **Properties**, select **Unblock** on the **General** tab, then click **Apply**. If SmartScreen appears when you launch it, choose **More info** and **Run anyway**. Only unblock and run files from a source you trust. You can always launch **Start-ATLAS.cmd** from the project folder instead.
 
 Setup downloads Electron, the pinned whisper.cpp v1.8.7 Windows CPU runtime, and approximately 268 MB of English speech recognition models. Kokoro downloads its voice model on first use; allow extra time for that first launch. An internet connection is needed for installation and provider requests. Windows speech is available as a fallback.
 
@@ -28,6 +28,7 @@ Setup downloads Electron, the pinned whisper.cpp v1.8.7 Windows CPU runtime, and
 
 - Persistent Codex app-server connection, streamed replies, and ongoing conversations.
 - Claude Code routing, with fallback when a recognized usage limit is reported.
+- Colab runs a task through Codex, Claude review, and a Codex final check, with selectable models and shared effort.
 - Provider cooldowns persist locally. Settings shows availability, estimated retry times, and **Retry now**. Availability means ATLAS has no active cooldown; it is not a live quota or sign-in check.
 - Brief spoken replies by default; full written answers remain on screen. Say **tell me more** or click **Read full answer** for more speech.
 - Local Kokoro British voices, Whisper recognition, wake-word and follow-up listening controls.
@@ -37,7 +38,7 @@ Setup downloads Electron, the pinned whisper.cpp v1.8.7 Windows CPU runtime, and
 
 GitHub shares the application source. It **does not sync conversations, settings, reminders, local files, or provider logins** between devices. ATLAS data stays in `%APPDATA%\atlas-local-desktop` on each Windows computer. Provider histories are read from the local provider folders only; signing in does not provide access to all private web chats.
 
-Credentials, downloaded models, dependencies, desktop shortcuts, and runtime data are excluded from Git. ElevenLabs is optional and needs your own key; no shared key is included.
+Credentials, downloaded models, dependencies, personal shortcuts, and runtime data are excluded from Git. Setup creates an **ATLAS.lnk** shortcut for each checkout. ElevenLabs is optional and needs your own key; no shared key is included.
 
 Check Settings before use: wake-word listening and automatic follow-up listening are enabled by the current defaults. They can be turned off. Permission bypass is disabled by default; enabling it gives the provider broader computer access. With bypass off, Codex uses the selected sandbox and does not automatically grant approval requests. Interactive requests that ATLAS cannot handle must be completed through the provider app.
 
