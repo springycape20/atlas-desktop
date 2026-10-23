@@ -1,20 +1,83 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test tests/performance.test.cjs"
+    "test": "node --test tests/performance.test.cjs",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
-    "electron": "^45.0.0"
+    "electron": "^45.0.0",
+    "electron-builder": "26.0.12"
   },
   "dependencies": {
     "kokoro-js": "1.2.1"
   },
   "allowScripts": {
     "onnxruntime-node@1.21.0": true
+  },
+  "productName": "ATLAS",
+  "build": {
+    "appId": "com.springycape.atlas",
+    "productName": "ATLAS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!tests/**",
+      "!README.md",
+      "!Setup-ATLAS.ps1",
+      "!Start-ATLAS.cmd",
+      "!install-desktop-runtime.cmd",
+      "!build/**",
+      "!dist/**",
+      "!speech/**"
+    ],
+    "extraResources": [
+      {
+        "from": "speech/whisper/Release",
+        "to": "speech/whisper/Release",
+        "filter": [
+          "whisper-server.exe",
+          "*.dll"
+        ]
+      },
+      {
+        "from": "speech/models",
+        "to": "speech/models",
+        "filter": [
+          "ggml-tiny.en.bin",
+          "ggml-small.en-q5_1.bin"
+        ]
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "ATLAS-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ATLAS",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
+    }
   }
 }

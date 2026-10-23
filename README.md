@@ -2,7 +2,17 @@
 
 A local Windows desktop interface for Codex and Claude Code, with local speech, conversation memory, reminders, task controls, and provider routing.
 
-## Set up on another computer
+## Install on Windows
+
+Currently supported: **Windows x64**. Download **ATLAS-Setup** from the [GitHub Releases](https://github.com/springycape20/atlas-desktop/releases) page and run it. The installer installs ATLAS for your Windows account under `%LOCALAPPDATA%\Programs\ATLAS`, then creates Desktop and Start Menu shortcuts. In Settings, enable **Launch ATLAS when I sign in** to start it automatically after you sign in. Uninstalling keeps your settings and conversations in `%LOCALAPPDATA%\ATLAS`.
+
+If Windows shows SmartScreen, choose **More info**, then **Run anyway**. If Windows marks the downloaded installer as blocked, right-click it, select **Properties**, select **Unblock** on the General tab, and choose **Apply**. Only run installers downloaded from the project's GitHub Releases page.
+
+The installer includes the pinned whisper.cpp Windows CPU runtime and approximately 268 MB of English speech recognition models. Kokoro downloads its voice model on first use, so allow extra time for the first launch. An internet connection is needed for provider requests. Windows speech is available as a fallback.
+
+## Run from source
+
+The source setup below is for contributors or users who want to run ATLAS from a checkout.
 
 Currently supported: **Windows x64**. This repository is source code, not a hosted website or a mobile app.
 
@@ -36,7 +46,7 @@ Setup downloads Electron, the pinned whisper.cpp v1.8.7 Windows CPU runtime, and
 
 ## Device data and permissions
 
-GitHub shares the application source. It **does not sync conversations, settings, reminders, local files, or provider logins** between devices. ATLAS data stays in `%APPDATA%\atlas-local-desktop` on each Windows computer. Provider histories are read from the local provider folders only; signing in does not provide access to all private web chats.
+GitHub shares the application source. It **does not sync conversations, settings, reminders, local files, or provider logins** between devices. ATLAS data stays in `%LOCALAPPDATA%\ATLAS` on each Windows computer. Existing data from `%APPDATA%\atlas-local-desktop` is moved there on first launch. Provider histories are read from the local provider folders only; signing in does not provide access to all private web chats.
 
 Credentials, downloaded models, dependencies, personal shortcuts, and runtime data are excluded from Git. Setup creates an **ATLAS.lnk** shortcut for each checkout. ElevenLabs is optional and needs your own key; no shared key is included.
 
@@ -46,7 +56,7 @@ Reminders require ATLAS to be running. Cancelling a task does not undo changes i
 
 ## Updating
 
-Close ATLAS, run `git pull`, then rerun `Setup-ATLAS.ps1` if dependencies have changed. Launch `Start-ATLAS.cmd` again. Local settings and history are kept outside the repository.
+Install a newer **ATLAS-Setup** from [GitHub Releases](https://github.com/springycape20/atlas-desktop/releases) over the existing installation. Your settings and conversations are preserved. For source checkouts, close ATLAS, run `git pull`, rerun `Setup-ATLAS.ps1` if dependencies have changed, then launch `Start-ATLAS.cmd`.
 
 ## Third-party components
 

@@ -1,13 +1,16 @@
+param([switch]$SkipDependencies)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
     throw 'This installer currently supports Windows x64 only.'
 }
-if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'Install Node.js LTS, reopen PowerShell, then run setup again.' }
-& npm.cmd ci
-if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
-& node node_modules/electron/install.js
-if ($LASTEXITCODE -ne 0) { throw 'Electron runtime installation failed.' }
+if (-not $SkipDependencies) {
+    if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw 'Install Node.js LTS, reopen PowerShell, then run setup again.' }
+    & npm.cmd ci
+    if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+    & node node_modules/electron/install.js
+    if ($LASTEXITCODE -ne 0) { throw 'Electron runtime installation failed.' }
+}
 $cache = Join-Path $PSScriptRoot '.setup-cache'
 $runtime = Join-Path $PSScriptRoot 'speech/whisper/Release'
 $models = Join-Path $PSScriptRoot 'speech/models'

@@ -1,11 +1,36 @@
 const { app, BrowserWindow, dialog, ipcMain, protocol, session, safeStorage, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const { existsSync, statSync, readdirSync } = require('node:fs');
-const { readFile, writeFile, unlink, mkdir } = require('node:fs/promises');
+const { readFile, writeFile, unlink, mkdir, rename, cp, readdir } = require('node:fs/promises');
 const { randomUUID, createHash } = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const APP_ID = 'com.springycape.atlas';
+app.setAppUserModelId(APP_ID);
+const appResourcesPath = app.isPackaged ? process.resourcesPath : __dirname;
+const legacyUserDataPath = app.getPath('userData');
+const localUserDataPath = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'ATLAS');
+const migrateToLocalAppData = process.platform === 'win32' && path.resolve(legacyUserDataPath).toLowerCase() !== path.resolve(localUserDataPath).toLowerCase();
+if (migrateToLocalAppData) app.setPath('userData', localUserDataPath);
+
+async function migrateLegacyUserData() {
+  if (!migrateToLocalAppData || !existsSync(legacyUserDataPath)) return;
+  await mkdir(localUserDataPath, { recursive: true });
+  for (const entry of await readdir(legacyUserDataPath, { withFileTypes: true })) {
+    const source = path.join(legacyUserDataPath, entry.name);
+    const destination = path.join(localUserDataPath, entry.name);
+    if (existsSync(destination)) {
+      if (entry.isDirectory()) await cp(source, destination, { recursive: true, force: false, errorOnExist: false });
+      continue;
+    }
+    try { await rename(source, destination); }
+    catch (error) {
+      if (error.code !== 'EXDEV') throw error;
+      await cp(source, destination, { recursive: true, force: false, errorOnExist: false });
+    }
+  }
+}
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'atlas',
@@ -41,7 +66,7 @@ function setupPermissions() {
 }
 const modelIdPattern = /^[A-Za-z0-9._:/-]{1,100}$/;
 function defaultSettings() {
-  return { routeMode: 'auto', permissionBypass: false, codexSandbox: 'workspace-write', codexModel: '', claudeModel: '', codexModels: [], claudeModels: [], voiceDeviceId: '', speechDetail: 'brief', speakResponses: true, voiceEngine: 'kokoro', kokoroVoice: 'bm_george', timeoutSeconds: 180, elevenLabsEnabled: false, elevenLabsVoiceId: '', elevenLabsModel: 'eleven_multilingual_v2', elevenLabsSpeed: 0.92, recognitionMode: 'fast', wakeWordEnabled: true, autoListenReplies: true };
+  return { routeMode: 'auto', permissionBypass: false, codexSandbox: 'workspace-write', codexModel: '', claudeModel: '', codexModels: [], claudeModels: [], voiceDeviceId: '', speechDetail: 'brief', speakResponses: true, launchAtStartup: false, voiceEngine: 'kokoro', kokoroVoice: 'bm_george', timeoutSeconds: 180, elevenLabsEnabled: false, elevenLabsVoiceId: '', elevenLabsModel: 'eleven_multilingual_v2', elevenLabsSpeed: 0.92, recognitionMode: 'fast', wakeWordEnabled: true, autoListenReplies: true };
 }
 function sanitizeSettings(value) {
   const defaults = defaultSettings();
@@ -55,6 +80,7 @@ function sanitizeSettings(value) {
     codexModels: cleanModels(value?.codexModels), claudeModels: cleanModels(value?.claudeModels),
     voiceDeviceId: typeof value?.voiceDeviceId === 'string' ? value.voiceDeviceId.slice(0, 512) : '',
     speakResponses: value?.speakResponses !== false,
+    launchAtStartup: value?.launchAtStartup === true,
     speechDetail: value?.speechDetail === 'full' ? 'full' : 'brief',
     voiceEngine: ['kokoro', 'windows', 'elevenlabs'].includes(value?.voiceEngine) ? value.voiceEngine : defaults.voiceEngine,
     kokoroVoice: ['bm_george', 'bm_daniel', 'bm_fable', 'bm_lewis', 'bf_emma', 'bf_isabella', 'bf_alice', 'bf_lily'].includes(value?.kokoroVoice) ? value.kokoroVoice : defaults.kokoroVoice,
@@ -70,7 +96,7 @@ function sanitizeSettings(value) {
   };
 }
 
-const whisperService = new (require('./whisper-service').WhisperService)(path.join(__dirname, 'speech', 'whisper', 'Release', 'whisper-server.exe'));
+const whisperService = new (require('./whisper-service').WhisperService)(path.join(appResourcesPath, 'speech', 'whisper', 'Release', 'whisper-server.exe'));
 let voiceWorker=null,voiceRequestCounter=0;const voiceRequests=new Map();
 function ensureVoiceWorker(){if(voiceWorker)return voiceWorker;const {Worker}=require('node:worker_threads');const worker=new Worker(path.join(__dirname,'voice-worker.cjs'),{workerData:{userData:app.getPath('userData')}});voiceWorker=worker;worker.on('message',result=>{const entry=voiceRequests.get(result.id);if(!entry)return;voiceRequests.delete(result.id);clearTimeout(entry.timer);result.error?entry.reject(Error(result.error)):entry.resolve(result.audio)});function failed(error){if(voiceWorker===worker)voiceWorker=null;for(const [id,entry]of voiceRequests){if(entry.worker===worker){clearTimeout(entry.timer);entry.reject(error);voiceRequests.delete(id)}}}worker.on('error',failed);worker.on('exit',code=>failed(Error('Local voice worker stopped ('+code+').')));return worker;}
 function kokoroSpeak(text,voice){const worker=ensureVoiceWorker(),id=++voiceRequestCounter;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{voiceRequests.delete(id);reject(Error('Local speech generation timed out.'));void worker.terminate()},90000);voiceRequests.set(id,{resolve,reject,timer,worker});worker.postMessage({id,text,voice})})}
@@ -478,7 +504,12 @@ function setupIpc() {
 
   ipcMain.handle('atlas:save-settings', async (event, data) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
-    return await writeAppSettings(data);
+    const previous = await readAppSettings();
+    const saved = await writeAppSettings(data);
+    if (process.platform === 'win32' && previous.launchAtStartup !== saved.launchAtStartup) {
+      app.setLoginItemSettings({ openAtLogin: saved.launchAtStartup, name: APP_ID });
+    }
+    return saved;
   });
   ipcMain.handle('atlas:elevenlabs-key-status', event => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
@@ -546,9 +577,9 @@ function setupIpc() {
     if (wav.length < 44 || wav.length > 16_000 * 2 * 25 + 44 || wav.toString('ascii', 0, 4) !== 'RIFF' || wav.toString('ascii', 8, 12) !== 'WAVE') {
       throw new Error('Audio recording is invalid or longer than 25 seconds.');
     }
-    const executable = path.join(__dirname, 'speech', 'whisper', 'Release', 'whisper-server.exe');
+    const executable = path.join(appResourcesPath, 'speech', 'whisper', 'Release', 'whisper-server.exe');
     const settings = await readAppSettings();
-    const modelFolder = path.join(__dirname, 'speech', 'models');
+    const modelFolder = path.join(appResourcesPath, 'speech', 'models');
     const enhancedModel = path.join(modelFolder, 'ggml-small.en-q5_1.bin');
     const fastModel = path.join(modelFolder, 'ggml-tiny.en.bin');
     const requestedModel = settings.recognitionMode === 'fast' ? fastModel : enhancedModel;
@@ -678,7 +709,9 @@ async function createWindow() {
 
 app.whenReady().then(async () => {
   app.setName('ATLAS');
-  app.setAppUserModelId('local.atlas.desktop');
+  app.setAppUserModelId(APP_ID);
+  try { await migrateLegacyUserData(); }
+  catch (error) { console.error('Could not fully migrate existing ATLAS data:', error); }
   setupPermissions();
   assistantService = require('./assistant-service').createService({directory:app.getPath('userData'),launchApp:async name=>{ const targets={notepad:'notepad.exe',calculator:'calc.exe',explorer:'explorer.exe','file explorer':'explorer.exe'}; if(name==='settings')return shell.openExternal('ms-settings:'); await new Promise((resolve,reject)=>{const child=spawn(targets[name],[],{detached:true,stdio:'ignore',windowsHide:false});child.once('error',reject);child.once('spawn',()=>{child.unref();resolve()})}) },volume:async direction=>{const key=direction==='up'?175:direction==='down'?174:173;const script='Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class AtlasVolume { [DllImport("user32.dll")] public static extern void keybd_event(byte v, byte s, uint f, UIntPtr e); }\'; [AtlasVolume]::keybd_event('+key+',0,0,[UIntPtr]::Zero); [AtlasVolume]::keybd_event('+key+',0,2,[UIntPtr]::Zero)';await new Promise((resolve,reject)=>{const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true});child.once('error',reject);child.once('close',code=>code===0?resolve():reject(Error('Volume control failed')))})},notify:reminder=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:reminder',reminder);const {Notification}=require('electron');if(Notification.isSupported())new Notification({title:'ATLAS reminder',body:reminder.title}).show();}});
   for(const saved of assistantService.state.jobs||[]){activeJobs.set(saved.id,{...saved,status:saved.status==='running'?'paused':saved.status,child:null});}
