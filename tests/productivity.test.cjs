@@ -37,7 +37,7 @@ test('project detection suggests actual scripts; completion checks are opt-in an
   const result=await completionChecks({checkCommands:'one\ntwo',autoCheck:true},cwd,{runner:async command=>({command,status:++ran===1?'passed':'failed',exitCode:ran===1?0:1})});assert.equal(result.status,'failed');assert.equal(result.results.length,2);
 });
 test('configured command checks execute in the chosen folder and report real exit codes',async t=>{
-  const {cwd}=await fixture(t);const success=await runCheck(process.platform==='win32'?'Write-Output (Get-Location).Path':'pwd',cwd);assert.equal(success.status,'passed');assert(success.output.toLowerCase().includes(cwd.toLowerCase()));const failure=await runCheck('exit 7',cwd);assert.equal(failure.status,'failed');assert.equal(failure.exitCode,7);
+  const {cwd}=await fixture(t);await fs.writeFile(path.join(cwd,'check-cwd.txt'),'ATLAS_CHECK_CWD_MARKER');const success=await runCheck(process.platform==='win32'?"Get-Content -LiteralPath 'check-cwd.txt'":'cat check-cwd.txt',cwd);assert.equal(success.status,'passed');assert(success.output.includes('ATLAS_CHECK_CWD_MARKER'));const failure=await runCheck('exit 7',cwd);assert.equal(failure.status,'failed');assert.equal(failure.exitCode,7);
 });
 test('Colab role selection reverses providers and keeps reviewers read-only',async()=>{
   const passes=[],run=createCollaboration({progress:()=>{},runProvider:async(provider,prompt,cwd,settings)=>{passes.push({provider,prompt,settings});return {output:'Complete\nATLAS_COLAB_READY'};}});await run({task:'build',cwd:'.',roles:'claude-builds',settings:{}});assert.deepEqual(passes.map(p=>p.provider),['claude','codex','claude']);assert.equal(passes[1].settings.readOnly,true);assert.match(passes[1].prompt,/You are the reviewer/);

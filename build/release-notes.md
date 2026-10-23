@@ -1,4 +1,4 @@
-ATLAS 0.6.4 adds Workbench, task queues, checkpoint recovery, provider approvals, and project tools, alongside usage indicators and a floating code change editor.
+ATLAS 0.6.5 adds Workbench, task queues, checkpoint recovery, provider approvals, and project tools, alongside usage indicators and a floating code change editor.
 
 - Open **Workbench** for a persistent task queue with reordering, retries, and optional pauses between tasks. Queues pause after restarting the app and when a task or its configured checks fail.
 - Discover existing Codex and Claude plugins, Codex skills and connectors, and supported MCP sign-in flows. Claude plugins can be enabled or disabled through the provider's shared configuration. Desktop-only plugins and unsupported connection forms still require the provider app.
@@ -10,6 +10,7 @@ ATLAS 0.6.4 adds Workbench, task queues, checkpoint recovery, provider approvals
 - Bottom-left Claude and Codex usage circles show available account limits, detailed reset information, and links to the providers' usage pages. Unavailable or stale readings are clearly marked.
 - A bottom-of-screen change bubble shows added/removed lines and opens a movable, resizable editor with file diffs and explicit text saves. Fixed the editor script's initialization error.
 - The effort popup now uses a smaller ATLAS design with a slim teal slider and text Reset control.
+- Fixed Windows path aliases in snapshot exclusions and suppressed PowerShell startup progress noise in completion checks.
 - Includes the photo previews, Ctrl+V screenshots, live task activity, Windows completion alerts, and unlimited runtime defaults from earlier releases.
 
 Install over your existing version to preserve settings and conversations, or use Settings → App updates → Check for updates, then Download and Restart and install. Windows x64.

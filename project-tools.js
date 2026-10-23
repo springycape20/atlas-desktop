@@ -12,7 +12,7 @@ async function detectProject(folder){
 function runCheck(command,cwd,{signal,timeoutMs=120000,spawnProcess=spawn}={}){
   return new Promise(resolve=>{
     const startedAt=Date.now();let output='',timedOut=false,settled=false;
-    const executable=process.platform==='win32'?'powershell.exe':'/bin/sh',args=process.platform==='win32'?['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from('$ErrorActionPreference="Stop"; '+command+'\nif ($LASTEXITCODE) { exit $LASTEXITCODE }','utf16le').toString('base64')]:['-c',command];
+    const executable=process.platform==='win32'?'powershell.exe':'/bin/sh',args=process.platform==='win32'?['-NoLogo','-NoProfile','-NonInteractive','-OutputFormat','Text','-EncodedCommand',Buffer.from('$ErrorActionPreference="Stop"; $ProgressPreference="SilentlyContinue"; '+command+'\nif ($LASTEXITCODE) { exit $LASTEXITCODE }','utf16le').toString('base64')]:['-c',command];
     const child=spawnProcess(executable,args,{cwd,windowsHide:true,stdio:['ignore','pipe','pipe'],env:process.env,detached:process.platform!=='win32'});
     const finish=(status,exitCode,error)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',stop);resolve({command,status,exitCode,output:output.slice(-16000),error,startedAt,durationMs:Date.now()-startedAt});};
     const stop=()=>{if(process.platform==='win32'&&child.pid){const killer=spawn('taskkill.exe',['/PID',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});killer.on('error',()=>child.kill());}else{try{process.kill(-child.pid,'SIGTERM');}catch{child.kill();}}};

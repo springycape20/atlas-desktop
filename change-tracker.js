@@ -8,6 +8,8 @@ function safeName(name){if(typeof name!=='string'||!name||name.includes('\0')||p
 function inside(root,file){const relative=path.relative(root,file);return relative!==''&&!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative);}
 async function safePath(root,name){name=safeName(name);if(await fs.realpath(root)!==root)throw Error('Project location changed.');const file=path.resolve(root,name);if(!inside(root,file))throw Error('File is outside this project.');let current=root;for(const part of name.split('/')){current=path.join(current,part);try{if((await fs.lstat(current)).isSymbolicLink())throw Error('Symbolic links cannot be edited here.');}catch(error){if(error.code==='ENOENT')break;throw error;}}return file;}
 async function scan(root,exclude){
+  // Match canonical task roots even when Windows supplies an 8.3 name or junction.
+  if(exclude)exclude=await fs.realpath(exclude).catch(()=>path.resolve(exclude));
   let names,limited=false;
   try{names=(await command('git',['ls-files','--cached','--others','--exclude-standard','-z','--','.'],root)).split('\0').filter(Boolean);}
   catch{names=[];async function walk(folder,prefix=''){for(const entry of await fs.readdir(folder,{withFileTypes:true})){if(names.length>=MAX_FILES){limited=true;return;}if(skipped.has(entry.name)||sensitive(prefix+entry.name)||entry.name.startsWith('.atlas-editor-')||exclude&&(path.join(folder,entry.name)===exclude||inside(exclude,path.join(folder,entry.name))))continue;const name=prefix+entry.name;if(entry.isDirectory())await walk(path.join(folder,entry.name),name+'/');else if(entry.isFile())names.push(name);}}await walk(root);}

@@ -15,6 +15,11 @@ test('editor saves preserve outside changes and reject paths outside the task',a
 test('snapshot storage and generated dependency trees are excluded from plain-folder tracking',async t=>{
  const {cwd}=await fixture(t),data=path.join(cwd,'private-data'),tracker=createChangeTracker(data);await fs.mkdir(path.join(cwd,'node_modules'));await fs.writeFile(path.join(cwd,'node_modules','dependency.js'),'dependency\n');await fs.writeFile(path.join(cwd,'app.js'),'hello\n');await fs.writeFile(path.join(cwd,'.env'),'private snapshot marker');await tracker.capture('first',cwd);await tracker.capture('second',cwd);await fs.writeFile(path.join(cwd,'.env'),'another private marker');assert(!(await fs.readFile(path.join(data,'changes','first.json'),'utf8')).includes('private snapshot marker'));const report=await tracker.report('first',true);assert.equal(report.files.length,0);await fs.writeFile(path.join(cwd,'node_modules','dependency.js'),'changed\n');assert.equal((await tracker.report('first',true)).files.length,0);
 });
+
+test('snapshot storage reached through an aliased Windows path is excluded from tracking',async t=>{
+ const {root,cwd}=await fixture(t),alias=path.join(root,'alias');await fs.symlink(cwd,alias,process.platform==='win32'?'junction':'dir');const tracker=createChangeTracker(path.join(alias,'private-data'));
+ await fs.writeFile(path.join(cwd,'app.js'),'hello\n');await tracker.capture('first',cwd);await tracker.capture('second',cwd);const report=await tracker.report('first',true);assert.equal(report.files.length,0);
+});
 test('change IPC enforces trusted access and blocks saves while another task edits the same folder',async()=>{
  const handlers=new Map(),current={id:'job',changeId:'snapshot',cwd:path.resolve('project'),status:'completed'},other={id:'other',cwd:current.cwd,status:'running'};let saved=0;
  registerChangeIpc({ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},trusted:event=>event.trusted,findJob:id=>id===current.id?current:null,jobs:()=>[current,other],tracker:()=>({report:async()=>({files:[{path:'app.js',patch:{secret:'not sent'}}],added:1,removed:0}),file:async()=>({content:'code',editable:true}),save:async()=>{saved++;return{saved:true};}})});
