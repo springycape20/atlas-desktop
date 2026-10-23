@@ -319,18 +319,24 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
 
 }
 function findClaudeExecutable() {
-  const executable = process.env.CLAUDE_CODE_EXECUTABLE || path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
-  return existsSync(executable) ? executable : null;
+  const candidates = [
+    process.env.CLAUDE_CODE_EXECUTABLE,
+    path.join(os.homedir(), '.local', 'bin', 'claude.exe'),
+    path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'),
+    ...(process.env.PATH || '').split(path.delimiter).filter(Boolean).map(directory => path.join(directory.replace(/^"|"$/g, ''), 'claude.exe')),
+  ];
+  return candidates.find(candidate => candidate && existsSync(candidate)) || null;
 }
 function launchProviderLogin(executable, args, provider) {
   if (!executable) throw new Error('Provider CLI was not found.');
-  const quote = value => `"${String(value).replace(/"/g, '""')}"`;
-  const command = [quote(executable), ...args].join(' ');
-  const terminal = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Microsoft', 'WindowsApps', 'wt.exe');
-  if (!existsSync(terminal)) throw new Error('Windows Terminal was not found, so ATLAS could not open an interactive command window.');
+  const quote = value => `'${String(value).replace(/'/g, "''")}'`;
+  const title = `ATLAS - ${provider === 'codex' ? 'Codex' : 'Claude Code'} sign-in`;
+  const command = `$Host.UI.RawUI.WindowTitle = ${quote(title)}; & ${[executable, ...args].map(quote).join(' ')}`;
+  const terminal = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  if (!existsSync(terminal)) throw new Error('Windows PowerShell was not found. Open a terminal and sign into the provider CLI manually.');
   return new Promise((resolve, reject) => {
-    const child = spawn(terminal, ['-w', 'new', '--title', `ATLAS · ${provider === 'codex' ? 'Codex' : 'Claude Code'}`, 'cmd.exe', '/d', '/k', command], {
-      cwd: app.getPath('home'), detached: true, windowsHide: true, shell: false,
+    const child = spawn(terminal, ['-NoLogo', '-NoProfile', '-NoExit', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], {
+      cwd: app.getPath('home'), detached: true, windowsHide: false, shell: false,
       stdio: 'ignore', env: process.env,
     });
     child.once('error', reject);
