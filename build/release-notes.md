@@ -1,6 +1,8 @@
 ATLAS 0.6.0 adds project workflows and easier setup for Codex and Claude.
 
 - Project profiles, file/screenshot attachments, isolated Git review, recoverable Colab passes, four collaboration modes, task budgets, diagnostics, and searchable/exportable chat history.
+- Compact composer that grows as you type, a + attachment menu, and live task activity that collapses when work ends.
+- Unlimited Colab passes by default, with an optional pass limit. Colab finishes when both providers confirm completion; runtime limits and Stop remain available.
 - Official download links for missing provider CLIs, Git, and GitHub CLI.
 - New Colab projects can create a local Git repository and initial snapshot after confirmation.
 - Settings, Colab, and profiles discover available models from the installed provider CLIs; refresh at launch or manually, with cached choices offline.

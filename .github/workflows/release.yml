@@ -18,6 +18,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm test
       - name: Download speech runtime and models
         shell: pwsh
         run: ./Setup-ATLAS.ps1 -SkipDependencies
