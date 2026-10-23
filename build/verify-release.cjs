@@ -7,7 +7,7 @@ const archive = path.join(__dirname, '..', 'dist', 'win-unpacked', 'resources', 
 const packaged = JSON.parse(asar.extractFile(archive, 'package.json').toString());
 assert.equal(packaged.version, version);
 if (process.env.GITHUB_REF_NAME) assert.equal(process.env.GITHUB_REF_NAME, `v${version}`);
-for (const file of ['model-catalog.js', 'app-updates.js', 'settings-discovery.js', 'workspace-service.js', 'workspace-ipc.js', 'workspace-extras.js', 'colab-workspace.js', 'provider-install.js', 'collaboration.js', 'task-notifications.js', 'provider-usage.js', 'provider-usage-ui.js', 'change-tracker.js', 'change-ipc.js', 'change-editor.js', 'main.js', 'index.html']) {
+for (const file of ['model-catalog.js', 'app-updates.js', 'settings-discovery.js', 'workspace-service.js', 'workspace-ipc.js', 'workspace-extras.js', 'colab-workspace.js', 'provider-install.js', 'collaboration.js', 'task-notifications.js', 'provider-usage.js', 'provider-usage-ui.js', 'change-tracker.js', 'change-ipc.js', 'change-editor.js', 'approval-manager.js', 'claude-control.js', 'task-queue.js', 'project-tools.js', 'plugin-discovery.js', 'productivity-ipc.js', 'productivity-ui.js', 'main.js', 'index.html']) {
   assert.ok(asar.extractFile(archive, file).length > 0, `Missing packaged app file: ${file}`);
 }
 assert.ok(fs.statSync(path.join(__dirname, '..', 'dist', `ATLAS-Setup-${version}.exe`)).size > 0);

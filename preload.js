@@ -1,6 +1,15 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('atlas', {
   onResponseText: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('atlas:response-text', listener); return () => ipcRenderer.removeListener('atlas:response-text', listener); },
+  taskQueue: request=>ipcRenderer.invoke('atlas:task-queue',request),
+  approvals: request=>ipcRenderer.invoke('atlas:approvals',request),
+  plugins: request=>ipcRenderer.invoke('atlas:plugins',request),
+  pluginConnect: request=>ipcRenderer.invoke('atlas:plugin-connect',request),
+  projectSetup: request=>ipcRenderer.invoke('atlas:project-setup',request),
+  searchWork: request=>ipcRenderer.invoke('atlas:search-work',request),
+  taskOpen: id=>ipcRenderer.invoke('atlas:task-open',{id}),
+  onApprovals: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:approvals',listener);return()=>ipcRenderer.removeListener('atlas:approvals',listener);},
+  onQueue: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:queue',listener);return()=>ipcRenderer.removeListener('atlas:queue',listener);},
   prepareProject: cwd=>ipcRenderer.invoke('atlas:prepare-project',{cwd}),
   discoverModels: refresh=>ipcRenderer.invoke('atlas:discover-models',{refresh}),
   updates: request=>ipcRenderer.invoke('atlas:updates',request),

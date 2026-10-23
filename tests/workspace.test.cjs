@@ -80,7 +80,7 @@ test('comparison is read-only and its second perspective is independent', async 
   await assert.rejects(run({task:'Stop',settings:{},signal:controller.signal}),/stopped/);
 });
 test('all renderer scripts parse, including the HTML inline scripts', async () => {
-  for(const file of ['colab-workspace.js','workspace-extras.js','provider-usage-ui.js','change-editor.js'])new vm.Script(await fs.readFile(path.join(__dirname,'..',file),'utf8'));
+  for(const file of ['colab-workspace.js','workspace-extras.js','provider-usage-ui.js','change-editor.js','productivity-ui.js','settings-discovery.js'])new vm.Script(await fs.readFile(path.join(__dirname,'..',file),'utf8'));
   const html=await fs.readFile(path.join(__dirname,'..','index.html'),'utf8');
   for(const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
 });

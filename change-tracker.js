@@ -43,6 +43,26 @@ function createChangeTracker(directory){
   async function save(id,name,content,version){if(typeof content!=='string'||Buffer.byteLength(content)>MAX_FILE||content.includes('\0'))throw Error('Use a UTF-8 text file under 512 KB.');const snapshot=await load(id),location=await safePath(snapshot.cwd,name),current=await file(id,name);if(!current.editable)throw Error('This file cannot be edited here.');if(current.version!==version)throw Error('The file changed on disk. Reload before saving to preserve those changes.');
     const stat=await fs.stat(location),temp=path.join(path.dirname(location),'.atlas-editor-'+randomUUID());try{await fs.writeFile(temp,content,{flag:'wx',mode:stat.mode&511});await safePath(snapshot.cwd,name);const bytes=await fs.readFile(location),latest=await fs.stat(location);if(hash(bytes)+':'+(latest.mode&511)!==version)throw Error('The file changed on disk. Reload before saving.');await fs.rename(temp,location);}finally{await fs.unlink(temp).catch(()=>{});}reports.delete(id);return {saved:true};
   }
-  return {capture,report,file,save};
+  async function seal(id){const snapshot=await load(id),current=await scan(snapshot.cwd,directory);snapshot.after=Object.fromEntries(changedFiles(snapshot.files,current.files).files.map(row=>[row.path,current.files[row.path]?{hash:current.files[row.path].hash,mode:current.files[row.path].mode}:null]));await fs.writeFile(idPath(id),JSON.stringify(snapshot));}
+  async function restorePreview(id){
+    const snapshot=await load(id);if(!snapshot.after)throw Error('This task has no completed checkpoint yet.');
+    const current=await scan(snapshot.cwd,directory),files=Object.keys(snapshot.after),conflicts=[];
+    for(const name of files){const expected=snapshot.after[name],actual=current.files[name];if((expected?.hash||null)!==(actual?.hash||null)||(expected?.mode??null)!==(actual?.mode??null))conflicts.push(name);if(snapshot.files[name]?.text===null||expected?.hash?.startsWith('large:'))throw Error('This checkpoint contains binary or large originals/changes. Restore those files with Git.');await safePath(snapshot.cwd,name);}
+    if(conflicts.length)throw Error('Later edits found in '+conflicts.slice(0,5).join(', ')+'. Restore cancelled to preserve them.');
+    return {files,cwd:snapshot.cwd,token:hash(JSON.stringify(snapshot.after)),limited:snapshot.limited};
+  }
+  async function restore(id,token){
+    const preview=await restorePreview(id);if(preview.token!==token)throw Error('Checkpoint changed. Review it again.');
+    const snapshot=await load(id),backupId='undo-'+randomUUID();await capture(backupId,snapshot.cwd);
+    for(const name of preview.files){const location=await safePath(snapshot.cwd,name),original=snapshot.files[name];
+      let current=null;try{const stat=await fs.stat(location);if(stat.size>MAX_FILE)throw Error('This file grew beyond the checkpoint limit: '+name);const bytes=await fs.readFile(location);current={hash:hash(bytes),mode:stat.mode&511};}catch(error){if(error.code!=='ENOENT')throw error;}
+      const expected=snapshot.after[name];if((expected?.hash||null)!==(current?.hash||null)||(expected?.mode??null)!==(current?.mode??null))throw Error('A file changed during restore: '+name+'. Recovery snapshot: '+backupId+'.');
+      if(!original){await fs.unlink(location).catch(error=>{if(error.code!=='ENOENT')throw error;});continue;}
+      await fs.mkdir(path.dirname(location),{recursive:true});await safePath(snapshot.cwd,name);
+      const temp=path.join(path.dirname(location),'.atlas-editor-'+randomUUID());try{await fs.writeFile(temp,original.text,{flag:'wx',mode:original.mode});await fs.rename(temp,location);await fs.chmod(location,original.mode);}finally{await fs.unlink(temp).catch(()=>{});}
+    }
+    await seal(backupId);reports.delete(id);return {restored:true,files:preview.files,backupId,message:'Working files restored to their pre-task contents. The Git index and commits were preserved; a recovery snapshot was saved.'};
+  }
+  return {capture,report,file,save,seal,restorePreview,restore};
 }
 module.exports={createChangeTracker,changedFiles};

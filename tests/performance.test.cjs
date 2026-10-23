@@ -276,3 +276,25 @@ test('Assistant starts the change snapshot before provider edits and exposes act
   const report=await h.handlers.get('atlas:changes')(event,{jobId:'changed-task'});
   assert.equal(report.ready,true);assert.equal(report.added,2);assert.equal(report.removed,1);assert.equal(report.files.length,1);assert.equal(report.files[0].path,'app.js');assert.equal(report.canEdit,true);
 });
+
+test('Assistant completion checks persist real results and checkpoint recovery is available through IPC',async t=>{
+  class EditingCodex{async run({cwd}){await fs.writeFile(path.join(cwd,'app.js'),'agent update\n');return {output:'Updated.',sessionId:'session'};}}
+  const h=await mainHarness(t,{modules:{'./codex-connection':{CodexConnection:EditingCodex}}});h.setupIpc();
+  const cwd=path.join(h.dir,'project');await fs.mkdir(cwd);await fs.writeFile(path.join(cwd,'app.js'),'before\n');
+  const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}},profile=await h.handlers.get('atlas:projects')(event,{action:'save',profile:{name:'Checks',cwd,autoCheck:true,checkCommands:'exit 3'}});
+  const result=await h.handlers.get('atlas:chat')(event,{requestId:'checked-task',prompt:'Use Codex to fix app.js',cwd,profileId:profile.id});
+  assert.equal(result.verification.status,'failed');assert.equal(result.verification.results[0].exitCode,3);assert.equal(h.jobSnapshots().find(j=>j.id==='checked-task').verification.status,'failed');
+  const changes=h.handlers.get('atlas:changes'),preview=await changes(event,{jobId:'checked-task',action:'restore-preview'});assert.deepEqual([...preview.files],['app.js']);
+  await changes(event,{jobId:'checked-task',action:'restore',token:preview.token});assert.equal(await fs.readFile(path.join(cwd,'app.js'),'utf8'),'before\n');
+  const recovery=await changes(event,{jobId:'checked-task',action:'restore-preview',recovery:true});await changes(event,{jobId:'checked-task',action:'restore',recovery:true,token:recovery.token});assert.equal(await fs.readFile(path.join(cwd,'app.js'),'utf8'),'agent update\n');
+});
+
+test('stopping during completion checks preserves cancelled status rather than reporting completion',async t=>{
+  let checking;
+  const started=new Promise(resolve=>checking=resolve);
+  class FakeCodex{async run(){return {output:'Finished editing.',sessionId:'session'};}}
+  const h=await mainHarness(t,{modules:{'./codex-connection':{CodexConnection:FakeCodex},'./project-tools':{completionChecks:async(_project,_cwd,{signal})=>{checking();await new Promise(resolve=>signal.addEventListener('abort',resolve,{once:true}));return {status:'cancelled',results:[]};}}}});h.setupIpc();
+  const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}},promise=h.handlers.get('atlas:chat')(event,{requestId:'stop-checks',prompt:'Use Codex to review the file.',cwd:h.dir});
+  await started;const rejected=assert.rejects(promise,/Task stopped/);await h.handlers.get('atlas:jobs')(event,{action:'stop',id:'stop-checks'});await rejected;
+  assert.equal(h.activeJobs.get('stop-checks').status,'cancelled');assert.equal(h.activeJobs.get('stop-checks').verification.status,'cancelled');
+});

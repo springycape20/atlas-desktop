@@ -14,7 +14,7 @@
   const current = () => chats.find(chat => chat.id === selected);
   function makeChat() {
     const previous = current();
-    const chat = { id: crypto.randomUUID(), title: 'New Colab chat', cwd: previous?.cwd || cwd || '', draft: '', messages: [], mode:previous?.mode||'build',isolated:previous?.isolated!==false,maxRounds:null,passLimitVersion:2,profileId:previous?.profileId||'',effort: previous?.effort || defaults.effort || 'medium', codexModel: previous?.codexModel || defaults.colabCodexModel || '', claudeModel: previous?.claudeModel || defaults.colabClaudeModel || '', busy: false, status: '' };
+    const chat = { id: crypto.randomUUID(), title: 'New Colab chat', cwd: previous?.cwd || cwd || '', draft: '', messages: [], mode:previous?.mode||'build',roles:previous?.roles||'codex-builds',isolated:previous?.isolated!==false,maxRounds:null,passLimitVersion:2,profileId:previous?.profileId||'',effort: previous?.effort || defaults.effort || 'medium', codexModel: previous?.codexModel || defaults.colabCodexModel || '', claudeModel: previous?.claudeModel || defaults.colabClaudeModel || '', busy: false, status: '' };
     chats.push(chat); selected = chat.id; return chat;
   }
   if (!current()) makeChat();
@@ -41,7 +41,7 @@
     <form class="colab-composer" id="colabForm"><label class="sr-only" for="colabTask">Message Colab</label><textarea id="colabTask" rows="1" maxlength="20000" aria-label="Message Colab" placeholder="Give Codex and Claude a task, or ask a follow-up…"></textarea><div class="colab-compose-footer"><span id="colabStatus" role="status" aria-live="polite"></span><button class="quiet-button" id="colabStop" type="button" hidden>Stop</button><button class="primary-button" id="colabStart" type="submit">Send to Colab</button></div></form></div>`;
   document.querySelector('.layout').append(panel);
   const search=document.createElement('input');search.id='colabSearch';search.className='history-search';search.placeholder='Search Colab chats…';search.setAttribute('aria-label','Search Colab chats');panel.querySelector('#colabChats').before(search);search.oninput=()=>render();
-  const controls=document.createElement('div');controls.className='colab-config-grid';controls.innerHTML='<label class="field">Mode<select id="colabMode"><option value="build">Build and review</option><option value="plan">Plan · read-only</option><option value="debug">Debug</option><option value="compare">Compare approaches · read-only</option></select></label><label class="field">Pass limit (optional)<input id="colabPasses" type="number" min="1" step="1" placeholder="Unlimited"><small>Leave blank for unlimited passes.</small></label><label class="toggle-row"><span>Review edits in an isolated Git worktree</span><input id="colabIsolated" type="checkbox" checked></label>';panel.querySelector('#colabConfig').append(controls);
+  const controls=document.createElement('div');controls.className='colab-config-grid';controls.innerHTML='<label class="field">Mode<select id="colabMode"><option value="build">Build and review</option><option value="plan">Plan · read-only</option><option value="debug">Debug</option><option value="compare">Compare approaches · read-only</option></select></label><label class="field">Roles<select id="colabRoles"><option value="codex-builds">Codex builds · Claude reviews</option><option value="claude-builds">Claude builds · Codex reviews</option><option value="proposals">Compare proposals, then build</option></select></label><label class="field">Pass limit (optional)<input id="colabPasses" type="number" min="1" step="1" placeholder="Unlimited"><small>Leave blank for unlimited passes.</small></label><label class="toggle-row"><span>Review edits in an isolated Git worktree</span><input id="colabIsolated" type="checkbox" checked></label>';panel.querySelector('#colabConfig').append(controls);
   const toolbar=document.createElement('div');toolbar.className='colab-chat-actions';toolbar.innerHTML='<button class="quiet-button" id="colabRename" type="button">Rename</button><button class="quiet-button" id="colabPin" type="button">Pin</button><button class="quiet-button" id="colabExport" type="button">Export</button>';panel.querySelector('.colab-chat-header').append(toolbar);
   const recovery=document.createElement('div');recovery.className='colab-recovery';recovery.innerHTML='<span id="colabUsage"></span><button class="quiet-button" id="colabResume" type="button" hidden>Resume saved stages</button><button class="quiet-button" id="colabReview" type="button" hidden>Review changes</button>';panel.querySelector('#colabForm').before(recovery);
 
@@ -81,7 +81,7 @@
   }
   function refreshModels() {
     const chat = current();
-    for(const [id,value] of [['colabMode',chat.mode||'build'],['colabPasses',chat.maxRounds??'']]){el(id).value=value;el(id).disabled=chat.busy;}el('colabIsolated').checked=chat.isolated!==false;el('colabIsolated').disabled=chat.busy;
+    for(const [id,value] of [['colabMode',chat.mode||'build'],['colabRoles',chat.roles||'codex-builds'],['colabPasses',chat.maxRounds??'']]){el(id).value=value;el(id).disabled=chat.busy;}el('colabIsolated').checked=chat.isolated!==false;el('colabIsolated').disabled=chat.busy;
 
     for (const provider of ['codex', 'claude']) {
       const picker = el(provider === 'codex' ? 'colabCodexModel' : 'colabClaudeModel'), chosen = chat[provider + 'Model'] || '';
@@ -184,7 +184,7 @@
     const attached=window.atlasWorkspace?.takeAttachments('colab',chat.id)||{request:{},files:[]};
     chat.messages.push({ role: 'user', content: task, attachments:attached.files }); chat.draft = ''; if(!chat.customTitle)chat.title = chat.messages.find(message => message.role === 'user').content.slice(0, 60);
     chat.busy = true; chat.jobId = ''; chat.status = 'Starting collaboration…'; save(); render();
-    try { const result = await window.atlas.collaborate({ task, context, chatId: chat.id, cwd: chat.cwd, codexModel: chat.codexModel, claudeModel: chat.claudeModel, effort: chat.effort,mode:chat.mode||'build',isolated:chat.isolated!==false,maxRounds:chat.maxRounds??null,...attached.request,profileId:chat.profileId }); chat.jobId = result.id; save(); render(); }
+    try { const result = await window.atlas.collaborate({ task, context, chatId: chat.id, cwd: chat.cwd, codexModel: chat.codexModel, claudeModel: chat.claudeModel, effort: chat.effort,mode:chat.mode||'build',roles:chat.roles||'codex-builds',isolated:chat.isolated!==false,maxRounds:chat.maxRounds??null,...attached.request,profileId:chat.profileId }); chat.jobId = result.id; save(); render(); }
     catch (error) { chat.busy = false; chat.status = 'Task failed. You can retry or send a follow-up.'; chat.messages.push({ role: 'assistant', error: true, content: error.message.replace(/^Error invoking remote method '[^']+': Error: /, '') }); save(); render(); }
   };
   el('colabStop').onclick = async () => {
@@ -218,7 +218,7 @@
     for (const chat of chats) if (chat.busy && !jobs.some(job => job.id === chat.jobId && job.status === 'running')) { chat.busy = false; chat.status = 'Previous run is no longer active. Send a follow-up to continue.'; }
     save(); render();
   }).catch(() => { for (const chat of chats) chat.busy = false; render(); });
-  for(const [id,key] of [['colabMode','mode'],['colabPasses','maxRounds']])el(id).onchange=()=>{current()[key]=key==='mode'?el(id).value:(el(id).value===''?null:Number(el(id).value));save();};el('colabIsolated').onchange=()=>{current().isolated=el('colabIsolated').checked;save();};
+  for(const [id,key] of [['colabMode','mode'],['colabRoles','roles'],['colabPasses','maxRounds']])el(id).onchange=()=>{current()[key]=key==='mode'||key==='roles'?el(id).value:(el(id).value===''?null:Number(el(id).value));save();};el('colabIsolated').onchange=()=>{current().isolated=el('colabIsolated').checked;save();};
   el('colabRename').onclick=()=>window.atlasWorkspace?.renameColab();
   el('colabPin').onclick=()=>{current().pinned=!current().pinned;save();render();};
   el('colabExport').onclick=()=>void window.atlas.exportChat({title:current().title,markdown:'# '+current().title+'\n\n'+current().messages.map(m=>'## '+(m.role==='user'?'You':'Colab')+'\n\n'+m.content).join('\n\n')}).catch(error=>toast(error.message));
