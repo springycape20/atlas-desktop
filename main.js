@@ -496,13 +496,19 @@ function setupIpc() {
       codexExecutable ? runCommand(codexExecutable, ['login', 'status'], app.getPath('home'), 'codex', 15_000).then(result => { const statusText = `${result.output}\n${result.errors}`.trim(); return { loggedIn: /\blogged in\b/i.test(statusText) && !/\bnot logged in\b/i.test(statusText), detail: statusText.slice(0, 120) }; }).catch(() => ({ loggedIn: false, detail: 'Could not check Codex login.' })) : Promise.resolve({ loggedIn: false, detail: 'Codex CLI not found.' }),
       claudeExecutable ? runCommand(claudeExecutable, ['auth', 'status', '--json'], app.getPath('home'), 'claude', 15_000).then(result => { const data = JSON.parse(result.output); return { loggedIn: data.loggedIn === true, detail: data.loggedIn ? `${data.authMethod || 'Account'}${data.subscriptionType ? ` · ${data.subscriptionType}` : ''}` : 'Not signed in.' }; }).catch(() => ({ loggedIn: false, detail: 'Could not check Claude Code login.' })) : Promise.resolve({ loggedIn: false, detail: 'Claude Code CLI not found.' }),
     ]);
-    return { codex, claude };
+    return { codex: { ...codex, installed: Boolean(codexExecutable) }, claude: { ...claude, installed: Boolean(claudeExecutable) } };
   });
   ipcMain.handle('atlas:provider-login', async (event, request) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
     const provider = request?.provider;
     if (provider !== 'codex' && provider !== 'claude') throw new Error('Unknown provider.');
-    const executable = provider === 'codex' ? findCodexExecutable() : findClaudeExecutable();
+    let executable = provider === 'codex' ? findCodexExecutable() : findClaudeExecutable();
+    if (!executable && provider === 'claude') {
+      await require('./provider-install').installClaudeCode();
+      executable = findClaudeExecutable();
+      if (!executable) throw new Error('The installer finished but Claude Code could not be found. Try installation again or set CLAUDE_CODE_EXECUTABLE.');
+      await runCommand(executable, ['--version'], app.getPath('home'), 'claude', 15000);
+    }
     if (!executable) throw new Error(`${provider === 'codex' ? 'Codex' : 'Claude Code'} CLI was not found.`);
     const connected = request?.connected === true;
     const args = provider === 'codex'
