@@ -13,7 +13,14 @@ function registerWorkspaceIpc({ipcMain,app,dialog,clipboard,window,trusted,servi
   handle('chat-metadata',request=>service().chatMeta(request));
   handle('attachment-preview',request=>service().preview(request.id));
   handle('attachments',async request=>{
-    if(request.action==='clipboard') {const image=clipboard.readImage();if(image.isEmpty())throw Error('Copy a screenshot or image to the clipboard first.');return service().importBuffers([{name:'Screenshot.png',bytes:image.toPNG()}]);}
+    if(request.action==='clipboard') {let bytes;
+      if(typeof clipboard.read==='function') {
+        for(const item of await clipboard.read())if(item.types.includes('image/png')){const blob=await item.getType('image/png');bytes=Buffer.from(await blob.arrayBuffer());break;}
+      } else if(typeof clipboard.readImage==='function') {
+        const image=clipboard.readImage();if(!image.isEmpty())bytes=image.toPNG();
+      }
+      if(!bytes?.length)throw Error('Copy a screenshot or image to the clipboard first.');
+      return service().importBuffers([{name:'Screenshot.png',bytes}]);}
     let paths=request.paths;
     if(!paths){const result=await dialog.showOpenDialog(window(),{title:'Choose files to share with your providers',properties:['openFile','multiSelections']});if(result.canceled)return[];paths=result.filePaths;}
     return service().importPaths(paths);

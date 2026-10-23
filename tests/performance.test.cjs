@@ -106,13 +106,13 @@ async function mainHarness(t, options = {}) {
     protocol: { registerSchemesAsPrivileged() {} }
   };
   const fakeProcess = { platform: 'win32', env: { ...process.env, LOCALAPPDATA: path.join(dir, 'Local'), CODEX_EXECUTABLE: path.join(root, 'main.js') } };
-  const context = vm.createContext({ console, Buffer, process: fakeProcess, URL, setTimeout, clearTimeout, setInterval, clearInterval, structuredClone,
+  const context = vm.createContext({ console, Buffer, AbortController, process: fakeProcess, URL, setTimeout, clearTimeout, setInterval, clearInterval, structuredClone,
     __dirname: root, require: name => name === 'electron' ? electron : options.modules?.[name] || localRequire(name), updates });
   const code = await fs.readFile(path.join(root, 'main.js'), 'utf8');
   vm.runInContext(code + `
     mainWindow = { isDestroyed: () => false, webContents: { send: (_event, patch) => updates.push(patch) } };
     assistantService = require('./assistant-service').createService({ directory: app.getPath('userData'), notify() {} });
-    globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, setupIpc, sender: mainWindow.webContents };
+    globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, readAppSettings, setupIpc, sender: mainWindow.webContents };
   `, context);
   return { ...context.harness, updates, events, quit, dir, paths, handlers };
 }
@@ -203,11 +203,25 @@ test('saved task budgets include active runtime but exclude offline time', async
   assert.equal(h.jobSnapshots()[0].budget.usedMs,saved.budget.usedMs);
 });
 
-test('exhausted task budgets and Colab-to-Assistant resumes are rejected', async t => {
+test('old task budgets do not block resuming and Colab-to-Assistant resumes are rejected', async t => {
   const h=await mainHarness(t);h.setupIpc();
   const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}};
   h.activeJobs.set('spent',{id:'spent',status:'paused',budget:{usedMs:60000,maxRuntimeSeconds:60}});
-  await assert.rejects(h.handlers.get('atlas:chat')(event,{requestId:'retry',resumeJobId:'spent',maxRuntimeSeconds:60}),/Increase the task runtime/);
+  await assert.rejects(h.handlers.get('atlas:chat')(event,{requestId:'retry',resumeJobId:'spent',maxRuntimeSeconds:60}),/Enter a prompt/);
+  assert.equal(h.activeJobs.get('retry').budget.maxRuntimeSeconds,null);
   h.activeJobs.set('colab',{id:'colab',status:'paused',collaboration:true});
   await assert.rejects(h.handlers.get('atlas:chat')(event,{requestId:'wrong-mode',resumeJobId:'colab'}),/open its Colab chat/);
+});
+
+
+
+test('request timeout defaults and legacy settings migrate to unlimited',async t=>{
+  const h=await mainHarness(t);
+  assert.equal((await h.readAppSettings()).timeoutSeconds,0);
+  await fs.mkdir(h.paths.userData,{recursive:true});
+  const file=path.join(h.paths.userData,'settings.json');
+  await fs.writeFile(file,JSON.stringify({timeoutSeconds:180}));
+  assert.equal((await h.readAppSettings()).timeoutSeconds,0);
+  await fs.writeFile(file,JSON.stringify({timeoutSeconds:60,timeoutPolicyVersion:1}));
+  assert.equal((await h.readAppSettings()).timeoutSeconds,60);
 });

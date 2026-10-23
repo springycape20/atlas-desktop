@@ -29,7 +29,7 @@ function createWorkspaceService(directory) {
       const name=trim(p.name,100).trim();if(!name)throw Error('Give the project a name.');
       const id=p.id&&s.profiles.some(row=>row.id===p.id)?p.id:randomUUID();
       const model=v=>/^[A-Za-z0-9._:/-]{1,100}$/.test(v||'')?v:'';
-      const profile={id,name,cwd:folder,instructions:trim(p.instructions,12000),commands:trim(p.commands,4000),codexModel:model(p.codexModel),claudeModel:model(p.claudeModel),effort:['low','medium','high','xhigh','max'].includes(p.effort)?p.effort:'medium',maxRuntimeSeconds:Math.min(7200,Math.max(60,Number(p.maxRuntimeSeconds)||900))};
+      const profile={id,name,cwd:folder,instructions:trim(p.instructions,12000),commands:trim(p.commands,4000),codexModel:model(p.codexModel),claudeModel:model(p.claudeModel),effort:['low','medium','high','xhigh','max'].includes(p.effort)?p.effort:'medium',maxRuntimeSeconds:null};
       if(s.profiles.length>=100&&!s.profiles.some(row=>row.id===id))throw Error('Up to 100 project profiles are supported.');s.profiles=s.profiles.filter(row=>row.id!==id);s.profiles.push(profile);await save();return profile;
     }
     if(request.action==='delete'){s.profiles=s.profiles.filter(row=>row.id!==request.id);await save();}

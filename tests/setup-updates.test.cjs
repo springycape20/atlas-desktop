@@ -69,3 +69,24 @@ test('Git setup requires confirmation and rejects untrusted windows',async()=>{
   response=0;assert.equal((await prepare({trusted:true},{cwd:'/project'})).ready,true);assert.equal(initializations,1);
   await assert.rejects(prepare({trusted:false},{cwd:'/project'}),/Untrusted/);
 });
+
+test('screenshot paste reads Electron async PNG clipboard and preserves bytes',async()=>{
+  const handlers=new Map(),png=Buffer.from('PNG snapshot');let imported;
+  const clipboard={read:async()=>[{types:['text/plain'],getType:async()=>{throw Error('wrong type');}},{types:['image/png'],getType:async type=>{assert.equal(type,'image/png');return new Blob([png],{type});}}]};
+  registerWorkspaceIpc({ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},trusted:e=>e.trusted,clipboard,service:()=>({importBuffers:async files=>{imported=files;return [{id:'screenshot'}];}})});
+  const paste=handlers.get('atlas:attachments');
+  assert.deepEqual(await paste({trusted:true},{action:'clipboard'}),[{id:'screenshot'}]);
+  assert.equal(imported[0].name,'Screenshot.png');assert.deepEqual(imported[0].bytes,png);
+  await assert.rejects(paste({trusted:false},{action:'clipboard'}),/Untrusted/);
+  clipboard.read=async()=>[{types:['text/plain']}];
+  await assert.rejects(paste({trusted:true},{action:'clipboard'}),/Copy a screenshot/);
+  clipboard.read=async()=>{throw Error('Clipboard unavailable');};
+  await assert.rejects(paste({trusted:true},{action:'clipboard'}),/Clipboard unavailable/);
+});
+
+test('screenshot paste remains compatible with earlier Electron clipboard API',async()=>{
+  const handlers=new Map(),png=Buffer.from('legacy PNG');
+  registerWorkspaceIpc({ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},trusted:()=>true,clipboard:{readImage:()=>({isEmpty:()=>false,toPNG:()=>png})},service:()=>({importBuffers:async files=>files})});
+  const result=await handlers.get('atlas:attachments')({}, {action:'clipboard'});
+  assert.deepEqual(result[0].bytes,png);
+});

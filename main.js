@@ -77,7 +77,7 @@ function setupPermissions() {
 }
 const modelIdPattern = /^[A-Za-z0-9._:/-]{1,100}$/;
 function defaultSettings() {
-  return { routeMode: 'auto', permissionBypass: false, codexSandbox: 'workspace-write', codexModel: '', claudeModel: '', codexModels: [], claudeModels: [], voiceDeviceId: '', speechDetail: 'brief', speakResponses: true, launchAtStartup: false, voiceEngine: 'kokoro', kokoroVoice: 'bm_george', timeoutSeconds: 180, elevenLabsEnabled: false, elevenLabsVoiceId: '', elevenLabsModel: 'eleven_multilingual_v2', elevenLabsSpeed: 0.92, recognitionMode: 'fast', wakeWordEnabled: true, autoListenReplies: true };
+  return { routeMode: 'auto', permissionBypass: false, codexSandbox: 'workspace-write', codexModel: '', claudeModel: '', codexModels: [], claudeModels: [], voiceDeviceId: '', speechDetail: 'brief', speakResponses: true, launchAtStartup: false, voiceEngine: 'kokoro', kokoroVoice: 'bm_george', timeoutSeconds: 0, timeoutPolicyVersion: 1, elevenLabsEnabled: false, elevenLabsVoiceId: '', elevenLabsModel: 'eleven_multilingual_v2', elevenLabsSpeed: 0.92, recognitionMode: 'fast', wakeWordEnabled: true, autoListenReplies: true };
 }
 function sanitizeSettings(value) {
   const defaults = defaultSettings();
@@ -95,7 +95,8 @@ function sanitizeSettings(value) {
     speechDetail: value?.speechDetail === 'full' ? 'full' : 'brief',
     voiceEngine: ['kokoro', 'windows', 'elevenlabs'].includes(value?.voiceEngine) ? value.voiceEngine : defaults.voiceEngine,
     kokoroVoice: ['bm_george', 'bm_daniel', 'bm_fable', 'bm_lewis', 'bf_emma', 'bf_isabella', 'bf_alice', 'bf_lily'].includes(value?.kokoroVoice) ? value.kokoroVoice : defaults.kokoroVoice,
-    timeoutSeconds: [60, 120, 180, 300].includes(value?.timeoutSeconds) ? value.timeoutSeconds : defaults.timeoutSeconds,
+    timeoutSeconds: value?.timeoutPolicyVersion === 1 && [0, 60, 120, 180, 300].includes(value?.timeoutSeconds) ? value.timeoutSeconds : defaults.timeoutSeconds,
+    timeoutPolicyVersion: 1,
     elevenLabsEnabled: value?.elevenLabsEnabled === true,
     elevenLabsVoiceId: cleanModel(value?.elevenLabsVoiceId),
     elevenLabsModel: ['eleven_multilingual_v2', 'eleven_flash_v2_5', 'eleven_turbo_v2_5'].includes(value?.elevenLabsModel) ? value.elevenLabsModel : defaults.elevenLabsModel,
@@ -252,7 +253,7 @@ function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText
       if (errors.length < 2_000_000) errors += part;
       reportProviderProgress(provider, `${provider === 'codex' ? 'Codex' : 'Claude Code'} is processing`);
     });
-    const timeout = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
+    const timeout = timeoutMs > 0 ? setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs) : null;
     child.once('error', error => { clearTimeout(timeout);if(job?.signal&&abortChild)job.signal.removeEventListener('abort',abortChild);reject(new Error(`Could not start ${path.basename(executable)}: ${error.message}`)); });
     child.once('close', code => {
       clearTimeout(timeout);
@@ -402,25 +403,24 @@ async function startCollaboration(event, input) {
   if(!isTrustedSender(event))throw Error('Untrusted app window.');
   const previous=input?.resumeJobId?activeJobs.get(input.resumeJobId):null;
   if(input?.resumeJobId&&(!previous?.collaboration||!previous.request||previous.status==='running'))throw Error('Choose a stopped Colab task with a saved checkpoint.');
-  const source=previous?{...previous.request,...(input.maxRuntimeSeconds?{maxRuntimeSeconds:input.maxRuntimeSeconds}:{}),...(Object.hasOwn(input,'maxRounds')?{maxRounds:input.maxRounds}:{})}:input||{};
+  const source=previous?{...previous.request,...(Object.hasOwn(input,'maxRounds')?{maxRounds:input.maxRounds}:{})}:input||{};
   const task=typeof source.task==='string'?source.task.trim():'',folder=typeof source.cwd==='string'?source.cwd:'';
   if(!task||task.length>20000)throw Error('Enter a task under 20,000 characters.');
   if(!path.isAbsolute(folder)||!existsSync(folder)||!statSync(folder).isDirectory())throw Error('Choose an existing working folder.');
   if(!providerHealth.available('codex')||!providerHealth.available('claude'))throw Error('Colab needs both providers available. Check Settings.');
   if(!findCodexExecutable()||!findClaudeExecutable())throw Error('Install and sign into both providers in Settings before starting Colab.');
   const model=value=>typeof value==='string'&&modelIdPattern.test(value)?value:'';
-  const request={task,cwd:folder,chatId:typeof source.chatId==='string'&&/^[A-Za-z0-9-]{1,80}$/.test(source.chatId)?source.chatId:randomUUID(),mode:['build','plan','debug','compare'].includes(source.mode)?source.mode:'build',effort:['low','medium','high','xhigh','max'].includes(source.effort)?source.effort:'medium',codexModel:model(source.codexModel),claudeModel:model(source.claudeModel),profileId:typeof source.profileId==='string'?source.profileId:'',attachments:Array.isArray(source.attachments)?source.attachments.slice(0,8):[],isolated:source.isolated!==false,maxRounds:require('./collaboration').normalizePassLimit(source.maxRounds),maxRuntimeSeconds:Math.min(7200,Math.max(60,Math.floor(Number(source.maxRuntimeSeconds)||900))),context:(Array.isArray(source.context)?source.context:[]).slice(-12).filter(turn=>['user','assistant'].includes(turn?.role)&&typeof turn.content==='string').map(turn=>({role:turn.role,content:turn.content.slice(0,12000)}))};
+  const request={task,cwd:folder,chatId:typeof source.chatId==='string'&&/^[A-Za-z0-9-]{1,80}$/.test(source.chatId)?source.chatId:randomUUID(),mode:['build','plan','debug','compare'].includes(source.mode)?source.mode:'build',effort:['low','medium','high','xhigh','max'].includes(source.effort)?source.effort:'medium',codexModel:model(source.codexModel),claudeModel:model(source.claudeModel),profileId:typeof source.profileId==='string'?source.profileId:'',attachments:Array.isArray(source.attachments)?source.attachments.slice(0,8):[],isolated:source.isolated!==false,maxRounds:require('./collaboration').normalizePassLimit(source.maxRounds),maxRuntimeSeconds:null,context:(Array.isArray(source.context)?source.context:[]).slice(-12).filter(turn=>['user','assistant'].includes(turn?.role)&&typeof turn.content==='string').map(turn=>({role:turn.role,content:turn.content.slice(0,12000)}))};
   if([...activeJobs.values()].some(job=>job.collaboration&&job.colabChatId===request.chatId&&job.status==='running'))throw Error('This Colab chat is already working.');
   const usedMs=previous?.budget?.usedMs||0;
-  if(usedMs>=request.maxRuntimeSeconds*1000)throw Error('Runtime budget is exhausted. Increase the budget before resuming.');
   const id=randomUUID(),job={id,colabChatId:request.chatId,prompt:task,cwd:folder,conversationId:request.chatId,status:'running',statusText:'Preparing workspace',startedAt:Date.now(),events:[],collaboration:true,request,checkpoints:previous?.checkpoints?structuredClone(previous.checkpoints):[],workspaceId:previous?.workspaceId||'',budget:{maxRuntimeSeconds:request.maxRuntimeSeconds,maxRounds:request.maxRounds,usedMs,runStartedAt:Date.now()}};
   activeJobs.set(id,job);persistJobs();emitJobs();
   job.promise=jobContext.run(job,async()=>{
     const controller=new AbortController();job.signal=controller.signal;job.interrupt=()=>controller.abort();
-    let exceeded=false;
-    const timer=setTimeout(()=>{exceeded=true;controller.abort();},request.maxRuntimeSeconds*1000-usedMs);
+
+
     const heartbeat=setInterval(()=>{persistJobs();emitJobs();},5000);heartbeat.unref();
-    const announce=status=>{if(job.stopped||controller.signal.aborted)throw Error(exceeded?'Task runtime budget reached.':'Collaboration stopped.');job.statusText=status;job.events.push({kind:'stage',text:status,at:Date.now()});job.events=job.events.slice(-100);emitJobs();if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status,workspaceId:job.workspaceId});};
+    const announce=status=>{if(job.stopped||controller.signal.aborted)throw Error('Collaboration stopped.');job.statusText=status;job.events.push({kind:'stage',text:status,at:Date.now()});job.events=job.events.slice(-100);emitJobs();if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status,workspaceId:job.workspaceId});};
     try{
       const project=previous?.projectSnapshot||await workspace().profile(request.profileId);job.projectSnapshot=project;
       const attachmentContext=await workspace().attachmentContext(request.attachments);
@@ -432,8 +432,8 @@ async function startCollaboration(event, input) {
       if(job.stopped||controller.signal.aborted)throw Error('Collaboration stopped.');
       job.result={...result,workspaceId:job.workspaceId};job.status='completed';job.statusText='Complete';
       if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:'Complete',result:result.output,usage:result.usage,limitation:result.limitation,workspaceId:job.workspaceId});return job.result;
-    }catch(error){job.status=job.stopped||'failed';job.error=exceeded?'Runtime budget reached. Completed stages were saved; increase the budget to resume.':error.message;job.statusText=job.stopped==='paused'?'Paused':job.stopped==='cancelled'?'Stopped':job.error;if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:job.statusText,error:job.error,workspaceId:job.workspaceId});throw error;
-    }finally{clearTimeout(timer);clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();await persistJobs();emitJobs();}
+    }catch(error){job.status=job.stopped||'failed';job.error=error.message;job.statusText=job.stopped==='paused'?'Paused':job.stopped==='cancelled'?'Stopped':job.error;if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:job.statusText,error:job.error,workspaceId:job.workspaceId});throw error;
+    }finally{clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();await persistJobs();emitJobs();}
   });job.promise.catch(()=>{});return{id};
 }
 
@@ -612,15 +612,15 @@ function setupIpc() {
   ipcMain.handle('atlas:chat',async(event,data)=>{
     if(!isTrustedSender(event))throw Error('Untrusted app window.');
     const id=typeof data?.requestId==='string'?data.requestId:randomUUID();if(activeJobs.has(id))throw Error('Duplicate job');
-    const previous=activeJobs.get(data?.resumeJobId),usedMs=previous?.budget?.usedMs||0,maxRuntimeSeconds=Math.min(7200,Math.max(60,Number(data?.maxRuntimeSeconds)||900));
-    if(usedMs>=maxRuntimeSeconds*1000)throw Error('Increase the task runtime budget before resuming.');
+    const previous=activeJobs.get(data?.resumeJobId),usedMs=previous?.budget?.usedMs||0,maxRuntimeSeconds=null;
+
     if(previous?.collaboration||previous?.status==='running')throw Error('Resume a stopped Assistant task, or open its Colab chat.');
     if(previous?.request)data={...data,profileId:previous.request.profileId,attachments:previous.request.attachments};
     const controller=new AbortController(),job={id,request:{profileId:data.profileId,attachments:data.attachments||[]},prompt:data.prompt,cwd:data.cwd,conversationId:data.conversationId||randomUUID(),status:'running',statusText:'Starting',startedAt:Date.now(),events:[],signal:controller.signal,interrupt:()=>controller.abort(),budget:{usedMs,maxRuntimeSeconds,runStartedAt:Date.now()}};
-    activeJobs.set(id,job);persistJobs();emitJobs();let expired=false;
-    const timer=setTimeout(()=>{expired=true;job.stopped='paused';controller.abort();},maxRuntimeSeconds*1000-usedMs);
+    activeJobs.set(id,job);persistJobs();emitJobs();
+
     const heartbeat=setInterval(()=>{persistJobs();emitJobs();},5000);heartbeat.unref();
-    job.promise=jobContext.run(job,async()=>{try{const result=await handleChat(event,{...data,conversationId:job.conversationId});if(controller.signal.aborted)throw Error('Task stopped.');job.result=result;job.status='completed';return result;}catch(error){job.status=job.stopped||'failed';job.error=expired?'Runtime budget reached. Increase it to resume.':error.message;job.statusText=job.error;throw Error(job.error);}finally{clearTimeout(timer);clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();await persistJobs();emitJobs();}});return job.promise;
+    job.promise=jobContext.run(job,async()=>{try{const result=await handleChat(event,{...data,conversationId:job.conversationId});if(controller.signal.aborted)throw Error('Task stopped.');job.result=result;job.status='completed';return result;}catch(error){job.status=job.stopped||'failed';job.error=error.message;job.statusText=job.error;throw Error(job.error);}finally{clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();await persistJobs();emitJobs();}});return job.promise;
   });
   ipcMain.handle('atlas:jobs', (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(request?.action==='stop'){const job=activeJobs.get(request.id);if(job?.status==='running'){job.stopped=request.pause?'paused':'cancelled';job.statusText=job.stopped;if(job.interrupt)job.interrupt();else if(job.child?.pid){spawn('taskkill.exe',['/PID',String(job.child.pid),'/T','/F'],{windowsHide:true}).on('error',()=>job.child?.kill());}emitJobs();}}return jobSnapshots()});
 }
