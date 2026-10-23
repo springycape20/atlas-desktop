@@ -192,13 +192,17 @@ function reportProviderProgress(provider, status) {
   }
 }
 
-function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText = () => {}, env = process.env) {
+function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText = () => {}, env = process.env, input = null) {
   return new Promise((resolve, reject) => {
     let output = '', sessionId = '', stdoutLines = '';
     let errors = '';
     const decode = require('./assistant-core').createDecoder(provider, onText, activity=>{const current=jobContext.getStore();if(current){current.events.push({...activity,at:Date.now()});current.events=current.events.slice(-100);emitJobs();}});
     let timedOut = false;
-    const child = spawn(executable, args, { cwd, windowsHide: true, shell: false, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(executable, args, { cwd, windowsHide: true, shell: false, env, stdio: [input === null ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
+    if (input !== null) {
+      child.stdin.on('error', () => {}); // Early CLI exits are reported through close/stderr below.
+      child.stdin.end(input);
+    }
     const job=jobContext.getStore();
     let abortChild;
     if(job){
@@ -289,19 +293,16 @@ function historyLookupRequested(prompt) {
 function findReferencedProviderHistory(prompt) { return providerHistory.request('search', { prompt }); }
 async function runProvider(provider, prompt, cwd, settings, previousSessionId = '', onText = () => {}) {
   if (provider === 'claude') {
-    const executable = process.env.CLAUDE_CODE_EXECUTABLE || path.join(
-      process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-      'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe',
-    );
-    if (!existsSync(executable)) throw new Error(`Claude Code was not found at ${executable}.`);
-    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--include-partial-messages'];
+    const executable = findClaudeExecutable();
+    if (!executable) throw new Error('Claude Code was not found. Install it from Settings.');
+    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages'];
     const newSessionId=previousSessionId||randomUUID();if(jobContext.getStore())jobContext.getStore().sessionId=newSessionId;
     if (previousSessionId) args.push('--resume', previousSessionId);
     else args.push('--session-id', newSessionId);
     if (settings.claudeModel) args.push('--model', settings.claudeModel);
     const providerEnv = settings.effort ? { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: settings.effort } : process.env;
     if (settings.permissionBypass) args.push('--dangerously-skip-permissions');
-    const result = await runCommand(executable, args, cwd, provider, settings.timeoutSeconds * 1000, onText, providerEnv);
+    const result = await runCommand(executable, args, cwd, provider, settings.timeoutSeconds * 1000, onText, providerEnv, prompt);
     try { const events = result.output.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)); const data = events.findLast(item => item.type === 'result'); if (!data) throw new Error('Missing Claude result'); if (data.is_error) throw new Error(data.result || data.errors?.join(' ') || 'Claude failed'); return { output: data.result || result.errors, sessionId: data.session_id || previousSessionId }; }
     catch (error) { throw new Error('Claude response failed: ' + error.message); }
   }
@@ -358,8 +359,8 @@ function pruneJobs() {
 }
 function jobSnapshots() {
   pruneJobs();
-  return [...activeJobs.values()].map(({id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration}) =>
-    ({id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration}));
+  return [...activeJobs.values()].map(({id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId}) =>
+    ({id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId}));
 }
 let jobsEmitTimer, sentJobs = new Map();
 function emitJobs() {
@@ -396,26 +397,29 @@ function startCollaboration(event, request) {
   if (!providerHealth.available('codex') || !providerHealth.available('claude')) throw Error('Colab needs both providers available. Check Settings → Provider availability.');
   if (!findCodexExecutable()) throw Error('Codex CLI was not found. Install or sign into the Codex desktop app.');
   if (!findClaudeExecutable()) throw Error('Claude Code CLI was not found. Install it before starting a collaboration.');
-  const id = randomUUID(), job = { id, prompt: task, cwd, conversationId: id, status: 'running', statusText: 'Starting collaboration', startedAt: Date.now(), events: [], collaboration: true };
+  const colabChatId = typeof request?.chatId === 'string' && /^[A-Za-z0-9-]{1,80}$/.test(request.chatId) ? request.chatId : randomUUID();
+  if ([...activeJobs.values()].some(job => job.collaboration && job.colabChatId === colabChatId && job.status === 'running')) throw Error('This Colab chat is already working.');
+  const context = (Array.isArray(request?.context) ? request.context : []).slice(-12).filter(turn => ['user', 'assistant'].includes(turn?.role) && typeof turn.content === 'string').map(turn => ({ role: turn.role, content: turn.content.slice(0, 12000) }));
+  const id = randomUUID(), job = { id, colabChatId, prompt: task, cwd, conversationId: id, status: 'running', statusText: 'Starting collaboration', startedAt: Date.now(), events: [], collaboration: true };
   activeJobs.set(id, job); persistJobs(); emitJobs();
   job.promise = jobContext.run(job, async () => {
     const controller = new AbortController(); job.signal=controller.signal; job.interrupt = () => controller.abort();
     const announce = status => {
       if (job.stopped) throw Error('Collaboration stopped.');
       job.statusText = status; emitJobs();
-      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, status });
+      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, chatId: colabChatId, status });
     };
     try {
       const settings = await readAppSettings();
       const run = require('./collaboration').createCollaboration({ runProvider, progress: announce });
-      const result = await run({ task, cwd, codexModel, claudeModel, effort, settings, signal: controller.signal });
+      const result = await run({ task, cwd, context, codexModel, claudeModel, effort, settings, signal: controller.signal });
       if (job.stopped) throw Error('Collaboration stopped.');
       job.result = result; job.status = 'completed'; job.statusText = 'Complete';
-      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, status: 'Complete', result: result.output, providers: result.providers, effort });
+      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, chatId: colabChatId, status: 'Complete', result: result.output, providers: result.providers, effort });
       return result;
     } catch (error) {
       job.status = job.stopped || 'failed'; job.error = error.message; job.statusText = job.stopped === 'cancelled' ? 'Stopped' : error.message;
-      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, status: job.statusText, error: job.error });
+      if (!event.sender.isDestroyed()) event.sender.send('atlas:collab-status', { id, chatId: colabChatId, status: job.statusText, error: job.error });
       throw error;
     } finally { job.signal=null; job.endedAt = Date.now(); persistJobs(); emitJobs(); }
   });
@@ -688,13 +692,14 @@ async function handleChat(event, data) {
 async function createWindow() {
   await protocol.handle('atlas', async request => {
     const url = new URL(request.url);
-    if (url.host !== 'app' || !['/', '/index.html'].includes(url.pathname)) {
+    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js'].includes(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
-    const html = await readFile(path.join(__dirname, 'index.html'));
+    const javascript = url.pathname === '/colab-workspace.js';
+    const html = await readFile(path.join(__dirname, javascript ? 'colab-workspace.js' : 'index.html'));
     return new Response(html, {
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Type': javascript ? 'application/javascript; charset=utf-8' : 'text/html; charset=utf-8',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'no-referrer',
       },

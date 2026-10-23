@@ -38,7 +38,8 @@ Setup downloads Electron, the pinned whisper.cpp v1.8.7 Windows CPU runtime, and
 
 - Persistent Codex app-server connection, streamed replies, and ongoing conversations.
 - Claude Code routing, with fallback when a recognized usage limit is reported.
-- Colab runs a task through Codex, Claude review, and a Codex final check, with selectable models and shared effort.
+- Assistant and Colab have separate chat workspaces in the same app. Colab saves its own conversations and drafts, with a working folder, provider models, and shared effort for each chat. Follow-ups include recent messages from that Colab conversation.
+- Colab runs a task through Codex, Claude review, and a Codex final check, then displays one final summary. Switch chats while a task runs; its result returns to the chat that started it.
 - Provider cooldowns persist locally. Settings shows availability, estimated retry times, and **Retry now**. Availability means ATLAS has no active cooldown; it is not a live quota or sign-in check.
 - Brief spoken replies by default; full written answers remain on screen. Say **tell me more** or click **Read full answer** for more speech.
 - Local Kokoro British voices, Whisper recognition, wake-word and follow-up listening controls.
