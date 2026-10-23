@@ -1,8 +1,9 @@
-ATLAS 0.6.1 fixes the app layout overflowing the desktop window.
+ATLAS 0.6.2 improves long-running tasks, screenshot attachments, and multiline messages.
 
-- The outer app fits the available window height without a page scrollbar.
-- Assistant and Colab keep the composer, Send button, navigation, and footer visible.
-- Long conversations, activity logs, and expanded panels scroll within their own areas.
-- Startup window dimensions fit the current monitor's usable area, including smaller displays and Windows scaling.
+- Removed task runtime limits from Assistant, Colab, and project profiles. Older tasks can resume without their previous runtime budget blocking them.
+- Provider requests now default to Unlimited. An optional individual request timeout can still be selected in Settings.
+- Fixed Paste screenshot with Electron's current asynchronous clipboard API, retaining compatibility with older Electron versions.
+- Assistant now supports Shift+Enter for a new line and Enter to send, matching Colab. The message box grows as you type.
+- Includes the viewport and window sizing fixes from 0.6.1.
 
-Install over the existing version to keep local data, or use Settings → App updates in ATLAS 0.6.0. Windows x64; the installer remains unsigned.
+Install over your existing version to preserve settings and conversations, or use Settings → App updates → Check for updates, then Download and Restart and install. Windows x64.
