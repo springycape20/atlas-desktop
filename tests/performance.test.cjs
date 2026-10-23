@@ -257,3 +257,13 @@ test('preload forwards the Assistant effort as a string through IPC',async()=>{
   api.chat({prompt:'Test',effort:'max'});assert.equal(last.channel,'atlas:chat');assert.equal(last.payload.effort,'max');
   api.chat({effort:{invalid:true}});assert.equal(last.payload.effort,undefined);
 });
+
+test('provider usage IPC requires the trusted app window',async t=>{
+  let reads=0;
+  const h=await mainHarness(t,{modules:{'./provider-usage':{createProviderUsage:()=>({read:async()=>{reads++;return{codex:{remainingPercent:34},claude:{remainingPercent:0}};}})}}});h.setupIpc();
+  const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}};
+  const read=h.handlers.get('atlas:provider-usage');
+  await assert.rejects(read({sender:{},senderFrame:event.senderFrame},{}),/Untrusted/);assert.equal(reads,0);
+  assert.equal((await read(event,{})).codex.remainingPercent,34);assert.equal(reads,1);
+  await assert.rejects(h.handlers.get('atlas:provider-usage-open')(event,'invalid'),/Choose Codex or Claude/);
+});

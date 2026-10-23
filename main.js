@@ -40,7 +40,8 @@ protocol.registerSchemesAsPrivileged([{
 
 let mainWindow;
 const taskNotifications=require('./task-notifications').createTaskNotifications({Notification,getWindow:()=>mainWindow});
-let modelCatalogService, updateService;
+let modelCatalogService, updateService, providerUsageService;
+function providerUsage(){return providerUsageService ||= require('./provider-usage').createProviderUsage({codex:async()=>{const executable=findCodexExecutable();if(!executable)throw Error('Codex is not installed.');codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);codexConnection.onRateLimits=data=>providerUsage().updateCodex(data);await codexConnection.connect();return codexConnection.request('account/rateLimits/read',{},10000);},notify:value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:provider-usage',value);}});}
 function models(){return modelCatalogService ||= require('./model-catalog').createModelCatalog({directory:app.getPath('userData'),discover:async provider=>{
   if(provider==='claude'){const executable=findClaudeExecutable();if(!executable)throw Error('Claude Code is not installed.');return require('./model-catalog').claudeModels(executable);}
   const executable=findCodexExecutable();if(!executable)throw Error('Codex is not installed.');
@@ -444,6 +445,8 @@ function setupIpc() {
   ipcMain.handle('atlas:model-catalog',async(event,provider)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');return (await models().get(provider)).models;});
   ipcMain.handle('atlas:discover-models',async(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');const results=await Promise.all(['codex','claude'].map(async provider=>[provider,await models().get(provider,request?.refresh===true)]));return Object.fromEntries(results);});
   ipcMain.handle('atlas:updates',async(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');return getAppUpdates().action(request);});
+  ipcMain.handle('atlas:provider-usage',async(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');return providerUsage().read({refresh:request?.refresh===true});});
+  ipcMain.handle('atlas:provider-usage-open',async(event,provider)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(!['codex','claude'].includes(provider))throw Error('Choose Codex or Claude.');const url=require('./provider-usage').USAGE_URLS[provider];await shell.openExternal(url);});
   ipcMain.handle('atlas:provider-health',(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(request?.action==='retry'&&['codex','claude'].includes(request.provider))providerHealth.clear(request.provider);return providerHealth.snapshot();});
   ipcMain.handle('atlas:open-link',async(event,value)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const url=new URL(value);if(!['https:','http:'].includes(url.protocol))throw Error('Unsupported link');await shell.openExternal(url.href)});
   ipcMain.handle('atlas:memory',async (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const result=assistantService.memory(request?.action||'list',request?.item);await assistantService.flush();return result;});
@@ -709,7 +712,7 @@ async function handleChat(event, data) {
 async function createWindow() {
   await protocol.handle('atlas', async request => {
     const url = new URL(request.url);
-    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js'].includes(url.pathname)) {
+    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js'].includes(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
     const javascript = url.pathname.endsWith('.js');

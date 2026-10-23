@@ -41,6 +41,7 @@ class CodexConnection {
   }
   close(){if(this.child)this.failed(this.child,Error('ATLAS closed.'));}
   receive(message) {
+    if(message.method==='account/rateLimits/updated'){this.onRateLimits?.(message.params);return;}
     if(message.id!==undefined && !message.method){
       const p=this.pending.get(message.id);if(!p)return;
       this.pending.delete(message.id);clearTimeout(p.timer);
