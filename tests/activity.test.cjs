@@ -11,7 +11,7 @@ test('Claude activity includes commands and completion, excluding private thinki
   const data=rows.map(row=>JSON.stringify(row)).join('\n');decoder.push(data.slice(0,80));decoder.push(data.slice(80));decoder.finish();
   assert.equal(activity[0].kind,'command');assert.equal(activity[0].text,'npm test');assert.equal(activity[0].status,'running');
   assert.equal(activity[1].status,'failed');assert.equal(activity[0].id,activity[1].id);
-  assert.deepEqual(text,['Tests reported a failure.']);assert.ok(!JSON.stringify(activity).includes('sentinel'));
+  assert.equal(activity.at(-1).kind,'progress');assert.equal(activity.at(-1).text,'Tests reported a failure.');assert.deepEqual(text,['Tests reported a failure.']);assert.ok(!JSON.stringify(activity).includes('sentinel'));
 });
 test('Codex activity tracks command exits, file changes, public progress, and plans',()=>{
   const connection=new CodexConnection('unused'),events=[];

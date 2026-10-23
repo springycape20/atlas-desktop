@@ -31,6 +31,7 @@
   style.textContent += '.colab-chat-main{height:calc(100vh - 155px);min-height:0;overflow:hidden}.colab-chat-header,.colab-composer{flex-shrink:0;max-height:42vh;overflow:auto}.colab-transcript{flex:1 1 0;min-height:0}.colab-config{flex-shrink:0;max-height:30vh;overflow:auto}@media(max-width:750px){.colab-chat-main{height:75vh;min-height:0}}';
   style.textContent += '.colab-config[open]{max-height:24vh;flex-shrink:1;min-height:40px}.colab-composer{flex:0 1 auto;min-height:160px;max-height:42vh;overflow:auto}.colab-composer .attachment-bar{margin:3px 0}.colab-composer .attachment-bar p{margin:4px 0}.colab-composer textarea{min-height:60px}.colab-compose-footer{position:sticky;bottom:0;background:#0c171e;padding:6px 0}';
   style.textContent += '.colab-composer{min-height:0;max-height:46vh}.colab-composer textarea{box-sizing:border-box;min-height:48px;height:48px;max-height:180px;resize:none;overflow-y:hidden;padding:12px 14px}.colab-work{margin:12px 0 18px;border:1px solid #28434d;border-radius:10px;padding:10px 12px;color:#92b2bd}.colab-work summary{cursor:pointer;font:12px/1.6 Segoe UI,sans-serif}.colab-work-list{max-height:24vh;overflow:auto;margin-top:8px}.colab-work-step{border-top:1px solid #213840;padding:8px 0;font:11px/1.6 Segoe UI,sans-serif}.colab-work-step pre{font:11px/1.6 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0;color:#bed4dd}.colab-work-step[data-status=failed]{color:#edb88c}.colab-work-note{font:10px/1.5 Segoe UI,sans-serif;color:#7897a3;margin:6px 0 0}';
+  style.textContent+='.task-progress pre{font:13px/1.7 Segoe UI,sans-serif;color:#c8d9df}.task-command>summary{color:#91aab4;cursor:pointer}.task-command pre{padding:8px;background:#071118;border-radius:7px}.assistant-task-work{margin:8px 0 16px}.assistant-task-work:empty{display:none}.assistant-task-work .colab-work{margin:0}.assistant-task-work .colab-work-list{max-height:32vh}.colab-work-step.task-progress{border-top:0;padding:6px 0}';
   document.head.append(style);
   const panel = document.createElement('section'); panel.className = 'colab-workspace'; panel.hidden = true; panel.setAttribute('aria-label', 'Colab chat workspace');
   panel.innerHTML = `<aside class="colab-chats" aria-label="Colab conversations"><button class="quiet-button" id="colabNewChat" type="button">＋ New Colab chat</button><div class="colab-chat-list" id="colabChats"></div></aside>
@@ -106,7 +107,7 @@
       const steps=new Map();for(const event of job.events.slice(-100)){
         const text=String(event.text||'').slice(0,800);if(!text)continue;
         const key=event.id?event.provider+':'+event.id:event.kind+':'+text;
-        steps.set(key,{kind:String(event.kind||'activity'),text,provider:event.provider||'',status:event.status||'',at:Number(event.at)||job.startedAt||0,...(Number.isInteger(event.exitCode)?{exitCode:event.exitCode}:{})});
+        steps.set(key,{kind:String(event.kind||'activity'),text,provider:event.provider||'',status:event.status||'',id:event.id||key,at:Number(event.at)||job.startedAt||0,...(Number.isInteger(event.exitCode)?{exitCode:event.exitCode}:{})});
       }run.events=[...steps.values()].slice(-60);
     }
     chat.activityRuns=chat.activityRuns.slice(-6);
@@ -118,7 +119,14 @@
     list.className='colab-work-list';list.setAttribute('aria-label','Reported task activity');
     for(const event of run.events){const row=document.createElement('div'),label=document.createElement('div'),text=document.createElement('pre');row.className='colab-work-step';row.dataset.status=event.status;
       label.textContent=[event.provider?.toUpperCase(),event.kind==='command'?'Command':event.kind==='files'?'Files':event.kind==='plan'?'Plan':'Progress',event.status,event.exitCode!==undefined?'exit '+event.exitCode:''].filter(Boolean).join(' · ');
-      text.textContent=event.text;row.append(label,text);list.append(row);
+      text.textContent=event.text;
+      if(event.kind==='command'){
+        const command=document.createElement('details'),heading=document.createElement('summary');command.className='task-command';command.open=(run.openCommands||[]).includes(event.id);
+        heading.textContent=[event.status==='running'?'Running command':event.status==='failed'?'Command failed':'Ran command',event.provider?.toUpperCase(),event.exitCode!==undefined?'exit '+event.exitCode:''].filter(Boolean).join(' · ');
+        command.append(heading,text);row.append(command);command.addEventListener('toggle',()=>{if(command.isConnected){const opened=new Set(run.openCommands||[]);command.open?opened.add(event.id):opened.delete(event.id);run.openCommands=[...opened];}});
+      }else if(event.kind==='progress'){row.classList.add('task-progress');row.append(text);}
+      else row.append(label,text);
+      list.append(row);
     }
     note.className='colab-work-note';note.textContent='Recent provider-reported actions and progress summaries.';details.append(summary,list,note);
     details.addEventListener('toggle',()=>{if(details.isConnected){run.expanded=details.open;save();}});return details;
@@ -216,7 +224,7 @@
   el('colabExport').onclick=()=>void window.atlas.exportChat({title:current().title,markdown:'# '+current().title+'\n\n'+current().messages.map(m=>'## '+(m.role==='user'?'You':'Colab')+'\n\n'+m.content).join('\n\n')}).catch(error=>toast(error.message));
   el('colabResume').onclick=async()=>{const chat=current();if(!chat.lastJob?.canResume)return;try{if(chat.isolated!==false&&!['plan','compare'].includes(chat.mode)&&!(await window.atlas.prepareProject(chat.cwd)).ready)return;}catch(error){chat.status=error.message;render();return;}chat.busy=true;chat.status='Resuming from saved provider stages…';save();render();try{const result=await window.atlas.collaborate({resumeJobId:chat.lastJob.id,maxRounds:chat.maxRounds??null});chat.jobId=result.id;save();render();}catch(error){chat.busy=false;chat.status=error.message;save();render();}};
   el('colabReview').onclick=()=>window.atlasWorkspace?.review(current().workspaceId);
-  window.atlasColab = {refreshMessages:render,setCatalog:value=>{for(const provider of ['codex','claude'])if(value[provider]?.models?.length)catalog[provider]=value[provider].models;refreshModels();},refreshModels,selectAssistant:()=>select('assistant'),current:()=>structuredClone(current()),history:()=>chats.map(chat=>({provider:'colab',id:chat.id,title:chat.title,pinned:chat.pinned,cwd:chat.cwd,turns:chat.messages,updatedAt:chat.messages.length?chat.lastJob?.startedAt||Date.now():0})),selectChat:id=>{if(!chats.some(chat=>chat.id===id))return;selected=id;save();select('colab');},metadata:(id,value)=>{const chat=chats.find(chat=>chat.id===id);if(chat){Object.assign(chat,value);chat.customTitle=true;save();render();}},applyProfile:profile=>{const chat=current();if(chat.busy)throw Error('Finish or stop the current Colab task before switching projects.');Object.assign(chat,{cwd:profile.cwd,profileId:profile.id,codexModel:profile.codexModel,claudeModel:profile.claudeModel,effort:profile.effort});save();render();}};
+  window.atlasColab = {captureActivity,activityView,refreshMessages:render,setCatalog:value=>{for(const provider of ['codex','claude'])if(value[provider]?.models?.length)catalog[provider]=value[provider].models;refreshModels();},refreshModels,selectAssistant:()=>select('assistant'),current:()=>structuredClone(current()),history:()=>chats.map(chat=>({provider:'colab',id:chat.id,title:chat.title,pinned:chat.pinned,cwd:chat.cwd,turns:chat.messages,updatedAt:chat.messages.length?chat.lastJob?.startedAt||Date.now():0})),selectChat:id=>{if(!chats.some(chat=>chat.id===id))return;selected=id;save();select('colab');},metadata:(id,value)=>{const chat=chats.find(chat=>chat.id===id);if(chat){Object.assign(chat,value);chat.customTitle=true;save();render();}},applyProfile:profile=>{const chat=current();if(chat.busy)throw Error('Finish or stop the current Colab task before switching projects.');Object.assign(chat,{cwd:profile.cwd,profileId:profile.id,codexModel:profile.codexModel,claudeModel:profile.claudeModel,effort:profile.effort});save();render();}};
   select('assistant'); render();
   for (const provider of ['codex', 'claude']) void window.atlas.modelCatalog(provider).then(models => { if (Array.isArray(models) && models.length) { catalog[provider] = models; refreshModels(); } }).catch(() => {});
 })();

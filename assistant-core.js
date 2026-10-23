@@ -11,6 +11,7 @@ function createDecoder(provider, onText, onActivity = () => {}) {
         tools.set(part.id,activity);onActivity(activity);
       }
     }
+    if(provider==='claude'&&event.type==='assistant')for(const part of event.message?.content||[])if(part.type==='text'&&part.text?.trim()){const key='progress:'+(event.message.id||part.text);if(!seen.has(key)){seen.add(key);onActivity({id:key,kind:'progress',text:part.text.slice(0,1200)});}}
     if(provider==='claude'&&event.type==='user')for(const part of event.message?.content||[])if(part.type==='tool_result'&&tools.has(part.tool_use_id))onActivity({...tools.get(part.tool_use_id),status:part.is_error?'failed':'completed'});
     if (provider === 'codex' && event.type === 'item.completed' && event.item?.type === 'agent_message') {
       const key = event.item.id || event.item.text;

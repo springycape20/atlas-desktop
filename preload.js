@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('atlas', {
   collaborate: request => ipcRenderer.invoke('atlas:collab', request),
   modelCatalog: provider => ipcRenderer.invoke('atlas:model-catalog', provider),
   onCollaborationStatus: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('atlas:collab-status', listener); return () => ipcRenderer.removeListener('atlas:collab-status', listener); },
+  onTaskOpen: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:task-open',listener);return()=>ipcRenderer.removeListener('atlas:task-open',listener);},
   onJobs: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:jobs-changed',listener);return()=>ipcRenderer.removeListener('atlas:jobs-changed',listener)},
   memory: request=>ipcRenderer.invoke('atlas:memory',request),
   reminders: request=>ipcRenderer.invoke('atlas:reminders',request),

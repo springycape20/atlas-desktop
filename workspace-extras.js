@@ -89,6 +89,27 @@
   async function rename(item){open('Rename conversation');const input=element('input');input.value=metadata[key(item)]?.title||item.title;input.maxLength=100;input.setAttribute('aria-label','Conversation name');body.append(input);button('Save name',async()=>{if(!input.value.trim())throw Error('Enter a name.');if(item.provider==='colab')window.atlasColab.metadata(item.id,{title:input.value.trim()});else metadata=await api.chatMetadata({action:'save',key:key(item),title:input.value.trim(),pinned:metadata[key(item)]?.pinned===true});await showHistory();});input.focus();}
   async function continueChat(item){if(item.provider==='colab'){modal.close();window.atlasColab.selectChat(item.id);return;}const chat=await transcript(item);clearFollowup();cancelRecording();stopSpeaking();cancelStreamPaint();foregroundRequest='';streamRequestId='';lastSpokenAnswer='';$id('readFullAnswer').hidden=true;userTurn.hidden=true;conversationId=chat.id;localStorage.setItem('atlas.activeConversation',conversationId);if(chat.cwd)setPath(chat.cwd);output.textContent=chat.turns.slice(-8).map(turn=>turn.role.toUpperCase()+': '+turn.content).join('\n\n');response.classList.add('show');window.atlasColab.selectAssistant();modal.close();$id('prompt').focus();}
   window.atlasWorkspace={context,takeAttachments,messageAttachments,review,renameColab:()=>rename({...window.atlasColab.current(),provider:'colab'})};
+  const assistantWork=element('div',undefined,'assistant-task-work'),assistantActivity={activityRuns:[]},taskJobs=new Map();let shownAssistantTask='';
+  assistantWork.setAttribute('aria-label','Task progress');$id('output')?.before(assistantWork);
+  function showAssistantActivity(){
+    const foreground=typeof foregroundRequest==='string'?foregroundRequest:'',conversation=typeof conversationId==='string'?conversationId:'';
+    const job=taskJobs.get(shownAssistantTask)||taskJobs.get(foreground)||[...taskJobs.values()].filter(job=>!job.collaboration&&job.conversationId===conversation).sort((a,b)=>(b.startedAt||0)-(a.startedAt||0))[0];
+    if(!job||job.collaboration){assistantWork.replaceChildren();return;}
+    const existing=assistantWork.querySelector('.colab-work-list'),top=existing?.scrollTop||0,atBottom=!existing||existing.scrollHeight-existing.scrollTop-existing.clientHeight<40;
+    window.atlasColab.captureActivity(assistantActivity,job);const run=assistantActivity.activityRuns.find(run=>run.id===job.id);
+    assistantWork.replaceChildren(window.atlasColab.activityView(run));const list=assistantWork.querySelector('.colab-work-list');list.scrollTop=atBottom?list.scrollHeight:top;
+  }
+  api.onJobs(patch=>{for(const id of patch.removed||[])taskJobs.delete(id);for(const job of patch.upsert||[])taskJobs.set(job.id,job);if(taskJobs.size>50)for(const [id,job]of taskJobs)if(taskJobs.size>50&&job.status!=='running')taskJobs.delete(id);showAssistantActivity();});
+  void api.jobs().then(jobs=>{for(const job of jobs)taskJobs.set(job.id,job);showAssistantActivity();}).catch(()=>{});
+  window.addEventListener('atlas-assistant-task',()=>{shownAssistantTask='';showAssistantActivity();});
+  api.onTaskOpen?.(async job=>{
+    if(job.collaboration){window.atlasColab.selectChat(job.colabChatId);return;}
+    if(!taskJobs.has(job.id))try{for(const item of await api.jobs())taskJobs.set(item.id,item);}catch{}
+    window.atlasColab.selectAssistant();shownAssistantTask=job.id;const selected=taskJobs.get(job.id);
+    if(selected){clearFollowup();cancelStreamPaint();stopSpeaking();foregroundRequest='';streamRequestId='';conversationId=selected.conversationId;localStorage.setItem('atlas.activeConversation',conversationId);if(selected.cwd)setPath(selected.cwd);userTurn.textContent=selected.prompt;userTurn.hidden=false;output.textContent=selected.result?.output||selected.error||selected.statusText;response.classList.add('show');}
+    showAssistantActivity();
+    if(selected)try{const saved=await api.historyRead({provider:'atlas',id:selected.conversationId}),turn=saved.turns.findLast(turn=>turn.role==='user'&&turn.content===selected.prompt);if(shownAssistantTask===job.id){userTurn.attachmentFiles=turn?.attachments||[];messageAttachments(userTurn,userTurn.attachmentFiles);}}catch{}
+  });
   const activeTurn=$id('userTurn');if(activeTurn?.attachmentFiles)messageAttachments(activeTurn,activeTurn.attachmentFiles);window.atlasColab.refreshMessages();
   void api.projects().then(items=>{profiles=items;renderAttachments();}).catch(()=>{});renderAttachments();
 })();

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, protocol, session, safeStorage, shell, clipboard, screen } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, protocol, session, safeStorage, shell, clipboard, screen, Notification } = require('electron');
 const { spawn } = require('node:child_process');
 const { existsSync, statSync, readdirSync } = require('node:fs');
 const { readFile, writeFile, unlink, mkdir, rename, cp, readdir } = require('node:fs/promises');
@@ -39,6 +39,7 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 
 let mainWindow;
+const taskNotifications=require('./task-notifications').createTaskNotifications({Notification,getWindow:()=>mainWindow});
 let modelCatalogService, updateService;
 function models(){return modelCatalogService ||= require('./model-catalog').createModelCatalog({directory:app.getPath('userData'),discover:async provider=>{
   if(provider==='claude'){const executable=findClaudeExecutable();if(!executable)throw Error('Claude Code is not installed.');return require('./model-catalog').claudeModels(executable);}
@@ -198,7 +199,7 @@ function findCodexExecutable() {
 }
 
 function reportProviderProgress(provider, status) {
-  const job=jobContext.getStore();if(job){job.statusText=status;job.provider=provider;emitJobs();}
+  const job=jobContext.getStore();if(job){job.statusText=status;job.provider=provider;if(job.events.at(-1)?.text!==status){job.events.push({kind:'stage',provider,text:status,at:Date.now()});job.events=job.events.slice(-100);}emitJobs();}
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('atlas:provider-progress', { provider, status });
   }
@@ -414,7 +415,7 @@ async function startCollaboration(event, input) {
   if([...activeJobs.values()].some(job=>job.collaboration&&job.colabChatId===request.chatId&&job.status==='running'))throw Error('This Colab chat is already working.');
   const usedMs=previous?.budget?.usedMs||0;
   const id=randomUUID(),job={id,colabChatId:request.chatId,prompt:task,cwd:folder,conversationId:request.chatId,status:'running',statusText:'Preparing workspace',startedAt:Date.now(),events:[],collaboration:true,request,checkpoints:previous?.checkpoints?structuredClone(previous.checkpoints):[],workspaceId:previous?.workspaceId||'',budget:{maxRuntimeSeconds:request.maxRuntimeSeconds,maxRounds:request.maxRounds,usedMs,runStartedAt:Date.now()}};
-  activeJobs.set(id,job);persistJobs();emitJobs();
+  activeJobs.set(id,job);taskNotifications.started(job);persistJobs();emitJobs();
   job.promise=jobContext.run(job,async()=>{
     const controller=new AbortController();job.signal=controller.signal;job.interrupt=()=>controller.abort();
 
@@ -433,7 +434,7 @@ async function startCollaboration(event, input) {
       job.result={...result,workspaceId:job.workspaceId};job.status='completed';job.statusText='Complete';
       if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:'Complete',result:result.output,usage:result.usage,limitation:result.limitation,workspaceId:job.workspaceId});return job.result;
     }catch(error){job.status=job.stopped||'failed';job.error=error.message;job.statusText=job.stopped==='paused'?'Paused':job.stopped==='cancelled'?'Stopped':job.error;if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:job.statusText,error:job.error,workspaceId:job.workspaceId});throw error;
-    }finally{clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();await persistJobs();emitJobs();}
+    }finally{clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();taskNotifications.finished(job,{silent:quitting});await persistJobs();emitJobs();}
   });job.promise.catch(()=>{});return{id};
 }
 
@@ -617,10 +618,10 @@ function setupIpc() {
     if(previous?.collaboration||previous?.status==='running')throw Error('Resume a stopped Assistant task, or open its Colab chat.');
     if(previous?.request)data={...data,profileId:previous.request.profileId,attachments:previous.request.attachments};
     const controller=new AbortController(),job={id,request:{profileId:data.profileId,attachments:data.attachments||[]},prompt:data.prompt,cwd:data.cwd,conversationId:data.conversationId||randomUUID(),status:'running',statusText:'Starting',startedAt:Date.now(),events:[],signal:controller.signal,interrupt:()=>controller.abort(),budget:{usedMs,maxRuntimeSeconds,runStartedAt:Date.now()}};
-    activeJobs.set(id,job);persistJobs();emitJobs();
+    activeJobs.set(id,job);taskNotifications.started(job);persistJobs();emitJobs();
 
     const heartbeat=setInterval(()=>{persistJobs();emitJobs();},5000);heartbeat.unref();
-    job.promise=jobContext.run(job,async()=>{try{const result=await handleChat(event,{...data,conversationId:job.conversationId});if(controller.signal.aborted)throw Error('Task stopped.');job.result=result;job.status='completed';return result;}catch(error){job.status=job.stopped||'failed';job.error=error.message;job.statusText=job.error;throw Error(job.error);}finally{clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();await persistJobs();emitJobs();}});return job.promise;
+    job.promise=jobContext.run(job,async()=>{try{const result=await handleChat(event,{...data,conversationId:job.conversationId});if(controller.signal.aborted)throw Error('Task stopped.');job.result=result;job.status='completed';job.statusText='Complete';return result;}catch(error){job.status=job.stopped||'failed';job.error=error.message;job.statusText=job.error;throw Error(job.error);}finally{clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();taskNotifications.finished(job,{silent:quitting});await persistJobs();emitJobs();}});return job.promise;
   });
   ipcMain.handle('atlas:jobs', (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(request?.action==='stop'){const job=activeJobs.get(request.id);if(job?.status==='running'){job.stopped=request.pause?'paused':'cancelled';job.statusText=job.stopped;if(job.interrupt)job.interrupt();else if(job.child?.pid){spawn('taskkill.exe',['/PID',String(job.child.pid),'/T','/F'],{windowsHide:true}).on('error',()=>job.child?.kill());}emitJobs();}}return jobSnapshots()});
 }
@@ -741,6 +742,7 @@ async function createWindow() {
   mainWindow.webContents.on('will-navigate', (event, target) => {
     if (!target.startsWith(`${appOrigin}/`)) event.preventDefault();
   });
+  mainWindow.on('focus',()=>mainWindow?.flashFrame(false));
   mainWindow.on('closed', () => { mainWindow = null; });
   await mainWindow.loadURL(`${appOrigin}/`);
 }
