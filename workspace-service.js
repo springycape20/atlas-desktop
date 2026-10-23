@@ -61,6 +61,26 @@ function createWorkspaceService(directory) {
   async function attachmentContext(ids) {const rows=await attachments(ids);return rows.map(item=>item.type==='image'?`USER-SELECTED IMAGE: ${item.name}\nInspect this local image using your image/file reading tools: ${item.file}`:`ATTACHMENT: ${item.name}\n<untrusted-file-content>\n${item.bytes.toString('utf8')}\n</untrusted-file-content>`).join('\n\n');}
   async function preview(id){const [a]=await attachments([id]);return a.type==='image'?{...a,bytes:undefined,file:undefined,preview:'data:image/'+(a.extension==='.jpg'||a.extension==='.jpeg'?'jpeg':a.extension.slice(1))+';base64,'+a.bytes.toString('base64')}:{...a,bytes:undefined,file:undefined,preview:a.bytes.toString('utf8')};}
   const git=(folder,args)=>command('git',['-C',folder,...args]);
+  const initialIgnore=['node_modules/','dist/','build/','vendor/','.venv/','venv/','__pycache__/','.env','.env.*','!.env.example','*.pem','*.key','credentials*.json','.DS_Store'];
+  async function repository(cwd){
+    const folder=await fs.realpath(cwd);if(!(await fs.stat(folder)).isDirectory())throw Error('Choose a project folder.');
+    try{return {exists:true,root:await git(folder,['rev-parse','--show-toplevel']),hasCommit:Boolean(await git(folder,['rev-parse','--verify','HEAD']).catch(()=>''))};}
+    catch(error){if(!/not a git repository/i.test(error.message))throw Error('Git is unavailable or the repository cannot be read. Install Git using Diagnostics, then restart ATLAS.');}
+    return {exists:false,root:folder};
+  }
+  async function initializeRepository(cwd){return serial(async()=>{
+    const status=await repository(cwd),folder=status.root;
+    if(status.exists){if(!status.hasCommit){await command('git',['-C',folder,'-c','user.name=ATLAS','-c','user.email=atlas@localhost','commit','--allow-empty','-m','Start project']);}return repository(folder);}
+    await git(folder,['init','-b','main']);
+    // Preserve existing ignore rules and exclude common local credentials/dependencies.
+    const ignore=path.join(folder,'.gitignore');let existing='';try{existing=await fs.readFile(ignore,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
+    await fs.writeFile(ignore,existing+'\n# ATLAS initial project exclusions\n'+initialIgnore.join('\n')+'\n');
+    // Stage exactly the visible, non-ignored starting files for the initial local snapshot.
+    const files=(await git(folder,['ls-files','--others','--exclude-standard','-z'])).split('\0').filter(Boolean);
+    for(let i=0;i<files.length;i+=50)await git(folder,['add','--',...files.slice(i,i+50)]);
+    await command('git',['-C',folder,'-c','user.name=ATLAS','-c','user.email=atlas@localhost','commit','--allow-empty','-m','Start project']);
+    return repository(folder);
+  });}
   async function createWorktree(cwd){return serial(async()=>{
     const root=await fs.realpath(await git(cwd,['rev-parse','--show-toplevel']));
     if((await git(root,['status','--porcelain'])).trim())throw Error('Isolated work starts from a clean Git checkout. Commit or stash your current changes first, or explicitly choose direct editing.');
@@ -98,6 +118,6 @@ function createWorkspaceService(directory) {
     throw Error('Unknown review action.');
   });}
   async function chatMeta(request={}){return serial(async()=>{const s=await state();const key=trim(request.key,160);if(request.action==='save'){if(!/^(atlas|codex|claude):[A-Za-z0-9-]+$/.test(key))throw Error('Invalid conversation.');s.chatMeta[key]={title:trim(request.title,100),pinned:request.pinned===true};await save();}return structuredClone(s.chatMeta);});}
-  return {profiles,profile,importPaths,importBuffers,attachments,attachmentContext,preview,createWorktree,tree,review,reviewAction,chatMeta,flush:()=>queue.then(()=>store.flush())};
+  return {profiles,profile,importPaths,importBuffers,attachments,attachmentContext,preview,repository,initializeRepository,createWorktree,tree,review,reviewAction,chatMeta,flush:()=>queue.then(()=>store.flush())};
 }
 module.exports={createWorkspaceService,command};

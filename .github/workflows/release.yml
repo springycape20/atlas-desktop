@@ -29,4 +29,7 @@ jobs:
           generate_release_notes: true
           body_path: build/release-notes.md
           fail_on_unmatched_files: true
-          files: dist/ATLAS-Setup-*.exe
+          files: |
+            dist/ATLAS-Setup-*.exe
+            dist/ATLAS-Setup-*.exe.blockmap
+            dist/latest.yml

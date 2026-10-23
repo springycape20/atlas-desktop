@@ -1,13 +1,11 @@
-ATLAS 0.5.1 includes the current Colab chat workspace, provider connection improvements, and fixes for saved-data migration and model discovery.
+ATLAS 0.6.0 adds project workflows and easier setup for Codex and Claude.
 
-- Separate Assistant and Colab workspaces in the same app.
-- Saved Colab conversations, drafts, follow-up context, and per-chat model, effort, and folder choices.
-- Codex and Claude work through the task and return one final summary to the originating chat.
-- Fixed provider buttons opening no visible sign-in window and connection errors hidden behind Settings.
-- Claude's **Install and sign in** button installs the missing Claude Code CLI using Anthropic's official installer.
-- Fixed upgrades finding the original `%APPDATA%\atlas-local-desktop` data folder so saved settings, conversations, memories, reminders, and encrypted keys migrate to `%LOCALAPPDATA%\ATLAS`.
-- Fixed Codex model discovery on a fresh launch by connecting to the app-server before requesting the model catalog.
+- Project profiles, file/screenshot attachments, isolated Git review, recoverable Colab passes, four collaboration modes, task budgets, diagnostics, and searchable/exportable chat history.
+- Official download links for missing provider CLIs, Git, and GitHub CLI.
+- New Colab projects can create a local Git repository and initial snapshot after confirmation.
+- Settings, Colab, and profiles discover available models from the installed provider CLIs; refresh at launch or manually, with cached choices offline.
+- Installed Windows apps check GitHub Releases at launch. Download updates in Settings, then restart and install when ready. Running tasks block an update restart.
 
-Download **ATLAS-Setup-0.5.1.exe** below. Windows x64 only. The installer adds Desktop and Start Menu shortcuts and installs under `%LOCALAPPDATA%\Programs\ATLAS`. Launch at sign-in is available in Settings.
+Windows x64. Install ATLAS-Setup-0.6.0.exe over an existing installation to keep local data. Older versions need this installer once to gain in-app updates. Source checkouts check release availability but update through Git or the installer.
 
-Install over an existing ATLAS installation to retain your settings and conversations. The installer is unsigned; Windows may show SmartScreen. See the README for installation and Windows unblock instructions.
+The installer is unsigned; Windows may show SmartScreen. See README installation/unblock guidance. Image support depends on provider tools. No live paid collaboration request was used during validation.

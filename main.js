@@ -39,6 +39,14 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 
 let mainWindow;
+let modelCatalogService, updateService;
+function models(){return modelCatalogService ||= require('./model-catalog').createModelCatalog({directory:app.getPath('userData'),discover:async provider=>{
+  if(provider==='claude'){const executable=findClaudeExecutable();if(!executable)throw Error('Claude Code is not installed.');return require('./model-catalog').claudeModels(executable);}
+  const executable=findCodexExecutable();if(!executable)throw Error('Codex is not installed.');
+  codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);await codexConnection.connect();
+  const rows=[];let cursor;do{const page=await codexConnection.request('model/list',{limit:100,...(cursor?{cursor}:{})});rows.push(...(page.data||[]));cursor=page.nextCursor;}while(cursor&&rows.length<300);return rows;
+}});}
+function getAppUpdates(){return updateService ||= require('./app-updates').createAppUpdates({app,updater:app.isPackaged?require('electron-updater').autoUpdater:null,busy:()=>[...activeJobs.values()].some(job=>job.status==='running'),notify:value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:update-status',value);}});}
 let workspaceService;
 function workspace(){return workspaceService ||= require('./workspace-service').createWorkspaceService(app.getPath('userData'));}
 let assistantService;
@@ -432,24 +440,9 @@ async function startCollaboration(event, input) {
 function setupIpc() {
   require('./workspace-ipc').registerWorkspaceIpc({ipcMain,app,dialog,clipboard,window:()=>mainWindow,trusted:isTrustedSender,service:workspace,jobs:jobSnapshots,findCodex:findCodexExecutable,findClaude:findClaudeExecutable});
   ipcMain.handle('atlas:collab', (event, request) => startCollaboration(event, request));
-  ipcMain.handle('atlas:model-catalog', async (event, provider) => {
-    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
-    if (provider === 'claude') return [
-      { id: 'opus', name: 'Claude Opus · latest' },
-      { id: 'sonnet', name: 'Claude Sonnet · latest' },
-      { id: 'haiku', name: 'Claude Haiku · latest' },
-    ];
-    if (provider !== 'codex') throw Error('Unknown model provider.');
-    const executable = findCodexExecutable();
-    if (!executable) return [];
-    try {
-      codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);
-      await codexConnection.connect();
-      const catalog = await codexConnection.request('model/list', { limit: 100 });
-      return (catalog?.data || []).filter(item => typeof item?.id === 'string' && modelIdPattern.test(item.id))
-        .map(item => ({ id: item.id, name: typeof item.displayName === 'string' ? item.displayName : item.id }));
-    } catch { return []; }
-  });
+  ipcMain.handle('atlas:model-catalog',async(event,provider)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');return (await models().get(provider)).models;});
+  ipcMain.handle('atlas:discover-models',async(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');const results=await Promise.all(['codex','claude'].map(async provider=>[provider,await models().get(provider,request?.refresh===true)]));return Object.fromEntries(results);});
+  ipcMain.handle('atlas:updates',async(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');return getAppUpdates().action(request);});
   ipcMain.handle('atlas:provider-health',(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(request?.action==='retry'&&['codex','claude'].includes(request.provider))providerHealth.clear(request.provider);return providerHealth.snapshot();});
   ipcMain.handle('atlas:open-link',async(event,value)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const url=new URL(value);if(!['https:','http:'].includes(url.protocol))throw Error('Unsupported link');await shell.openExternal(url.href)});
   ipcMain.handle('atlas:memory',async (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const result=assistantService.memory(request?.action||'list',request?.item);await assistantService.flush();return result;});
@@ -712,7 +705,7 @@ async function handleChat(event, data) {
 async function createWindow() {
   await protocol.handle('atlas', async request => {
     const url = new URL(request.url);
-    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js', '/workspace-extras.js'].includes(url.pathname)) {
+    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js'].includes(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
     const javascript = url.pathname.endsWith('.js');

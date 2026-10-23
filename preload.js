@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('atlas', {
   onResponseText: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('atlas:response-text', listener); return () => ipcRenderer.removeListener('atlas:response-text', listener); },
+  prepareProject: cwd=>ipcRenderer.invoke('atlas:prepare-project',{cwd}),
+  discoverModels: refresh=>ipcRenderer.invoke('atlas:discover-models',{refresh}),
+  updates: request=>ipcRenderer.invoke('atlas:updates',request),
+  onUpdateStatus: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:update-status',listener);return()=>ipcRenderer.removeListener('atlas:update-status',listener);},
   projects: request=>ipcRenderer.invoke('atlas:projects',request),
   attachments: request=>ipcRenderer.invoke('atlas:attachments',request),
   droppedFiles: files=>ipcRenderer.invoke('atlas:attachments',{paths:Array.from(files).map(file=>webUtils.getPathForFile(file))}),

@@ -89,3 +89,15 @@ Run `npm test` for regression checks covering queued saves, state persistence, h
 - Assistant and Colab have runtime limits; Colab also has a maximum provider-pass count. Colab displays token counts and costs only when a provider reports them. Partial usage and provider-reported cost are not an account bill or a spending cap.
 
 Profiles, attachment snapshots, review worktrees, and history metadata are stored in the app's local data directory. Discarded worktrees are retained for recovery and can consume disk space. Existing downloaded installers do not gain these features until a new release is built from this branch.
+
+## Setup, model discovery, and app updates (0.6.0)
+
+Diagnostics includes official download links for missing Codex, Claude Code, Git, and GitHub CLI installations. After installing a missing tool, restart ATLAS and run diagnostics again.
+
+Before an isolated Colab task starts, a folder without Git history prompts to create a local repository and initial commit. New repositories include existing project files and append common dependency and credential exclusions to `.gitignore`. This does not upload files. Review private files before accepting. Existing repositories keep their current ignore rules and staged files; commit or stash changes before using an isolated worktree.
+
+Settings now offers discovered models in its dropdowns. ATLAS refreshes both provider catalogues at launch; **Refresh available models** repeats the scan. Codex uses its app-server catalogue and Claude uses CLI initialization without submitting a chat prompt. Cached catalogues remain available offline, with a status explaining a failed refresh. Provider defaults and optional custom IDs are preserved. Updating a provider CLI can expose models that an older CLI does not report.
+
+The Windows installer includes an updater. On launch it checks published GitHub Releases; **Settings → App updates** shows availability, download progress, and **Restart and install**. Updates never restart automatically, and installation is blocked while tasks run. Versions before 0.6.0 require installing the new installer once to gain this feature. Source checkouts check release availability but do not replace their source files automatically.
+
+For maintainers: every updater-enabled release must publish the installer, its `.blockmap`, and `latest.yml` together. The release workflow and package verifier check these files. A local build or pull request does not become an update until that version is published as a GitHub Release. See the [electron-builder v26 update documentation](https://raw.githubusercontent.com/electron-userland/electron-builder/v26.0.12/pages/auto-update.md).

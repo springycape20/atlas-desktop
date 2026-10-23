@@ -1,6 +1,6 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
@@ -14,6 +14,7 @@
     "electron-builder": "26.0.12"
   },
   "dependencies": {
+    "electron-updater": "6.8.9",
     "kokoro-js": "1.2.1"
   },
   "allowScripts": {
@@ -78,6 +79,14 @@
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
       "include": "build/installer.nsh"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "springycape20",
+        "repo": "atlas-desktop",
+        "releaseType": "release"
+      }
+    ]
   }
 }
