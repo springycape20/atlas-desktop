@@ -616,8 +616,9 @@ function setupIpc() {
     const previous=activeJobs.get(data?.resumeJobId),usedMs=previous?.budget?.usedMs||0,maxRuntimeSeconds=null;
 
     if(previous?.collaboration||previous?.status==='running')throw Error('Resume a stopped Assistant task, or open its Colab chat.');
-    if(previous?.request)data={...data,profileId:previous.request.profileId,attachments:previous.request.attachments};
-    const controller=new AbortController(),job={id,request:{profileId:data.profileId,attachments:data.attachments||[]},prompt:data.prompt,cwd:data.cwd,conversationId:data.conversationId||randomUUID(),status:'running',statusText:'Starting',startedAt:Date.now(),events:[],signal:controller.signal,interrupt:()=>controller.abort(),budget:{usedMs,maxRuntimeSeconds,runStartedAt:Date.now()}};
+    if(previous?.request)data={...data,profileId:previous.request.profileId,attachments:previous.request.attachments,effort:data.effort===undefined?previous.request.effort:data.effort};
+    if(data.effort!==undefined&&data.effort!==''&&!['low','medium','high','xhigh','max'].includes(data.effort))throw Error('Choose a supported effort level.');
+    const controller=new AbortController(),job={id,request:{profileId:data.profileId,attachments:data.attachments||[],effort:data.effort||''},prompt:data.prompt,cwd:data.cwd,conversationId:data.conversationId||randomUUID(),status:'running',statusText:'Starting',startedAt:Date.now(),events:[],signal:controller.signal,interrupt:()=>controller.abort(),budget:{usedMs,maxRuntimeSeconds,runStartedAt:Date.now()}};
     activeJobs.set(id,job);taskNotifications.started(job);persistJobs();emitJobs();
 
     const heartbeat=setInterval(()=>{persistJobs();emitJobs();},5000);heartbeat.unref();
@@ -636,6 +637,7 @@ async function handleChat(event, data) {
     const settings = await readAppSettings();
     const project = await workspace().profile(data.profileId);
     if(project)Object.assign(settings,{codexModel:project.codexModel||settings.codexModel,claudeModel:project.claudeModel||settings.claudeModel,effort:project.effort});
+    if(data.effort)settings.effort=data.effort;
     const attachmentContext = await workspace().attachmentContext(data.attachments||[]);
     const conversationId = typeof data?.conversationId === 'string' && /^[A-Za-z0-9-]{20,80}$/.test(data.conversationId) ? data.conversationId : randomUUID();
     const history = await readAtlasHistory();

@@ -112,6 +112,7 @@ async function mainHarness(t, options = {}) {
   vm.runInContext(code + `
     mainWindow = { isDestroyed: () => false, webContents: { send: (_event, patch) => updates.push(patch) } };
     assistantService = require('./assistant-service').createService({ directory: app.getPath('userData'), notify() {} });
+    providerHealth = new (require('./provider-health').ProviderHealth)(path.join(app.getPath('userData'),'provider-health.json'));
     globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, readAppSettings, setupIpc, sender: mainWindow.webContents };
   `, context);
   return { ...context.harness, updates, events, quit, dir, paths, handlers };
@@ -233,4 +234,26 @@ test('saved Assistant turns keep attachment references without storing image byt
   assert.deepEqual(data[0].turns[0].attachments,[{id:'photo1',name:'Screenshot.png',type:'image',size:123}]);
   assert.deepEqual(data[0].turns[1].attachments,[]);
   assert(!JSON.stringify(data).includes('base64'));
+});
+
+test('Assistant effort overrides the project, respects default, and survives resume',async t=>{
+  const received=[];
+  class FakeCodex{async run({settings}){received.push(settings.effort);return{output:'Verified effort routing.',sessionId:'test-session'};}}
+  const h=await mainHarness(t,{modules:{'./codex-connection':{CodexConnection:FakeCodex}}});h.setupIpc();
+  const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}};
+  const profile=await h.handlers.get('atlas:projects')(event,{action:'save',profile:{name:'Test',cwd:h.dir,effort:'high'}});
+  const send=(id,extra)=>h.handlers.get('atlas:chat')(event,{requestId:id,prompt:'Use Codex to check effort routing.',cwd:h.dir,profileId:profile.id,...extra});
+  await send('override',{effort:'low'});assert.equal(received.at(-1),'low');assert.equal(h.activeJobs.get('override').request.effort,'low');
+  await send('default',{effort:''});assert.equal(received.at(-1),'high');
+  h.activeJobs.set('paused-effort',{id:'paused-effort',status:'paused',provider:'codex',request:{profileId:profile.id,attachments:[],effort:'max'}});
+  await send('resume',{resumeJobId:'paused-effort'});assert.equal(received.at(-1),'max');
+  await send('reset',{resumeJobId:'paused-effort',effort:''});assert.equal(received.at(-1),'high');
+  const calls=received.length;await assert.rejects(send('invalid',{effort:'unsupported'}),/supported effort/);assert.equal(received.length,calls);
+});
+
+test('preload forwards the Assistant effort as a string through IPC',async()=>{
+  let api,last;
+  vm.runInNewContext(await fs.readFile(path.join(root,'preload.js'),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(_name,value)=>api=value},ipcRenderer:{invoke:(channel,payload)=>{last={channel,payload};}},webUtils:{}})});
+  api.chat({prompt:'Test',effort:'max'});assert.equal(last.channel,'atlas:chat');assert.equal(last.payload.effort,'max');
+  api.chat({effort:{invalid:true}});assert.equal(last.payload.effort,undefined);
 });

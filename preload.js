@@ -54,7 +54,7 @@ contextBridge.exposeInMainWorld('atlas', {
   },
   chat: payload => ipcRenderer.invoke('atlas:chat', {
     requestId: payload?.requestId, resumeJobId: payload?.resumeJobId,
-    profileId:payload?.profileId, attachments:payload?.attachments, maxRuntimeSeconds:payload?.maxRuntimeSeconds,
+    profileId:payload?.profileId, attachments:payload?.attachments, effort:typeof payload?.effort==='string'?payload.effort:undefined, maxRuntimeSeconds:payload?.maxRuntimeSeconds,
     cwd: typeof payload?.cwd === 'string' ? payload.cwd : '',
     prompt: typeof payload?.prompt === 'string' ? payload.prompt : '',
     conversationId: typeof payload?.conversationId === 'string' ? payload.conversationId : '',
