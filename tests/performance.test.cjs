@@ -267,3 +267,12 @@ test('provider usage IPC requires the trusted app window',async t=>{
   assert.equal((await read(event,{})).codex.remainingPercent,34);assert.equal(reads,1);
   await assert.rejects(h.handlers.get('atlas:provider-usage-open')(event,'invalid'),/Choose Codex or Claude/);
 });
+
+test('Assistant starts the change snapshot before provider edits and exposes actual line counts',async t=>{
+  class EditingCodex{async run({cwd}){await fs.writeFile(path.join(cwd,'app.js'),'after\nnew line\n');return{output:'Updated the file.',sessionId:'test-session'};}}
+  const h=await mainHarness(t,{modules:{'./codex-connection':{CodexConnection:EditingCodex}}});h.setupIpc();await fs.writeFile(path.join(h.dir,'app.js'),'before\n');
+  const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}};
+  await h.handlers.get('atlas:chat')(event,{requestId:'changed-task',prompt:'Use Codex to fix the file.',cwd:h.dir});
+  const report=await h.handlers.get('atlas:changes')(event,{jobId:'changed-task'});
+  assert.equal(report.ready,true);assert.equal(report.added,2);assert.equal(report.removed,1);assert.equal(report.files.length,1);assert.equal(report.files[0].path,'app.js');assert.equal(report.canEdit,true);
+});

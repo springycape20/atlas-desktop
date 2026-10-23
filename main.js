@@ -49,6 +49,9 @@ function models(){return modelCatalogService ||= require('./model-catalog').crea
   const rows=[];let cursor;do{const page=await codexConnection.request('model/list',{limit:100,...(cursor?{cursor}:{})});rows.push(...(page.data||[]));cursor=page.nextCursor;}while(cursor&&rows.length<300);return rows;
 }});}
 function getAppUpdates(){return updateService ||= require('./app-updates').createAppUpdates({app,updater:app.isPackaged?require('electron-updater').autoUpdater:null,busy:()=>[...activeJobs.values()].some(job=>job.status==='running'),notify:value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:update-status',value);}});}
+let changeTrackerService;
+function changes(){return changeTrackerService ||= require('./change-tracker').createChangeTracker(app.getPath('userData'));}
+async function beginChanges(job,previous){if(!job)return;try{job.cwd=await require('node:fs/promises').realpath(job.cwd);job.changeId=previous?.changeId&&previous.cwd===job.cwd?previous.changeId:await changes().capture(job.id,job.cwd);await persistJobs();}catch(error){job.changesError='Change tracking unavailable: '+error.message;}emitJobs();}
 let workspaceService;
 function workspace(){return workspaceService ||= require('./workspace-service').createWorkspaceService(app.getPath('userData'));}
 let assistantService;
@@ -378,8 +381,8 @@ function pruneJobs() {
 function jobSnapshots() {
   pruneJobs();
   return [...activeJobs.values()].map(job=>{
-    const {id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId,workspaceId,request,checkpoints,budget,projectSnapshot}=job;
-    return {id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId,workspaceId,request,checkpoints,projectSnapshot,budget:budget?{...budget,usedMs:budget.usedMs+(budget.runStartedAt?Date.now()-budget.runStartedAt:0),runStartedAt:null}:undefined};
+    const {id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId,workspaceId,request,checkpoints,budget,projectSnapshot,changeId,changesError}=job;
+    return {id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId,workspaceId,request,checkpoints,projectSnapshot,changeId,changesError,budget:budget?{...budget,usedMs:budget.usedMs+(budget.runStartedAt?Date.now()-budget.runStartedAt:0),runStartedAt:null}:undefined};
   });
 }
 
@@ -428,6 +431,7 @@ async function startCollaboration(event, input) {
       const attachmentContext=await workspace().attachmentContext(request.attachments);
       if(job.workspaceId){const existing=await workspace().tree(job.workspaceId);if(existing.state!=='active')throw Error('The isolated workspace has already been '+existing.state+'. Start a new task.');job.cwd=existing.cwd;}
       else if(request.isolated&&!['plan','compare'].includes(request.mode)){const isolated=await workspace().createWorktree(folder);job.workspaceId=isolated.id;job.cwd=isolated.cwd;await persistJobs();}
+      await beginChanges(job,previous);
       const settings=await readAppSettings();if(project)Object.assign(settings,{codexModel:project.codexModel||settings.codexModel,claudeModel:project.claudeModel||settings.claudeModel});
       const run=require('./collaboration').createCollaboration({runProvider,progress:announce,checkpoint:async reports=>{job.checkpoints=reports;await persistJobs();await assistantService.flush();}});
       const result=await run({...request,cwd:job.cwd,settings,checkpoints:job.checkpoints,instructions:project?.instructions||'',attachmentContext,signal:controller.signal});
@@ -440,6 +444,7 @@ async function startCollaboration(event, input) {
 }
 
 function setupIpc() {
+  require('./change-ipc').registerChangeIpc({ipcMain,trusted:isTrustedSender,findJob:id=>activeJobs.get(id),jobs:()=>[...activeJobs.values()],tracker:changes,workspace});
   require('./workspace-ipc').registerWorkspaceIpc({ipcMain,app,dialog,clipboard,window:()=>mainWindow,trusted:isTrustedSender,service:workspace,jobs:jobSnapshots,findCodex:findCodexExecutable,findClaude:findClaudeExecutable});
   ipcMain.handle('atlas:collab', (event, request) => startCollaboration(event, request));
   ipcMain.handle('atlas:model-catalog',async(event,provider)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');return (await models().get(provider)).models;});
@@ -675,6 +680,7 @@ async function handleChat(event, data) {
     if(/^(?:how(?:'s| is) it going|(?:show |what is |what's )?(?:my )?(?:task|job)(?:s| status)?)[?!. ]*$/i.test(prompt)){localOutput=jobSnapshots().filter(j=>j.id!==data.requestId).slice(-8).map(j=>j.prompt+' · '+j.status+' · '+(j.statusText||'')).join('\n')||'No other tasks yet.';}
     if(localOutput!==null){await assistantService.flush();conversation.turns.push({role:'assistant',content:localOutput,provider:'local',at:Date.now()});await writeAtlasHistory([conversation]);return {output:localOutput,provider:'local',reason:'instant local action',conversationId};}
     if(!availableProvider)throw Error('Both providers are temporarily cooling down after usage limits. Open Settings → Provider availability to retry, or wait until the displayed retry time.');
+    await beginChanges(jobContext.getStore(),activeJobs.get(data.resumeJobId));
     reportProviderProgress(route.provider, `Selected ${route.provider} · ${route.reason}`);
     try {
       const result = await runProvider(route.provider, contextualPrompt, cwd, settings, conversation.sessions[route.provider], onText);
@@ -712,7 +718,7 @@ async function handleChat(event, data) {
 async function createWindow() {
   await protocol.handle('atlas', async request => {
     const url = new URL(request.url);
-    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js'].includes(url.pathname)) {
+    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js'].includes(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
     const javascript = url.pathname.endsWith('.js');

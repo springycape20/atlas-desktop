@@ -1,0 +1,14 @@
+const path=require('node:path');
+function registerChangeIpc({ipcMain,trusted,findJob,jobs,tracker,workspace}){
+  const overlaps=(a,b)=>{if(typeof a!=='string'||typeof b!=='string')return false;const rel=path.relative(a,b);return rel===''||(!rel.startsWith('..'+path.sep)&&rel!=='..'&&!path.isAbsolute(rel));};
+  const editable=job=>job.status!=='running'&&!jobs().some(other=>other.status==='running'&&(overlaps(job.cwd,other.cwd)||overlaps(other.cwd,job.cwd)));
+  ipcMain.handle('atlas:changes',async(event,request={})=>{
+    if(!trusted(event))throw Error('Untrusted app window.');const job=findJob(request.jobId);if(!job)throw Error('This task is no longer available.');
+    if(!job.changeId)return {ready:false,message:job.changesError||'Change tracking is available for new code tasks once their snapshot is ready.',files:[],added:0,removed:0};
+    const service=tracker(),workspaceState=job.workspaceId&&workspace?(await workspace().tree(job.workspaceId)).state:'active',canEdit=editable(job)&&workspaceState==='active',readOnlyReason=workspaceState!=='active'?'This isolated checkout has already been accepted or discarded. Start a new task to edit.':'Stop or finish tasks editing this folder before saving.';
+    if(request.action==='save'){if(!canEdit)throw Error(readOnlyReason);const result=await service.save(job.changeId,request.path,request.content,request.version);return result;}
+    if(request.action==='file'){const file=await service.file(job.changeId,request.path);return {...file,editable:file.editable&&canEdit,cannotSave:!canEdit,readOnlyReason:canEdit?null:readOnlyReason};}
+    const report=await service.report(job.changeId,request.refresh===true);return {...report,files:report.files.map(({patch,...file})=>file),ready:true,canEdit,readOnlyReason:canEdit?null:readOnlyReason,jobId:job.id,isolated:Boolean(job.workspaceId)};
+  });
+}
+module.exports={registerChangeIpc};

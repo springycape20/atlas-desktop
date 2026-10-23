@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('atlas', {
   droppedFiles: files=>ipcRenderer.invoke('atlas:attachments',{paths:Array.from(files).map(file=>webUtils.getPathForFile(file))}),
   attachmentPreview: id=>ipcRenderer.invoke('atlas:attachment-preview',{id}),
   diagnostics: ()=>ipcRenderer.invoke('atlas:diagnostics'),
+  changes: request=>ipcRenderer.invoke('atlas:changes',request),
   reviewChanges: request=>ipcRenderer.invoke('atlas:review-changes',request),
   chatMetadata: request=>ipcRenderer.invoke('atlas:chat-metadata',request),
   exportChat: request=>ipcRenderer.invoke('atlas:export-chat',request),
