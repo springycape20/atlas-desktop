@@ -191,3 +191,23 @@ test('shutdown waits for finishing jobs and flushes their latest state', async t
   assert.equal(saved.jobs[0].status, 'paused');
   assert.equal(saved.memories[0].text, 'Persist on exit');
 });
+
+test('saved task budgets include active runtime but exclude offline time', async t => {
+  const h = await mainHarness(t);
+  h.activeJobs.set('budget', {id:'budget',status:'running',budget:{usedMs:2000,runStartedAt:Date.now()-1000,maxRuntimeSeconds:60},checkpoints:[{provider:'codex',output:'done'}]});
+  const saved = h.jobSnapshots()[0];
+  assert.ok(saved.budget.usedMs >= 3000 && saved.budget.usedMs < 5000);
+  assert.equal(saved.budget.runStartedAt,null);
+  assert.equal(saved.checkpoints[0].output,'done');
+  h.activeJobs.set('budget',{...saved,status:'paused'});
+  assert.equal(h.jobSnapshots()[0].budget.usedMs,saved.budget.usedMs);
+});
+
+test('exhausted task budgets and Colab-to-Assistant resumes are rejected', async t => {
+  const h=await mainHarness(t);h.setupIpc();
+  const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}};
+  h.activeJobs.set('spent',{id:'spent',status:'paused',budget:{usedMs:60000,maxRuntimeSeconds:60}});
+  await assert.rejects(h.handlers.get('atlas:chat')(event,{requestId:'retry',resumeJobId:'spent',maxRuntimeSeconds:60}),/Increase the task runtime/);
+  h.activeJobs.set('colab',{id:'colab',status:'paused',collaboration:true});
+  await assert.rejects(h.handlers.get('atlas:chat')(event,{requestId:'wrong-mode',resumeJobId:'colab'}),/open its Colab chat/);
+});
