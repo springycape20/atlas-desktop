@@ -1,9 +1,10 @@
-ATLAS 0.6.2 improves long-running tasks, screenshot attachments, and multiline messages.
+ATLAS 0.6.3 adds photo context previews, live task progress, Windows completion alerts, and an effort slider for the main chat.
 
-- Removed task runtime limits from Assistant, Colab, and project profiles. Older tasks can resume without their previous runtime budget blocking them.
-- Provider requests now default to Unlimited. An optional individual request timeout can still be selected in Settings.
-- Fixed Paste screenshot with Electron's current asynchronous clipboard API, retaining compatibility with older Electron versions.
-- Assistant now supports Shift+Enter for a new line and Enter to send, matching Colab. The message box grows as you type.
-- Includes the viewport and window sizing fixes from 0.6.1.
+- Paste copied pictures directly into Assistant or Colab with Ctrl+V. Ordinary text still pastes normally.
+- Photos show compact clickable thumbnails in the draft and with the question they accompany. Sent attachments clear from the composer and are saved with that message, so later questions do not automatically resend them.
+- Assistant and Colab show live provider progress summaries, plans, and expandable command steps. Work logs collapse when tasks finish and can be reopened.
+- Windows shows taskbar activity while tasks run and notifications on completion or failure. Background tasks flash the taskbar icon; clicking a notification opens the relevant chat.
+- The main chat's Effort button opens a five-step slider with a live label and reset-to-default control. Your choice is remembered and can override the active project for each message.
+- Includes the unlimited runtime, screenshot clipboard, multiline composer, and viewport fixes from earlier releases.
 
 Install over your existing version to preserve settings and conversations, or use Settings → App updates → Check for updates, then Download and Restart and install. Windows x64.
