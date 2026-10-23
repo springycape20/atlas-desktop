@@ -68,8 +68,8 @@ function parseProviderTranscriptUncached(provider, file) {
   }
   return { id: createHash('sha256').update(resolved).digest('hex'), sessionId, title: turns.find(turn => turn.role === 'user')?.content.replace(/\s+/g, ' ').slice(0, 76) || 'Untitled conversation', provider, cwd, updatedAt, turns: turns.slice(-50) };
 }
-function listProviderHistory(provider) {
-  return providerFiles(provider).map(({ file }) => { try { const item = parseProviderTranscript(provider, file); return { id: item.id, title: item.title, provider, cwd: item.cwd, updatedAt: item.updatedAt, turnCount: item.turns.length, sessionId: item.sessionId, searchText: item.turns.map(turn => turn.content).join(' ').slice(-2500) }; } catch { return null; } }).filter(item => item && item.turnCount);
+function listProviderHistory(provider, query = '') {
+  return providerFiles(provider).map(({ file }) => { try { const item = parseProviderTranscript(provider, file); if(query && !(item.title+' '+item.turns.map(turn=>turn.content).join(' ')).toLowerCase().includes(query))return null; return { id: item.id, title: item.title, provider, cwd: item.cwd, updatedAt: item.updatedAt, turnCount: item.turns.length, sessionId: item.sessionId, searchText: item.turns.map(turn => turn.content).join(' ').slice(-2500) }; } catch { return null; } }).filter(item => item && item.turnCount);
 }
 async function findReferencedProviderHistory(prompt) {
   const ignored = new Set(['able', 'about', 'after', 'also', 'another', 'asked', 'chat', 'chats', 'claude', 'codex', 'conversation', 'conversations', 'could', 'earlier', 'find', 'from', 'history', 'last', 'local', 'look', 'old', 'older', 'past', 'please', 'previous', 'read', 'saved', 'session', 'sessions', 'specific', 'thread', 'threads', 'that', 'their', 'this', 'what', 'when', 'where', 'which', 'with']);
@@ -122,7 +122,7 @@ async function findReferencedProviderHistory(prompt) {
 parentPort.on('message', async ({ id, method, args }) => {
   try {
     let value;
-    if (method === 'list') value = listProviderHistory(args.provider);
+    if (method === 'list') value = listProviderHistory(args.provider, typeof args.query==='string'?args.query.toLowerCase().slice(0,200):'');
     else if (method === 'search') value = await findReferencedProviderHistory(args.prompt);
     else if (method === 'read') {
       if (!['codex', 'claude'].includes(args.provider) || !/^[a-f0-9]{64}$/.test(args.id)) throw Error('Invalid provider history selection.');

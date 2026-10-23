@@ -54,6 +54,10 @@ class CodexConnection {
       t?.activity({kind:'attention',text:'An interactive request requires the provider app.'});return;
     }
     if(!t)return;
+    if(message.method==='thread/tokenUsage/updated') {
+      const usage=p.tokenUsage?.last;
+      if(usage)t.usage={...(Number.isFinite(usage.inputTokens)?{inputTokens:usage.inputTokens}:{}),...(Number.isFinite(usage.outputTokens)?{outputTokens:usage.outputTokens}:{})};
+    }
     if(message.method==='item/started'&&p.item?.type==='agentMessage'&&p.item.phase==='commentary')t.commentary.add(p.item.id);
     const turnId=p.turnId||p.turn?.id;
     if(t.turnId&&turnId&&t.turnId!==turnId)return;
@@ -77,7 +81,7 @@ class CodexConnection {
       const turn=p.turn;
       if(t.cancelled||turn.status==='interrupted')t.finish(Error('Job cancelled or paused.'));
       else if(turn.status==='failed')t.finish(Error([turn.error?.message,JSON.stringify(turn.error?.codexErrorInfo||'')].filter(Boolean).join(' ')));
-      else t.finish(null,{output:t.final||[...t.messages.values()].join('\n\n'),sessionId:p.threadId});
+      else t.finish(null,{output:t.final||[...t.messages.values()].join('\n\n'),sessionId:p.threadId,usage:t.usage||null});
     }
   }
   async run({prompt,cwd,settings,sessionId,onText=()=>{},onSession=()=>{},activity=()=>{},signal}) {

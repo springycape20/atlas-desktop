@@ -13,7 +13,7 @@
   const current = () => chats.find(chat => chat.id === selected);
   function makeChat() {
     const previous = current();
-    const chat = { id: crypto.randomUUID(), title: 'New Colab chat', cwd: previous?.cwd || cwd || '', draft: '', messages: [], effort: previous?.effort || defaults.effort || 'medium', codexModel: previous?.codexModel || defaults.colabCodexModel || '', claudeModel: previous?.claudeModel || defaults.colabClaudeModel || '', busy: false, status: '' };
+    const chat = { id: crypto.randomUUID(), title: 'New Colab chat', cwd: previous?.cwd || cwd || '', draft: '', messages: [], mode:previous?.mode||'build',isolated:previous?.isolated!==false,maxRounds:previous?.maxRounds||3,maxRuntimeSeconds:previous?.maxRuntimeSeconds||900,profileId:previous?.profileId||'',effort: previous?.effort || defaults.effort || 'medium', codexModel: previous?.codexModel || defaults.colabCodexModel || '', claudeModel: previous?.claudeModel || defaults.colabClaudeModel || '', busy: false, status: '' };
     chats.push(chat); selected = chat.id; return chat;
   }
   if (!current()) makeChat();
@@ -27,7 +27,8 @@
     @media(max-width:1000px){.colab-workspace{grid-template-columns:160px minmax(0,1fr)}.colab-chat-main{padding:20px}.colab-config-grid{grid-template-columns:1fr}.colab-config[open]{max-height:38vh;overflow:auto}}
     @media(max-width:750px){.workspace-nav{flex-wrap:wrap}.workspace-divider{display:none}.colab-workspace{width:100%;display:flex;flex-direction:column;min-height:70vh}.colab-chats{border-right:0;border-bottom:1px solid #243942;padding:12px}.colab-chats>button{width:auto;margin:0 0 10px}.colab-chat-list{flex-direction:row;max-height:75px}.colab-chat-item{min-width:130px;max-width:180px}.colab-chat-main{max-height:none;min-height:65vh;padding:18px}.colab-transcript{max-height:55vh}.colab-chat-header{align-items:flex-start}.colab-chat-header h1{font-size:21px}}
   `;
-  style.textContent += '.colab-chat-main{height:calc(100vh - 155px);min-height:0;overflow:hidden}.colab-chat-header,.colab-composer{flex-shrink:0}.colab-transcript{flex:1 1 0;min-height:0}.colab-config{flex-shrink:0;max-height:30vh;overflow:auto}@media(max-width:750px){.colab-chat-main{height:75vh;min-height:0}}';
+  style.textContent += '.colab-chat-main{height:calc(100vh - 155px);min-height:0;overflow:hidden}.colab-chat-header,.colab-composer{flex-shrink:0;max-height:42vh;overflow:auto}.colab-transcript{flex:1 1 0;min-height:0}.colab-config{flex-shrink:0;max-height:30vh;overflow:auto}@media(max-width:750px){.colab-chat-main{height:75vh;min-height:0}}';
+  style.textContent += '.colab-config[open]{max-height:24vh;flex-shrink:1;min-height:40px}.colab-composer{flex:0 1 auto;min-height:160px;max-height:42vh;overflow:auto}.colab-composer .attachment-bar{margin:3px 0}.colab-composer .attachment-bar p{margin:4px 0}.colab-composer textarea{min-height:60px}.colab-compose-footer{position:sticky;bottom:0;background:#0c171e;padding:6px 0}';
   document.head.append(style);
   const panel = document.createElement('section'); panel.className = 'colab-workspace'; panel.hidden = true; panel.setAttribute('aria-label', 'Colab chat workspace');
   panel.innerHTML = `<aside class="colab-chats" aria-label="Colab conversations"><button class="quiet-button" id="colabNewChat" type="button">＋ New Colab chat</button><div class="colab-chat-list" id="colabChats"></div></aside>
@@ -36,6 +37,11 @@
     <div class="colab-transcript" id="colabTranscript" role="log" aria-label="Colab messages" aria-live="polite"></div>
     <form class="colab-composer" id="colabForm"><label class="sr-only" for="colabTask">Message Colab</label><textarea id="colabTask" rows="3" maxlength="20000" aria-label="Message Colab" placeholder="Give Codex and Claude a task, or ask a follow-up…"></textarea><div class="colab-compose-footer"><span id="colabStatus" role="status" aria-live="polite"></span><button class="quiet-button" id="colabStop" type="button" hidden>Stop</button><button class="primary-button" id="colabStart" type="submit">Send to Colab</button></div></form></div>`;
   document.querySelector('.layout').append(panel);
+  const search=document.createElement('input');search.id='colabSearch';search.className='history-search';search.placeholder='Search Colab chats…';search.setAttribute('aria-label','Search Colab chats');panel.querySelector('#colabChats').before(search);search.oninput=()=>render();
+  const controls=document.createElement('div');controls.className='colab-config-grid';controls.innerHTML='<label class="field">Mode<select id="colabMode"><option value="build">Build and review</option><option value="plan">Plan · read-only</option><option value="debug">Debug</option><option value="compare">Compare approaches · read-only</option></select></label><label class="field">Maximum runtime (minutes)<input id="colabMinutes" type="number" min="1" max="120" value="15"></label><label class="field">Maximum provider passes<input id="colabPasses" type="number" min="1" max="6" value="3"></label><label class="toggle-row"><span>Review edits in an isolated Git worktree</span><input id="colabIsolated" type="checkbox" checked></label>';panel.querySelector('#colabConfig').append(controls);
+  const toolbar=document.createElement('div');toolbar.className='colab-chat-actions';toolbar.innerHTML='<button class="quiet-button" id="colabRename" type="button">Rename</button><button class="quiet-button" id="colabPin" type="button">Pin</button><button class="quiet-button" id="colabExport" type="button">Export</button>';panel.querySelector('.colab-chat-header').append(toolbar);
+  const recovery=document.createElement('div');recovery.className='colab-recovery';recovery.innerHTML='<span id="colabUsage"></span><button class="quiet-button" id="colabResume" type="button" hidden>Resume saved stages</button><button class="quiet-button" id="colabReview" type="button" hidden>Review changes</button>';panel.querySelector('#colabForm').before(recovery);
+
   const el = id => panel.querySelector('#' + id);
   // The textarea already has an accessible label; keep the visual surface uncluttered.
   panel.querySelector('.sr-only').hidden = true;
@@ -72,6 +78,8 @@
   }
   function refreshModels() {
     const chat = current();
+    for(const [id,value] of [['colabMode',chat.mode||'build'],['colabMinutes',Math.round((chat.maxRuntimeSeconds||900)/60)],['colabPasses',chat.maxRounds||3]]){el(id).value=value;el(id).disabled=chat.busy;}el('colabIsolated').checked=chat.isolated!==false;el('colabIsolated').disabled=chat.busy;
+
     for (const provider of ['codex', 'claude']) {
       const picker = el(provider === 'codex' ? 'colabCodexModel' : 'colabClaudeModel'), chosen = chat[provider + 'Model'] || '';
       const models = new Map([...catalog[provider], ...(settings[provider + 'Models'] || []).map(id => ({ id, name: id })), ...(chosen ? [{ id: chosen, name: chosen }] : [])].map(item => [item.id, item]));
@@ -85,9 +93,10 @@
   function render() {
     const chat = current(), list = el('colabChats'), transcript = el('colabTranscript');
     list.replaceChildren();
-    for (const item of [...chats].reverse()) {
+    const query=el('colabSearch').value.toLowerCase();
+    for (const item of [...chats].reverse().sort((a,b)=>Number(Boolean(b.pinned))-Number(Boolean(a.pinned))).filter(chat=>(chat.title+' '+chat.messages.map(m=>m.content).join(' ')).toLowerCase().includes(query))) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'colab-chat-item'; button.setAttribute('aria-current', String(item.id === selected));
-      const title = document.createElement('span'), detail = document.createElement('small'); title.textContent = item.title; detail.textContent = item.busy ? 'Working…' : item.messages.length ? 'Saved on this computer' : 'New conversation';
+      const title = document.createElement('span'), detail = document.createElement('small'); title.textContent = (item.pinned?'★ ':'')+item.title; detail.textContent = item.busy ? 'Working…' : item.messages.length ? 'Saved on this computer' : 'New conversation';
       button.append(title, detail); button.onclick = () => { selected = item.id; save(); render(); }; list.append(button);
     }
     const atBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
@@ -104,7 +113,11 @@
     el('colabTask').value = chat.draft || '';
     el('colabStart').disabled = chat.busy; el('colabStop').hidden = !chat.busy; el('colabStop').disabled = !chat.jobId;
     el('colabStatus').textContent = chat.status || 'Only the final summary appears when both models finish.';
+    el('colabPin').textContent=chat.pinned?'Unpin':'Pin';
+    const job=chat.lastJob;el('colabResume').hidden=chat.busy||!job?.canResume;el('colabReview').hidden=chat.busy||!chat.workspaceId;
+    const usage=chat.usage;el('colabUsage').textContent=(job?.budget?'Runtime '+Math.round(job.budget.usedMs/1000)+'s / '+job.budget.maxRuntimeSeconds+'s · '+(job.checkpointCount||0)+' saved passes. ':'')+(usage?.reported?usage.inputTokens+' input / '+usage.outputTokens+' output tokens. ':'Usage not reported yet.')+(usage?.costReported?' Provider-reported cost USD '+usage.reportedCostUsd.toFixed(4)+'.':'');
     refreshModels();
+    window.dispatchEvent(new Event('atlas-colab-chat-change'));
   }
   el('colabNewChat').onclick = () => { makeChat(); save(); render(); el('colabConfig').open = true; el('colabTask').focus(); };
   el('colabTask').oninput = () => { current().draft = el('colabTask').value; save(); };
@@ -120,9 +133,9 @@
     if (chat.busy || !task) return;
     if (!chat.cwd) { chat.status = 'Choose a working folder before sending.'; el('colabConfig').open = true; render(); return; }
     const context = chat.messages.filter(message => !message.error).slice(-12).map(({ role, content }) => ({ role, content }));
-    chat.messages.push({ role: 'user', content: task }); chat.draft = ''; chat.title = chat.messages.find(message => message.role === 'user').content.slice(0, 60);
+    chat.messages.push({ role: 'user', content: task }); chat.draft = ''; if(!chat.customTitle)chat.title = chat.messages.find(message => message.role === 'user').content.slice(0, 60);
     chat.busy = true; chat.jobId = ''; chat.status = 'Starting collaboration…'; save(); render();
-    try { const result = await window.atlas.collaborate({ task, context, chatId: chat.id, cwd: chat.cwd, codexModel: chat.codexModel, claudeModel: chat.claudeModel, effort: chat.effort }); chat.jobId = result.id; save(); render(); }
+    try { const result = await window.atlas.collaborate({ task, context, chatId: chat.id, cwd: chat.cwd, codexModel: chat.codexModel, claudeModel: chat.claudeModel, effort: chat.effort,mode:chat.mode||'build',isolated:chat.isolated!==false,maxRuntimeSeconds:chat.maxRuntimeSeconds||900,maxRounds:chat.maxRounds||3,...window.atlasWorkspace?.context('colab') }); chat.jobId = result.id; save(); render(); }
     catch (error) { chat.busy = false; chat.status = 'Task failed. You can retry or send a follow-up.'; chat.messages.push({ role: 'assistant', error: true, content: error.message.replace(/^Error invoking remote method '[^']+': Error: /, '') }); save(); render(); }
   };
   el('colabStop').onclick = async () => {
@@ -133,7 +146,8 @@
   function update(value) {
     const chat = chats.find(chat => chat.id === value.chatId || chat.jobId === value.id);
     if (!chat || chat.finishedJob === value.id || chat.finishedJobs?.includes(value.id)) return;
-    chat.jobId = value.id; chat.status = value.status || 'Working…';
+    chat.jobId = value.id; chat.status = value.limitation||value.status||'Working…';
+    if(value.workspaceId)chat.workspaceId=value.workspaceId;if(value.usage)chat.usage=value.usage;
     if (typeof value.result === 'string' || value.error) {
       chat.busy = false; chat.finishedJob = value.id;
       chat.finishedJobs = [...(chat.finishedJobs || []), value.id].slice(-100);
@@ -142,7 +156,10 @@
     save(); render();
   }
   function reconcile(jobs) {
-    for (const job of jobs.filter(job => job.collaboration)) update({ id: job.id, chatId: job.colabChatId, status: job.statusText, ...(job.status === 'completed' ? { result: job.result?.output || 'Both providers finished.' } : job.status !== 'running' ? { error: job.error || 'Collaboration stopped. Send a follow-up to continue.' } : {}) });
+    for(const job of [...jobs].sort((a,b)=>(a.startedAt||0)-(b.startedAt||0))){const chat=chats.find(chat=>job.collaboration&&chat.id===job.colabChatId);if(!chat||(chat.lastJob?.startedAt||0)>(job.startedAt||0))continue;chat.lastJob={id:job.id,status:job.status,startedAt:job.startedAt,budget:job.budget,checkpointCount:job.checkpoints?.length||0,canResume:Boolean(job.request&&['paused','failed','cancelled'].includes(job.status))};if(job.workspaceId)chat.workspaceId=job.workspaceId;if(job.result?.usage)chat.usage=job.result.usage;}
+
+    for (const job of jobs.filter(job => job.collaboration && !chats.some(chat=>chat.id===job.colabChatId && (chat.lastJob?.startedAt||0)>(job.startedAt||0)))) update({ id: job.id, chatId: job.colabChatId, status: job.statusText, ...(job.status === 'completed' ? { result: job.result?.output || 'Both providers finished.' } : job.status !== 'running' ? { error: job.error || 'Collaboration stopped. Send a follow-up to continue.' } : {}) });
+    save(); render();
   }
   window.atlas.onCollaborationStatus(update);
   window.atlas.onJobs(patch => reconcile(patch.upsert || []));
@@ -151,7 +168,13 @@
     for (const chat of chats) if (chat.busy && !jobs.some(job => job.id === chat.jobId && job.status === 'running')) { chat.busy = false; chat.status = 'Previous run is no longer active. Send a follow-up to continue.'; }
     save(); render();
   }).catch(() => { for (const chat of chats) chat.busy = false; render(); });
-  window.atlasColab = { refreshModels, selectAssistant: () => select('assistant') };
+  for(const [id,key] of [['colabMode','mode'],['colabMinutes','maxRuntimeSeconds'],['colabPasses','maxRounds']])el(id).onchange=()=>{current()[key]=key==='mode'?el(id).value:Number(el(id).value)*(key==='maxRuntimeSeconds'?60:1);save();};el('colabIsolated').onchange=()=>{current().isolated=el('colabIsolated').checked;save();};
+  el('colabRename').onclick=()=>window.atlasWorkspace?.renameColab();
+  el('colabPin').onclick=()=>{current().pinned=!current().pinned;save();render();};
+  el('colabExport').onclick=()=>void window.atlas.exportChat({title:current().title,markdown:'# '+current().title+'\n\n'+current().messages.map(m=>'## '+(m.role==='user'?'You':'Colab')+'\n\n'+m.content).join('\n\n')}).catch(error=>toast(error.message));
+  el('colabResume').onclick=async()=>{const chat=current();if(!chat.lastJob?.canResume)return;chat.busy=true;chat.status='Resuming from saved provider stages…';save();render();try{const result=await window.atlas.collaborate({resumeJobId:chat.lastJob.id,maxRuntimeSeconds:chat.maxRuntimeSeconds||900,maxRounds:chat.maxRounds||3});chat.jobId=result.id;save();render();}catch(error){chat.busy=false;chat.status=error.message;save();render();}};
+  el('colabReview').onclick=()=>window.atlasWorkspace?.review(current().workspaceId);
+  window.atlasColab = {refreshModels,selectAssistant:()=>select('assistant'),current:()=>structuredClone(current()),history:()=>chats.map(chat=>({provider:'colab',id:chat.id,title:chat.title,pinned:chat.pinned,cwd:chat.cwd,turns:chat.messages,updatedAt:chat.messages.length?chat.lastJob?.startedAt||Date.now():0})),selectChat:id=>{if(!chats.some(chat=>chat.id===id))return;selected=id;save();select('colab');},metadata:(id,value)=>{const chat=chats.find(chat=>chat.id===id);if(chat){Object.assign(chat,value);chat.customTitle=true;save();render();}},applyProfile:profile=>{const chat=current();if(chat.busy)throw Error('Finish or stop the current Colab task before switching projects.');Object.assign(chat,{cwd:profile.cwd,profileId:profile.id,codexModel:profile.codexModel,claudeModel:profile.claudeModel,effort:profile.effort,maxRuntimeSeconds:profile.maxRuntimeSeconds});save();render();}};
   select('assistant'); render();
   for (const provider of ['codex', 'claude']) void window.atlas.modelCatalog(provider).then(models => { if (Array.isArray(models) && models.length) { catalog[provider] = models; refreshModels(); } }).catch(() => {});
 })();

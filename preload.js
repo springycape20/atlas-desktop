@@ -1,6 +1,14 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('atlas', {
   onResponseText: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('atlas:response-text', listener); return () => ipcRenderer.removeListener('atlas:response-text', listener); },
+  projects: request=>ipcRenderer.invoke('atlas:projects',request),
+  attachments: request=>ipcRenderer.invoke('atlas:attachments',request),
+  droppedFiles: files=>ipcRenderer.invoke('atlas:attachments',{paths:Array.from(files).map(file=>webUtils.getPathForFile(file))}),
+  attachmentPreview: id=>ipcRenderer.invoke('atlas:attachment-preview',{id}),
+  diagnostics: ()=>ipcRenderer.invoke('atlas:diagnostics'),
+  reviewChanges: request=>ipcRenderer.invoke('atlas:review-changes',request),
+  chatMetadata: request=>ipcRenderer.invoke('atlas:chat-metadata',request),
+  exportChat: request=>ipcRenderer.invoke('atlas:export-chat',request),
   providerHealth: request=>ipcRenderer.invoke('atlas:provider-health',request),
   jobs: request => ipcRenderer.invoke('atlas:jobs',request),
   collaborate: request => ipcRenderer.invoke('atlas:collab', request),
@@ -13,7 +21,7 @@ contextBridge.exposeInMainWorld('atlas', {
   openLink: value=>ipcRenderer.invoke('atlas:open-link',value),
   home: () => ipcRenderer.invoke('atlas:home'),
   latestConversation: () => ipcRenderer.invoke('atlas:latest-conversation'),
-  historyList: () => ipcRenderer.invoke('atlas:history-list'),
+  historyList: request => ipcRenderer.invoke('atlas:history-list', request),
   historyRead: request => ipcRenderer.invoke('atlas:history-read', request),
   openProviderSession: request => ipcRenderer.invoke('atlas:open-provider-session', request),
   getSettings: () => ipcRenderer.invoke('atlas:get-settings'),
@@ -41,6 +49,7 @@ contextBridge.exposeInMainWorld('atlas', {
   },
   chat: payload => ipcRenderer.invoke('atlas:chat', {
     requestId: payload?.requestId, resumeJobId: payload?.resumeJobId,
+    profileId:payload?.profileId, attachments:payload?.attachments, maxRuntimeSeconds:payload?.maxRuntimeSeconds,
     cwd: typeof payload?.cwd === 'string' ? payload.cwd : '',
     prompt: typeof payload?.prompt === 'string' ? payload.prompt : '',
     conversationId: typeof payload?.conversationId === 'string' ? payload.conversationId : '',
