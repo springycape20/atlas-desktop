@@ -41,6 +41,7 @@ class CodexConnection {
   }
   close(){if(this.child)this.failed(this.child,Error('ATLAS closed.'));}
   receive(message) {
+    if(message.method==='account/rateLimits/updated'){this.onRateLimits?.(message.params);return;}
     if(message.id!==undefined && !message.method){
       const p=this.pending.get(message.id);if(!p)return;
       this.pending.delete(message.id);clearTimeout(p.timer);
@@ -48,12 +49,19 @@ class CodexConnection {
     }
     const p=message.params||{},t=this.turns.get(p.threadId);
     if(message.id!==undefined){
-      // Never grant a server-initiated permission implicitly.
+      if(t?.onApproval){void Promise.resolve().then(()=>t.onApproval(message.method,{...p,changes:p.changes||t.fileItems?.get(p.itemId)?.changes})).then(result=>{if(this.child)this.send({id:message.id,result});},error=>{if(this.child)this.send({id:message.id,error:{code:-32603,message:error.message}});});return;}
+      // Requests without a live task are never approved implicitly.
       if(/requestApproval$/.test(message.method))this.send({id:message.id,result:{decision:'decline'}});
       else this.send({id:message.id,error:{code:-32601,message:'ATLAS cannot handle this interactive request. Use the provider app.'}});
       t?.activity({kind:'attention',text:'An interactive request requires the provider app.'});return;
     }
     if(!t)return;
+    if(message.method==='item/started'&&p.item?.type==='fileChange'){t.fileItems ||= new Map();t.fileItems.set(p.item.id,p.item);}
+    if(message.method==='item/completed'&&p.item?.type==='fileChange')t.fileItems?.delete(p.item.id);
+    if(message.method==='thread/tokenUsage/updated') {
+      const usage=!t.resumed?p.tokenUsage?.total||p.tokenUsage?.last:p.tokenUsage?.last;
+      if(usage)t.usage={complete:!t.resumed&&Boolean(p.tokenUsage?.total),scope:!t.resumed&&p.tokenUsage?.total?'new thread total':'last model call; turn total unavailable',...(Number.isFinite(usage.inputTokens)?{inputTokens:usage.inputTokens}:{}),...(Number.isFinite(usage.outputTokens)?{outputTokens:usage.outputTokens}:{})};
+    }
     if(message.method==='item/started'&&p.item?.type==='agentMessage'&&p.item.phase==='commentary')t.commentary.add(p.item.id);
     const turnId=p.turnId||p.turn?.id;
     if(t.turnId&&turnId&&t.turnId!==turnId)return;
@@ -72,30 +80,36 @@ class CodexConnection {
       t.lastItem=p.item.id;t.messages.set(p.item.id,p.item.text||old);
       if(p.item.phase==='final_answer')t.final=p.item.text;
     }
-    if(message.method==='item/started'&&p.item?.type!=='agentMessage')t.activity({kind:p.item?.type||'work',text:p.item?.command||'Working'});
+    if(['item/started','item/completed'].includes(message.method)&&p.item&& !['agentMessage','reasoning'].includes(p.item.type)){
+      const item=p.item,completed=message.method==='item/completed';
+      const text=item.type==='commandExecution'?item.command:item.type==='fileChange'?(item.changes||[]).map(change=>(change.kind?.type||change.kind||'Changed')+': '+change.path).join('\n'):item.type==='mcpToolCall'?'Tool: '+[item.server,item.tool].filter(Boolean).join(' / '):item.type==='webSearch'?'Search: '+(item.query||item.action?.query||'Web search'):item.type;
+      t.activity({id:p.threadId+':'+item.id,kind:item.type==='commandExecution'?'command':item.type==='fileChange'?'files':'activity',text:String(text||item.type).slice(0,1200),status:completed?(item.status==='failed'||(Number.isInteger(item.exitCode)&&item.exitCode!==0)?'failed':'completed'):'running',...(Number.isInteger(item.exitCode)?{exitCode:item.exitCode}:{})});
+    }
+    if(message.method==='turn/plan/updated')t.activity({kind:'plan',text:(p.plan||[]).map(step=>(step.status==='completed'?'Done: ':'Next: ')+step.step).join('\n').slice(0,1200)});
     if(message.method==='turn/completed'){
       const turn=p.turn;
       if(t.cancelled||turn.status==='interrupted')t.finish(Error('Job cancelled or paused.'));
       else if(turn.status==='failed')t.finish(Error([turn.error?.message,JSON.stringify(turn.error?.codexErrorInfo||'')].filter(Boolean).join(' ')));
-      else t.finish(null,{output:t.final||[...t.messages.values()].join('\n\n'),sessionId:p.threadId});
+      else t.finish(null,{output:t.final||[...t.messages.values()].join('\n\n'),sessionId:p.threadId,usage:t.usage||null});
     }
   }
-  async run({prompt,cwd,settings,sessionId,onText=()=>{},onSession=()=>{},activity=()=>{},signal}) {
+  async run({prompt,cwd,settings,sessionId,onText=()=>{},onSession=()=>{},activity=()=>{},onApproval,signal}) {
     await this.connect();if(signal?.aborted)throw Error('Job cancelled.');
     if(sessionId&&this.turns.has(sessionId))throw Error('This Codex conversation is already running.');
-    const params={cwd,approvalPolicy:'never',sandbox:settings.permissionBypass?'danger-full-access':settings.codexSandbox};
+    const approvalPolicy=settings.permissionBypass?'never':'on-request';
+    const params={cwd,approvalPolicy,sandbox:settings.permissionBypass?'danger-full-access':settings.codexSandbox};
     if(settings.codexModel)params.model=settings.codexModel;
     const result=await this.request(sessionId?'thread/resume':'thread/start',sessionId?{...params,threadId:sessionId}:params);
     const threadId=result.thread.id;onSession(threadId);
     if(signal?.aborted)throw Error('Job cancelled.');
     if(this.turns.has(threadId))throw Error('This Codex conversation is already running.');
     return new Promise((resolve,reject)=>{
-      const t={onText,activity,messages:new Map(),commentary:new Set(),turnId:null,cancelled:false};
+      const t={resumed:Boolean(sessionId),onText,activity,onApproval,messages:new Map(),commentary:new Set(),turnId:null,cancelled:false};
       const abort=()=>{t.cancelled=true;if(t.turnId&&!t.interrupting){t.interrupting=true;void this.request('turn/interrupt',{threadId,turnId:t.turnId}).catch(error=>t.finish(error));}};
-      const timer=setTimeout(()=>{abort();t.finish(Error('Codex response timed out. The turn was interrupted.'));},settings.timeoutSeconds*1000);
+      const timer=settings.timeoutSeconds > 0 ? setTimeout(()=>{abort();t.finish(Error('Codex response timed out. The turn was interrupted.'));},settings.timeoutSeconds*1000) : null;
       t.finish=(error,value)=>{if(this.turns.get(threadId)!==t)return;clearTimeout(timer);signal?.removeEventListener('abort',abort);this.turns.delete(threadId);error?reject(error):resolve(value);};
       this.turns.set(threadId,t);signal?.addEventListener('abort',abort,{once:true});
-      this.request('turn/start',{threadId,cwd,approvalPolicy:'never',sandboxPolicy:settings.permissionBypass?{type:'dangerFullAccess'}:settings.codexSandbox==='read-only'?{type:'readOnly'}:{type:'workspaceWrite',writableRoots:[cwd]},...(settings.codexModel?{model:settings.codexModel}:{}),input:[{type:'text',text:prompt}]}).then(result=>{t.turnId=result.turn.id;if(t.cancelled)abort();},error=>t.finish(error));
+      this.request('turn/start',{threadId,cwd,approvalPolicy,sandboxPolicy:settings.permissionBypass?{type:'dangerFullAccess'}:settings.codexSandbox==='read-only'?{type:'readOnly'}:{type:'workspaceWrite',writableRoots:[cwd]},...(settings.codexModel?{model:settings.codexModel}:{}),...(settings.effort?{effort:settings.effort}:{}),input:[{type:'text',text:prompt}]}).then(result=>{t.turnId=result.turn.id;if(t.cancelled)abort();},error=>t.finish(error));
     });
   }
 }
