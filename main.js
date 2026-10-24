@@ -68,7 +68,7 @@ async function checkTask(job){
 let workspaceService;
 function workspace(){return workspaceService ||= require('./workspace-service').createWorkspaceService(app.getPath('userData'));}
 let assistantService;
-let codexConnection, providerHealth;
+let codexConnection, claudeConnections, providerHealth;
 const { AsyncLocalStorage } = require("node:async_hooks");
 const jobContext = new AsyncLocalStorage();
 const activeJobs = new Map();
@@ -146,7 +146,7 @@ app.on('before-quit', event => {
     if (job.interrupt) job.interrupt(); else job.child?.kill();
     if (job.promise) finishing.push(job.promise);
   }
-  codexConnection?.close(); providerHistory.close(); cancelVoiceRequests(); clearTimeout(jobsEmitTimer);
+  codexConnection?.close(); claudeConnections?.close(); providerHistory.close(); cancelVoiceRequests(); clearTimeout(jobsEmitTimer);
   void (async () => {
     let timer;
     try { await Promise.race([Promise.allSettled(finishing), new Promise(resolve => { timer = setTimeout(resolve, 5000); })]); }
@@ -330,18 +330,12 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   if (provider === 'claude') {
     const executable = findClaudeExecutable();
     if (!executable) throw new Error('Claude Code was not found. Install it from Settings.');
-    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages'];
-    if(jobContext.getStore())args.push('--input-format','stream-json','--permission-prompt-tool','stdio');
-    const newSessionId=previousSessionId||randomUUID();if(jobContext.getStore())jobContext.getStore().sessionId=newSessionId;
-    if (previousSessionId) args.push('--resume', previousSessionId);
-    else args.push('--session-id', newSessionId);
-    if (settings.claudeModel) args.push('--model', settings.claudeModel);
-    const providerEnv = settings.effort ? { ...process.env, CLAUDE_CODE_EFFORT_LEVEL: settings.effort } : process.env;
-    if (settings.readOnly) args.push('--tools', 'Read,Glob,Grep,WebSearch,WebFetch', '--permission-mode', 'plan');
-    else if (settings.permissionBypass) args.push('--dangerously-skip-permissions');
-    const result = await runCommand(executable, args, cwd, provider, settings.timeoutSeconds * 1000, onText, providerEnv, prompt);
-    try { const events = result.output.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)); const data = events.findLast(item => item.type === 'result'); if (!data) throw new Error('Missing Claude result'); if (data.is_error) throw new Error(data.result || data.errors?.join(' ') || 'Claude failed'); return { output: data.result || result.errors, sessionId: data.session_id || previousSessionId, usage: { ...(Number.isFinite(data.usage?.input_tokens)?{inputTokens:data.usage.input_tokens+(data.usage.cache_read_input_tokens||0)+(data.usage.cache_creation_input_tokens||0)}:{}), ...(Number.isFinite(data.usage?.output_tokens)?{outputTokens:data.usage.output_tokens}:{}), ...(Number.isFinite(data.total_cost_usd)?{reportedCostUsd:data.total_cost_usd}:{}) } }; }
-    catch (error) { throw new Error('Claude response failed: ' + error.message); }
+    claudeConnections ||= new (require('./claude-connection').ClaudeConnectionPool)();
+    const job=jobContext.getStore(),controller=new AbortController(),oldInterrupt=job?.interrupt,abortParent=()=>controller.abort();
+    job?.signal?.addEventListener('abort',abortParent,{once:true});if(job?.signal?.aborted||job?.stopped)controller.abort();if(job)job.interrupt=()=>controller.abort();
+    reportProviderProgress('claude','Claude connected · working');
+    try{return await claudeConnections.run({executable,cwd,settings,prompt,sessionId:previousSessionId,owner:job?.collaboration?'colab:'+job.colabChatId:'assistant:'+(job?.conversationId||previousSessionId||randomUUID()),signal:controller.signal,onText,job:job||{},manager:approvals,onSession:id=>{if(job)job.sessionId=id;},activity:activity=>{if(job){job.events.push({...activity,provider:'claude',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}});}
+    finally{job?.signal?.removeEventListener('abort',abortParent);if(job)job.interrupt=oldInterrupt||null;}
   }
 
   const executable = findCodexExecutable();
@@ -428,10 +422,12 @@ async function startCollaboration(event, input) {
   if(!findCodexExecutable()||!findClaudeExecutable())throw Error('Install and sign into both providers in Settings before starting Colab.');
   const model=value=>typeof value==='string'&&modelIdPattern.test(value)?value:'';
   const efficiency=require('./colab-efficiency');
-  const request={preset:efficiency.preset(source.preset),rolesExplicit:source.rolesExplicit===true,adaptiveEffort:source.adaptiveEffort===true,reuseChecks:source.reuseChecks===true,tokenWarning:efficiency.tokenLimit(source.tokenWarning),brief:{criteria:typeof source.brief?.criteria==='string'?source.brief.criteria.slice(0,4000):'',outOfScope:typeof source.brief?.outOfScope==='string'?source.brief.outOfScope.slice(0,2000):''},task,cwd:folder,chatId:typeof source.chatId==='string'&&/^[A-Za-z0-9-]{1,80}$/.test(source.chatId)?source.chatId:randomUUID(),mode:['build','plan','debug','compare'].includes(source.mode)?source.mode:'build',roles:['codex-builds','claude-builds','proposals'].includes(source.roles)?source.roles:'codex-builds',effort:['low','medium','high','xhigh','max'].includes(source.effort)?source.effort:'medium',codexModel:model(source.codexModel),claudeModel:model(source.claudeModel),profileId:typeof source.profileId==='string'?source.profileId:'',attachments:Array.isArray(source.attachments)?source.attachments.slice(0,8):[],isolated:source.isolated!==false,maxRounds:require('./collaboration').normalizePassLimit(source.maxRounds),maxRuntimeSeconds:null,context:efficiency.selectHistory(task,(Array.isArray(source.context)?source.context:[]).slice(-500).filter(turn=>['user','assistant'].includes(turn?.role)&&typeof turn.content==='string').map(turn=>({role:turn.role,content:turn.content.slice(0,12000)})),efficiency.preset(source.preset)).turns};
+  const request={workspaceId:typeof source.workspaceId==='string'&&/^[A-Za-z0-9-]{1,80}$/.test(source.workspaceId)?source.workspaceId:'',preset:efficiency.preset(source.preset),rolesExplicit:source.rolesExplicit===true,adaptiveEffort:source.adaptiveEffort===true,reuseChecks:source.reuseChecks===true,tokenWarning:efficiency.tokenLimit(source.tokenWarning),brief:{criteria:typeof source.brief?.criteria==='string'?source.brief.criteria.slice(0,4000):'',outOfScope:typeof source.brief?.outOfScope==='string'?source.brief.outOfScope.slice(0,2000):''},task,cwd:folder,chatId:typeof source.chatId==='string'&&/^[A-Za-z0-9-]{1,80}$/.test(source.chatId)?source.chatId:randomUUID(),mode:['build','plan','debug','compare'].includes(source.mode)?source.mode:'build',roles:['codex-builds','claude-builds','proposals'].includes(source.roles)?source.roles:'codex-builds',effort:['low','medium','high','xhigh','max'].includes(source.effort)?source.effort:'medium',codexModel:model(source.codexModel),claudeModel:model(source.claudeModel),profileId:typeof source.profileId==='string'?source.profileId:'',attachments:Array.isArray(source.attachments)?source.attachments.slice(0,8):[],isolated:source.isolated!==false,maxRounds:require('./collaboration').normalizePassLimit(source.maxRounds),maxRuntimeSeconds:null,context:efficiency.selectHistory(task,(Array.isArray(source.context)?source.context:[]).slice(-500).filter(turn=>['user','assistant'].includes(turn?.role)&&typeof turn.content==='string').map(turn=>({role:turn.role,content:turn.content.slice(0,12000)})),efficiency.preset(source.preset)).turns};
+  if([...activeJobs.values()].some(job=>job.collaboration&&job.colabChatId===request.chatId&&job.status==='running'))throw Error('This Colab chat is already working.');
+  const reusable=!previous&&request.isolated&&!['plan','compare'].includes(request.mode)?await require('./colab-workspace-reuse').reusableWorkspace({id:request.workspaceId,chatId:request.chatId,cwd:folder,jobs:[...activeJobs.values()],service:workspace()}):null;
   if([...activeJobs.values()].some(job=>job.collaboration&&job.colabChatId===request.chatId&&job.status==='running'))throw Error('This Colab chat is already working.');
   const usedMs=previous?.budget?.usedMs||0;
-  const id=randomUUID(),job={id,colabChatId:request.chatId,prompt:task,cwd:folder,conversationId:request.chatId,status:'running',statusText:'Preparing workspace',startedAt:Date.now(),events:[],collaboration:true,request,checkpoints:previous?.checkpoints?structuredClone(previous.checkpoints):[],workspaceId:previous?.workspaceId||'',budget:{maxRuntimeSeconds:request.maxRuntimeSeconds,maxRounds:request.maxRounds,usedMs,runStartedAt:Date.now()}};
+  const id=randomUUID(),job={id,colabChatId:request.chatId,prompt:task,cwd:folder,conversationId:request.chatId,status:'running',statusText:'Preparing workspace',startedAt:Date.now(),events:[],collaboration:true,request,checkpoints:previous?.checkpoints?structuredClone(previous.checkpoints):[],workspaceId:previous?.workspaceId||reusable?.id||'',budget:{maxRuntimeSeconds:request.maxRuntimeSeconds,maxRounds:request.maxRounds,usedMs,runStartedAt:Date.now()}};
   activeJobs.set(id,job);taskNotifications.started(job);persistJobs();emitJobs();
   job.promise=jobContext.run(job,async()=>{
     const controller=new AbortController();job.signal=controller.signal;job.interrupt=()=>controller.abort();

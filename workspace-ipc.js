@@ -9,6 +9,7 @@ function registerWorkspaceIpc({ipcMain,app,dialog,clipboard,window,trusted,servi
       return answer.response===0?{ready:true,isolated:false}:{ready:false};
   }
   handle('prepare-project',async request=>{
+    if(request.workspaceId&&request.chatId){const tree=await require('./colab-workspace-reuse').reusableWorkspace({id:request.workspaceId,chatId:request.chatId,cwd:request.cwd,jobs:jobs(),service:service()});if(tree)return {ready:true,reuseWorkspace:true};}
     const status=await service().repository(request.cwd);
     if(status.exists&&status.hasCommit){
       if(!status.dirty)return {ready:true};

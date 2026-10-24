@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('atlas', {
   taskOpen: id=>ipcRenderer.invoke('atlas:task-open',{id}),
   onApprovals: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:approvals',listener);return()=>ipcRenderer.removeListener('atlas:approvals',listener);},
   onQueue: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:queue',listener);return()=>ipcRenderer.removeListener('atlas:queue',listener);},
-  prepareProject: cwd=>ipcRenderer.invoke('atlas:prepare-project',{cwd}),
+  prepareProject: (cwd,options={})=>ipcRenderer.invoke('atlas:prepare-project',{...options,cwd}),
   discoverModels: refresh=>ipcRenderer.invoke('atlas:discover-models',{refresh}),
   updates: request=>ipcRenderer.invoke('atlas:updates',request),
   onUpdateStatus: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:update-status',listener);return()=>ipcRenderer.removeListener('atlas:update-status',listener);},
