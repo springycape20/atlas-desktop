@@ -21,6 +21,8 @@ jobs:
       - run: npm test
       - name: Verify Colab history and browsing in Electron
         run: npm run test:colab-ui
+      - name: Verify Assistant chat and provider import browsing
+        run: npm run test:assistant-ui
       - name: Download speech runtime and models
         shell: pwsh
         run: ./Setup-ATLAS.ps1 -SkipDependencies

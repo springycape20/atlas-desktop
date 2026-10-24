@@ -5,9 +5,9 @@ function sourceKey(chat){return chat.provider+':'+(chat.sessionId||chat.id);}
 function createChatImporter({history,transaction,dialog,window,home,now=Date.now}){
   let files=new Map();
   async function scan(){
-    const results=await Promise.allSettled(['codex','claude'].map(provider=>history.request('list',{provider,limit:100}))),chats=[],errors=[];
-    results.forEach((result,index)=>result.status==='fulfilled'?chats.push(...result.value):errors.push((index?'Claude':'Codex')+': '+result.reason.message));
-    return {chats:chats.sort((a,b)=>b.updatedAt-a.updatedAt),errors};
+    const results=await Promise.allSettled(['codex','claude'].map(provider=>history.request('catalog',{provider}))),chats=[],errors=[],workspaces=[];
+    results.forEach((result,index)=>{if(result.status==='fulfilled'){chats.push(...result.value.chats);workspaces.push(...result.value.workspaces);errors.push(...result.value.warnings);}else errors.push((index?'Claude':'Codex')+': '+result.reason.message);});
+    return {chats:chats.sort((a,b)=>b.updatedAt-a.updatedAt),workspaces,errors};
   }
   async function chooseFile(){
     const selected=await dialog.showOpenDialog(window(),{title:'Import a Claude export or Codex / Claude Code transcript',properties:['openFile'],filters:[{name:'Conversations and transcripts',extensions:['json','jsonl','zst']}]});
@@ -33,7 +33,7 @@ function createChatImporter({history,transaction,dialog,window,home,now=Date.now
       for(const [key,chat]of unique){
         if(existing.has(key)){skipped++;imported.push(existing.get(key));continue;}
         let cwd=home;try{if(path.isAbsolute(chat.cwd)&&(await fs.stat(chat.cwd)).isDirectory())cwd=chat.cwd;}catch{}
-        const item={id:randomUUID(),title:chat.title,provider:'atlas',lastProvider:chat.provider,sessions:{codex:'',claude:''},cwd,updatedAt:now(),importSource:{provider:chat.provider,id:chat.id,sessionId:chat.sessionId||'',importedAt:now(),truncated:Boolean(chat.truncated),originalTurnCount:chat.originalTurnCount||chat.turns.length},turns:chat.turns.slice(-80).map(turn=>({role:turn.role,content:turn.content,provider:turn.role==='assistant'?chat.provider:'',at:turn.at||chat.updatedAt||now()}))};
+        const item={id:randomUUID(),title:chat.title,provider:'atlas',lastProvider:chat.provider,sessions:{codex:'',claude:''},cwd,updatedAt:now(),importSource:{provider:chat.provider,id:chat.id,sessionId:chat.sessionId||'',importedAt:now(),workspaceName:chat.workspaceName||'',workspaceId:chat.workspaceId||chat.cwd||'',truncated:Boolean(chat.truncated),originalTurnCount:chat.originalTurnCount||chat.turns.length},turns:chat.turns.slice(-80).map(turn=>({role:turn.role,content:turn.content,provider:turn.role==='assistant'?chat.provider:'',at:turn.at||chat.updatedAt||now()}))};
         current.push(item);imported.push(item);
       }
       return current;

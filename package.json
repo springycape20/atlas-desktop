@@ -12,7 +12,8 @@
     "prestart": "npm run build:syntax",
     "pretest": "npm run build:syntax",
     "predist:win": "npm run build:syntax",
-    "test:colab-ui": "electron tests/colab-history.browser.cjs"
+    "test:colab-ui": "electron tests/colab-history.browser.cjs",
+    "test:assistant-ui": "electron tests/assistant-chat.browser.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0",

@@ -28,7 +28,7 @@ app.whenReady().then(async()=>{try{
  await win.reload();await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
  await win.webContents.executeJavaScript(`(async()=>{await atlasColab.ready;atlasColab.selectChat('chat-0');if(atlasColab.history().length!==14||atlasColab.current().messages.length!==73||!atlasColab.current().messages[0].content.startsWith('Question 0')||atlasColab.current().messages.at(-1).content!=='New saved final result')throw Error('IndexedDB reload lost chat history');})()`);
  for(const [width,height]of [[1280,800],[800,600],[640,600]]){
-  win.setContentSize(width,height);await new Promise(resolve=>setTimeout(resolve,80));
+  win.setContentSize(width,height);for(let attempt=0;attempt<40;attempt++){const size=await win.webContents.executeJavaScript('[innerWidth,innerHeight]');if(size[0]===width&&size[1]===height)break;await new Promise(resolve=>setTimeout(resolve,50));}
   const bounds=await win.webContents.executeJavaScript(`(()=>{const transcript=document.querySelector('#colabTranscript'),form=document.querySelector('#colabForm');return {height:transcript.clientHeight,formBottom:form.getBoundingClientRect().bottom,outerHeight:document.documentElement.scrollHeight,outerWidth:document.documentElement.scrollWidth,width:innerWidth,heightLimit:innerHeight};})()`);
   assert(bounds.height>35&&bounds.formBottom<=height+1&&bounds.outerHeight<=height+1&&bounds.outerWidth<=width+1,JSON.stringify(bounds));
  }

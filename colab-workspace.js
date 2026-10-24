@@ -69,7 +69,7 @@
   function select(workspace) {
     if (workspace === 'colab') { selectWorkspaceView(''); cancelRecording(); stopWakeListener(); stopSpeaking(); }
     if(workspace!=='colab')wasVisible=false;document.body.dataset.workspace = workspace;
-    document.querySelector('.core').hidden = workspace === 'colab'; panel.hidden = workspace !== 'colab';
+    document.querySelector('.core').hidden = workspace === 'colab';const assistant=document.querySelector('.assistant-workspace');if(assistant)assistant.hidden=workspace==='colab'; panel.hidden = workspace !== 'colab';
     $('#historyOpen').hidden = false;
     assistantButton.setAttribute('aria-current', workspace === 'assistant' ? 'page' : 'false');
     colabButton.setAttribute('aria-current', workspace === 'colab' ? 'page' : 'false');

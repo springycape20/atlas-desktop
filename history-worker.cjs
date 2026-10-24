@@ -25,7 +25,7 @@ function providerRoots(provider){
 }
 function providerFiles(provider, limit = 20) {
   const files = [], queue = providerRoots(provider).filter(existsSync).map(dir=>({dir,depth:0}));
-  while (queue.length && files.length < 1000) {
+  while (queue.length && files.length < 20000) {
     const { dir, depth } = queue.shift(); if (depth > 6) continue;
     let entries; try { entries = readdirSync(dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
@@ -105,7 +105,7 @@ function readImportFile(file){
   const stat=statSync(file);if(!stat.isFile()||stat.size>32000000)throw Error('Choose a transcript or export under 32 MB.');
   const bytes=require('node:fs').readFileSync(file),raw=file.endsWith('.zst')?require('node:zlib').zstdDecompressSync(bytes,{maxOutputLength:32000000}).toString('utf8'):bytes.toString('utf8');
   let chats;
-  if(/\.json$/i.test(file))chats=require('./transcript-import').claudeExport(raw);
+  if(/\.json$/i.test(file)){chats=require('./transcript-import').claudeExport(raw);try{const projectsFile=path.join(path.dirname(file),'projects.json');if(statSync(projectsFile).size<4000000){const data=JSON.parse(require('node:fs').readFileSync(projectsFile,'utf8'));if(Array.isArray(data)){const names=new Map(data.filter(row=>row&&typeof row.uuid==='string'&&typeof row.name==='string').map(row=>[row.uuid,row.name]));for(const chat of chats)if(names.has(chat.workspaceId))chat.workspaceName=names.get(chat.workspaceId);}}}catch{}}
   else{
     let provider='';for(const line of raw.replace(/^\uFEFF/,'').split(/\r?\n/).slice(0,100)){try{const row=JSON.parse(line);if(row.type==='session_meta'||row.type==='response_item'){provider='codex';break;}if(['user','assistant'].includes(row.type)&&row.message){provider='claude';break;}}catch{}}
     if(!provider)throw Error('This file is not a recognized Codex or Claude Code transcript.');
@@ -117,14 +117,15 @@ function readImportFile(file){
 parentPort.on('message', async ({ id, method, args }) => {
   try {
     let value;
-    if (method === 'list') {if(!['codex','claude'].includes(args.provider))throw Error('Choose a provider.');value = listProviderHistory(args.provider, typeof args.query==='string'?args.query.toLowerCase().slice(0,200):'',Math.max(1,Math.min(1000,Number(args.limit)||20)));}
+    if(method==='catalog'){if(!['codex','claude'].includes(args.provider))throw Error('Choose a provider.');const roots=providerRoots(args.provider);value=require('./provider-catalog').catalog({provider:args.provider,base:path.dirname(roots[0]),roots,files:providerFiles(args.provider,20000),parse:parseProviderTranscript});}
+    else if (method === 'list') {if(!['codex','claude'].includes(args.provider))throw Error('Choose a provider.');value = listProviderHistory(args.provider, typeof args.query==='string'?args.query.toLowerCase().slice(0,200):'',Math.max(1,Math.min(1000,Number(args.limit)||20)));}
     else if(method==='import-file')value=readImportFile(args.file);
     else if (method === 'search') value = await findReferencedProviderHistory(args.prompt);
     else if (method === 'read') {
       if (!['codex', 'claude'].includes(args.provider) || !/^[a-f0-9]{64}$/.test(args.id)) throw Error('Invalid provider history selection.');
-      const file = providerFiles(args.provider, 1000).find(item => createHash('sha256').update(path.resolve(item.file)).digest('hex') === args.id)?.file;
+      const file = providerFiles(args.provider, 20000).find(item => createHash('sha256').update(path.resolve(item.file)).digest('hex') === args.id)?.file;
       if (!file) throw Error('Provider transcript could not be found. It may have been moved or compressed.');
-      value = parseProviderTranscript(args.provider, file);
+      value = parseProviderTranscript(args.provider, file);const named=require('./provider-catalog').catalog({provider:args.provider,base:path.dirname(providerRoots(args.provider)[0]),roots:providerRoots(args.provider),files:[{file,modified:value.updatedAt}],parse:parseProviderTranscript}).chats.find(chat=>chat.id===args.id);if(named)value={...value,title:named.title,workspaceName:named.workspaceName,workspaceId:named.workspaceId};
     } else throw Error('Unknown history operation.');
     parentPort.postMessage({ id, value });
   } catch (error) { parentPort.postMessage({ id, error: error.message }); }

@@ -310,7 +310,7 @@ async function persistAtlasHistory(items) {
   const trimmed = items.slice(-100).map(item => ({
     id: String(item.id).slice(0, 80), title: String(item.title || 'Conversation').slice(0, 100),
     provider: 'atlas', lastProvider: String(item.lastProvider || '').slice(0, 20), sessions: { codex: String(item.sessions?.codex || '').slice(0, 80), claude: String(item.sessions?.claude || '').slice(0, 80) }, cwd: String(item.cwd || '').slice(0, 1024),
-    ...(item.importSource?{importSource:{provider:item.importSource.provider,id:String(item.importSource.id||'').slice(0,80),sessionId:String(item.importSource.sessionId||'').slice(0,100),importedAt:Number(item.importSource.importedAt)||Date.now(),truncated:item.importSource.truncated===true,originalTurnCount:Number(item.importSource.originalTurnCount)||0}}:{}),
+    ...(item.importSource?{importSource:{provider:item.importSource.provider,id:String(item.importSource.id||'').slice(0,80),sessionId:String(item.importSource.sessionId||'').slice(0,100),importedAt:Number(item.importSource.importedAt)||Date.now(),workspaceName:String(item.importSource.workspaceName||'').slice(0,150),workspaceId:String(item.importSource.workspaceId||'').slice(0,1024),truncated:item.importSource.truncated===true,originalTurnCount:Number(item.importSource.originalTurnCount)||0}}:{}),
     updatedAt: Number(item.updatedAt) || Date.now(), turns: item.turns.slice(-80).map(turn => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: String(turn.content || '').slice(0, 12000), provider: String(turn.provider || '').slice(0, 20), attachments:(Array.isArray(turn.attachments)?turn.attachments:[]).slice(0,8).map(({id,name,type,size})=>({id,name,type,size})), at: Number(turn.at) || Date.now() })),
   }));
   const file = atlasHistoryPath(), temp = `${file}.${randomUUID()}.tmp`;
@@ -482,7 +482,8 @@ function setupIpc() {
   ipcMain.handle('atlas:history-list', async (event, request) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
     const query = typeof request?.query === 'string' ? request.query.toLowerCase().slice(0,200) : '';
-    const local = (await readAtlasHistory()).filter(item=>!query||(item.title+' '+item.turns.map(turn=>turn.content).join(' ')).toLowerCase().includes(query)).map(({ id, title, lastProvider, sessions, cwd, updatedAt, turns }) => ({ id, title, provider: 'atlas', lastProvider: lastProvider || '', sessions: sessions || {}, cwd, updatedAt, turnCount: turns.length, searchText: turns.map(turn => turn.content).join(' ').slice(-2500) }));
+    const local = (await readAtlasHistory()).filter(item=>!query||(item.title+' '+item.turns.map(turn=>turn.content).join(' ')).toLowerCase().includes(query)).map(({ id, title, lastProvider, sessions, cwd, updatedAt, turns, importSource }) => ({ id, title, workspaceName:importSource?.workspaceName||'',workspaceId:importSource?.workspaceId||'',provider: 'atlas', lastProvider: lastProvider || '', sessions: sessions || {}, cwd, updatedAt, turnCount: turns.length, searchText: turns.map(turn => turn.content).join(' ').slice(-2500) }));
+    if(request?.provider==='atlas')return local.sort((a,b)=>b.updatedAt-a.updatedAt);
     const [codex, claude] = await Promise.all(['codex', 'claude'].map(provider => providerHistory.request('list', { provider, query })));
     return [...local, ...codex, ...claude].sort((a, b) => b.updatedAt - a.updatedAt);
   });
@@ -737,7 +738,7 @@ async function handleChat(event, data) {
 async function createWindow() {
   await protocol.handle('atlas', async request => {
     const url = new URL(request.url);
-    if (url.host !== 'app' || !['/', '/index.html', '/colab-history.js', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js', '/productivity-ui.js', '/code-syntax.js', '/syntax-worker.js', '/syntax-highlight.js'].includes(url.pathname)) {
+    if (url.host !== 'app' || !['/', '/index.html', '/assistant-chat.js', '/colab-history.js', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js', '/productivity-ui.js', '/code-syntax.js', '/syntax-worker.js', '/syntax-highlight.js'].includes(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
     const javascript = url.pathname.endsWith('.js');
