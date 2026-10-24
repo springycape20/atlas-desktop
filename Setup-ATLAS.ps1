@@ -23,11 +23,21 @@ if (-not (Test-Path -LiteralPath (Join-Path $runtime 'whisper-cli.exe'))) {
     if (-not $cli) { throw 'Speech runtime archive did not contain whisper-cli.exe.' }
     Get-ChildItem -LiteralPath $cli.DirectoryName -File | Copy-Item -Destination $runtime
 }
+# Models are pinned to one repository commit and verified before use.
+$modelRevision = '5359861c739e955e79d9a303bcbc70fb988958b1'
+$modelHashes = @{
+    'ggml-tiny.en.bin'       = '921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f'
+    'ggml-small.en-q5_1.bin' = 'bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30'
+}
 foreach ($model in @('ggml-tiny.en.bin', 'ggml-small.en-q5_1.bin')) {
     $destination = Join-Path $models $model
     if (-not (Test-Path -LiteralPath $destination)) {
         Write-Host "Downloading $model..."
-        Invoke-WebRequest -UseBasicParsing -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$model" -OutFile "$destination.partial"
+        Invoke-WebRequest -UseBasicParsing -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/$modelRevision/$model" -OutFile "$destination.partial"
+        if ((Get-FileHash -LiteralPath "$destination.partial" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $modelHashes[$model]) {
+            Remove-Item -LiteralPath "$destination.partial"
+            throw "Speech model checksum mismatch: $model"
+        }
         Move-Item -LiteralPath "$destination.partial" -Destination $destination
     }
 }
