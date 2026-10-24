@@ -19,6 +19,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Verify Colab history and browsing in Electron
+        run: npm run test:colab-ui
       - name: Download speech runtime and models
         shell: pwsh
         run: ./Setup-ATLAS.ps1 -SkipDependencies

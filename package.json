@@ -11,7 +11,8 @@
     "build:syntax": "node build/bundle-syntax.cjs",
     "prestart": "npm run build:syntax",
     "pretest": "npm run build:syntax",
-    "predist:win": "npm run build:syntax"
+    "predist:win": "npm run build:syntax",
+    "test:colab-ui": "electron tests/colab-history.browser.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0",
