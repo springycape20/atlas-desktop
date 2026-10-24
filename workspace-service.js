@@ -69,7 +69,7 @@ function createWorkspaceService(directory,options={}) {
     catch(error){if(!/not a git repository/i.test(error.message))throw Error('Git is unavailable or the repository cannot be read. Install Git using Diagnostics, then restart ATLAS.');}
     if(!root)return {exists:false,root:folder};
     if(await projectRoots.isProtected(root))return {exists:false,root:folder,ancestorRoot:root,needsOwnRepository:true};
-    return {exists:true,root,hasCommit:Boolean(await git(folder,['rev-parse','--verify','HEAD']).catch(()=>''))};
+    return {exists:true,root,hasCommit:Boolean(await git(folder,['rev-parse','--verify','HEAD']).catch(()=>'')),dirty:Boolean((await git(root,['status','--porcelain'])).trim())};
   }
   async function initializeRepository(cwd){return serial(async()=>{
     const status=await repository(cwd),folder=status.root;

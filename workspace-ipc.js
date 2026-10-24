@@ -4,11 +4,18 @@ const { command } = require('./workspace-service');
 function registerWorkspaceIpc({ipcMain,app,dialog,clipboard,window,trusted,service,jobs,findCodex,findClaude}) {
   const handle=(name,fn)=>ipcMain.handle('atlas:'+name,async(event,request)=>{if(!trusted(event))throw Error('Untrusted app window.');return fn(request||{});});
   handle('projects',request=>service().profiles(request));
+  async function confirmDirectEditing(request,status){
+      const answer=await dialog.showMessageBox(window(),{type:'question',title:'Continue with your current project files?',message:'This project has uncommitted changes, so an isolated checkout cannot include your current work.',detail:'Selected folder: '+request.cwd+'\nRepository: '+status.root+'\n\nEdit the selected folder directly to continue using its current files. Colab will make changes in that folder and track the changes made by this task for review. ATLAS will not automatically commit, stash or discard your existing changes.\n\nTo keep isolated editing, cancel, commit or stash your changes yourself, then retry.',buttons:['Edit selected folder','Cancel'],defaultId:1,cancelId:1,noLink:true});
+      return answer.response===0?{ready:true,isolated:false}:{ready:false};
+  }
   handle('prepare-project',async request=>{
     const status=await service().repository(request.cwd);
-    if(status.exists&&status.hasCommit)return {ready:true};
+    if(status.exists&&status.hasCommit){
+      if(!status.dirty)return {ready:true};
+      return confirmDirectEditing(request,status);
+    }
     const answer=await dialog.showMessageBox(window(),{type:'question',title:'Set up this Colab project?',message:status.needsOwnRepository?'The selected folder inherits Git from a broad parent folder.':status.exists?'This Git repository needs its first commit.':'This folder is not a Git project yet.',detail:'Folder: '+status.root+(status.ancestorRoot?'\nParent repository: '+status.ancestorRoot+'\nATLAS will leave the parent repository intact and create a separate repository inside the selected folder.':'')+'\n\nCreate a local Git repository and initial commit so Colab can work in an isolated copy? Existing project files will be included in the first local commit; common dependencies and .env/key files are excluded for a new repository. Review private files before continuing. Nothing is uploaded to GitHub. Existing Git repositories keep their current ignore rules and staged changes.',buttons:['Create initial Git snapshot','Cancel'],defaultId:1,cancelId:1,noLink:true});
-    if(answer.response!==0)return {ready:false};await service().initializeRepository(request.cwd);return {ready:true};
+    if(answer.response!==0)return {ready:false};const initialized=await service().initializeRepository(request.cwd);return initialized?.dirty?confirmDirectEditing(request,initialized):{ready:true};
   });
   handle('chat-metadata',request=>service().chatMeta(request));
   handle('attachment-preview',request=>service().preview(request.id));

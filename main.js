@@ -420,7 +420,7 @@ async function startCollaboration(event, input) {
   if(!isTrustedSender(event))throw Error('Untrusted app window.');
   const previous=input?.resumeJobId?activeJobs.get(input.resumeJobId):null;
   if(input?.resumeJobId&&(!previous?.collaboration||!previous.request||previous.status==='running'))throw Error('Choose a stopped Colab task with a saved checkpoint.');
-  const source=previous?{...previous.request,...(Object.hasOwn(input,'maxRounds')?{maxRounds:input.maxRounds}:{})}:input||{};
+  const source=previous?{...previous.request,...(Object.hasOwn(input,'maxRounds')?{maxRounds:input.maxRounds}:{}),...(!previous.workspaceId&&!previous.checkpoints?.length&&typeof input.isolated==='boolean'?{isolated:input.isolated}:{})}:input||{};
   const task=typeof source.task==='string'?source.task.trim():'',folder=typeof source.cwd==='string'?source.cwd:'';
   if(!task||task.length>20000)throw Error('Enter a task under 20,000 characters.');
   if(!path.isAbsolute(folder)||!existsSync(folder)||!statSync(folder).isDirectory())throw Error('Choose an existing working folder.');

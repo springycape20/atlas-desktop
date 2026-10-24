@@ -114,3 +114,11 @@ test('screenshot paste remains compatible with earlier Electron clipboard API',a
   const result=await handlers.get('atlas:attachments')({}, {action:'clipboard'});
   assert.deepEqual(result[0].bytes,png);
 });
+test('dirty projects offer direct editing before a task without changing files, commits or staging',async t=>{
+ const dir=await temporary(t),repo=path.join(dir,'project');await fs.mkdir(repo);const service=createWorkspaceService(path.join(dir,'data'));await fs.writeFile(path.join(repo,'app.js'),'original');await service.initializeRepository(repo);
+ const git=args=>command('git',['-C',repo,...args]);await fs.writeFile(path.join(repo,'app.js'),'staged');await git(['add','--','app.js']);await fs.writeFile(path.join(repo,'app.js'),'working edits');await fs.writeFile(path.join(repo,'notes.txt'),'untracked work');
+ const before={head:await git(['rev-parse','HEAD']),index:await git(['write-tree']),status:await git(['status','--porcelain'])};assert.equal((await service.repository(repo)).dirty,true);
+ let response=1,prompt;const handlers=new Map();registerWorkspaceIpc({ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},trusted:()=>true,window:()=>null,service:()=>service,dialog:{showMessageBox:async(_window,options)=>{prompt=options;return {response};}}});const prepare=handlers.get('atlas:prepare-project');
+ assert.equal((await prepare({},{cwd:repo})).ready,false);assert.equal(prompt.defaultId,1);assert.match(prompt.buttons[0],/Edit selected folder/);response=0;assert.deepEqual(await prepare({},{cwd:repo}),{ready:true,isolated:false});
+ assert.equal(await git(['rev-parse','HEAD']),before.head);assert.equal(await git(['write-tree']),before.index);assert.equal(await git(['status','--porcelain']),before.status);assert.equal(await fs.readFile(path.join(repo,'app.js'),'utf8'),'working edits');assert.equal(await fs.readFile(path.join(repo,'notes.txt'),'utf8'),'untracked work');await assert.rejects(service.createWorktree(repo),/clean Git checkout/);
+});

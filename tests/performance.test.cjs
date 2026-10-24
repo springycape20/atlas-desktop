@@ -329,3 +329,9 @@ test('imported full histories remain intact on disk after Assistant follow-ups',
  await h.handlers.get('atlas:chat')(event,{requestId:'long-import-followup',conversationId:result.chats[0].id,prompt:'Use Codex to continue.',cwd:h.dir});
  const disk=JSON.parse(await fs.readFile(path.join(h.paths.userData,'conversations.json'),'utf8'))[0];assert.equal(disk.turns.length,124);assert.equal(disk.turns[0].content,source.turns[0].content);assert.equal(disk.turns.at(-1).content,'Follow-up result');assert(!sent.prompt.includes('First message'));assert(sent.prompt.includes('Historical message 121'));
 });
+test('a Colab task that failed before workspace setup can resume with explicit direct editing',async t=>{
+ let worktreeAttempts=0,runs=0;
+ const h=await mainHarness(t,{modules:{'./workspace-service':{createWorkspaceService:()=>({profile:async()=>null,attachmentContext:async()=>'',createWorktree:async()=>{worktreeAttempts++;throw Error('Isolated work starts from a clean Git checkout.');},flush:async()=>{}})},'./collaboration':{normalizePassLimit:require('../collaboration').normalizePassLimit,createCollaboration:()=>async request=>{runs++;assert.equal(request.isolated,false);return {output:'Ready in direct mode',outcome:'completed',usage:{reported:false}};}}}});h.setupIpc();h.allowColab();const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}};
+ const first=await h.handlers.get('atlas:collab')(event,{task:'Continue the current project',cwd:h.dir,isolated:true});await assert.rejects(h.activeJobs.get(first.id).promise,/clean Git checkout/);assert.equal(h.activeJobs.get(first.id).status,'failed');
+ const next=await h.handlers.get('atlas:collab')(event,{resumeJobId:first.id,isolated:false});await h.activeJobs.get(next.id).promise;assert.equal(h.activeJobs.get(next.id).status,'completed');assert.equal(worktreeAttempts,1);assert.equal(runs,1);
+});
