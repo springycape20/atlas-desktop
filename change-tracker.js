@@ -65,6 +65,7 @@ function createChangeTracker(directory){
     }
     await seal(backupId);reports.delete(id);return {restored:true,files:preview.files,backupId,message:'Working files restored to their pre-task contents. The Git index and commits were preserved; a recovery snapshot was saved.'};
   }
-  return {capture,report,file,save,seal,restorePreview,restore};
+  async function fingerprint(id){const snapshot=await load(id),current=await scan(snapshot.cwd,directory);return {value:hash(JSON.stringify(Object.entries(current.files).map(([name,file])=>[name,file.hash,file.mode]))),complete:!current.limited};}
+  return {capture,report,file,save,seal,restorePreview,restore,fingerprint};
 }
 module.exports={createChangeTracker,changedFiles};

@@ -7,7 +7,7 @@ function createTaskNotifications({Notification,getWindow}) {
     started(job){running.add(job.id);progress();},
     finished(job,{silent=false}={}){
       if(!running.delete(job.id))return;
-      progress();if(silent||!['completed','failed'].includes(job.status))return;
+      progress();if(silent||!['completed','failed','needs_attention','limit_reached'].includes(job.status))return;
       const win=window();
       try{if(win&&!win.isFocused?.())win.flashFrame?.(true);}catch{}
       try{

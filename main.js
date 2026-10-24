@@ -60,7 +60,7 @@ async function finishTask(job){
 }
 async function checkTask(job){
   const project=job.projectSnapshot||await workspace().profile(job.request?.profileId);
-  job.verification=job.collaboration&&['plan','compare'].includes(job.request?.mode)?{status:'not-checked',results:[],reason:'Automatic commands are disabled for read-only Colab modes.'}:await require('./project-tools').completionChecks(project,job.cwd,{signal:job.signal,progress:text=>{job.statusText=text;job.events.push({kind:'command',text,at:Date.now()});emitJobs();}});
+  job.verification=job.collaboration&&job.result?.outcome&&job.result.outcome!=='completed'?{status:'not-checked',results:[],reason:'Colab needs attention before completion checks can run.'}:job.collaboration&&['plan','compare'].includes(job.request?.mode)?{status:'not-checked',results:[],reason:'Automatic commands are disabled for read-only Colab modes.'}:await require('./project-tools').completionChecks(project,job.cwd,{signal:job.signal,progress:text=>{job.statusText=text;job.events.push({kind:'command',text,at:Date.now()});emitJobs();}});
   job.events.push({kind:'progress',text:'Completion checks: '+job.verification.status+(job.verification.reason?' · '+job.verification.reason:''),at:Date.now()});
   job.events=job.events.slice(-100);emitJobs();
   if(job.result)job.result.verification=job.verification;
@@ -449,11 +449,11 @@ async function startCollaboration(event, input) {
       else if(request.isolated&&!['plan','compare'].includes(request.mode)){const isolated=await workspace().createWorktree(folder);job.workspaceId=isolated.id;job.cwd=isolated.cwd;await persistJobs();}
       await beginChanges(job,previous);
       const settings=await readAppSettings();if(project)Object.assign(settings,{codexModel:project.codexModel||settings.codexModel,claudeModel:project.claudeModel||settings.claudeModel});
-      const run=require('./collaboration').createCollaboration({runProvider,progress:announce,checkpoint:async reports=>{job.checkpoints=reports;await persistJobs();await assistantService.flush();}});
+      const run=require('./collaboration').createCollaboration({runProvider,progress:announce,fingerprint:async()=>job.changeId?changes().fingerprint(job.changeId):null,checkpoint:async reports=>{job.checkpoints=reports;await persistJobs();await assistantService.flush();}});
       const result=await run({...request,cwd:job.cwd,settings,checkpoints:job.checkpoints,instructions:project?.instructions||'',attachmentContext,signal:controller.signal});
       if(job.stopped||controller.signal.aborted)throw Error('Collaboration stopped.');
-      job.result={...result,workspaceId:job.workspaceId};await checkTask(job);if(job.stopped||controller.signal.aborted)throw Error('Task stopped.');job.status='completed';job.statusText=job.verification?.status==='failed'?'Complete · checks failed':'Complete';
-      if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:'Complete',result:result.output,usage:result.usage,limitation:result.limitation,workspaceId:job.workspaceId});return job.result;
+      job.result={...result,workspaceId:job.workspaceId};await checkTask(job);if(job.stopped||controller.signal.aborted)throw Error('Task stopped.');job.status=result.outcome;job.statusText=result.outcome==='completed'?(job.verification?.status==='failed'?'Complete · checks failed':'Complete'):result.limitation||'Needs attention';
+      if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:job.statusText,outcome:result.outcome,result:result.output,usage:result.usage,limitation:result.limitation,workspaceId:job.workspaceId});return job.result;
     }catch(error){job.status=job.stopped||'failed';job.error=error.message;job.statusText=job.stopped==='paused'?'Paused':job.stopped==='cancelled'?'Stopped':job.error;if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:job.statusText,error:job.error,workspaceId:job.workspaceId});throw error;
     }finally{await finishTask(job);clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();taskNotifications.finished(job,{silent:quitting});await persistJobs();emitJobs();}
   });job.promise.catch(()=>{});return{id};
@@ -462,7 +462,7 @@ async function startCollaboration(event, input) {
 function setupIpc() {
   productivity=require('./productivity-ipc').registerProductivityIpc({ipcMain,app,dialog,window:()=>mainWindow,trusted:isTrustedSender,workspace,jobs:()=>[...activeJobs.values()],approvals,findCodex:findCodexExecutable,findClaude:findClaudeExecutable,history:readAtlasHistory,codex:async(method,params)=>{const executable=findCodexExecutable();if(!executable)throw Error('Codex is not installed.');codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);await codexConnection.connect();return codexConnection.request(method,params);},run:async(row)=>{
     const event={sender:mainWindow.webContents,senderFrame:{url:mainWindow.webContents.getURL()}};
-    if(row.provider==='colab'){const result=await startCollaboration(event,{task:row.prompt,cwd:row.cwd,profileId:row.profileId,roles:row.roles,isolated:true});await activeJobs.get(result.id).promise;return {jobId:result.id,checksFailed:activeJobs.get(result.id).verification?.status==='failed'};}
+    if(row.provider==='colab'){const result=await startCollaboration(event,{task:row.prompt,cwd:row.cwd,profileId:row.profileId,roles:row.roles,isolated:true});await activeJobs.get(result.id).promise;const job=activeJobs.get(result.id);return {jobId:result.id,checksFailed:job.verification?.status==='failed',needsAttention:job.result?.outcome!=='completed',reason:job.result?.limitation};}
     const id=randomUUID();await startAssistant(event,{requestId:id,prompt:row.prompt,cwd:row.cwd,profileId:row.profileId});return {jobId:id,checksFailed:activeJobs.get(id).verification?.status==='failed'};
   },canRun:()=>!quitting&&mainWindow&&!mainWindow.isDestroyed()&&![...activeJobs.values()].some(job=>job.status==='running')});
   require('./change-ipc').registerChangeIpc({ipcMain,trusted:isTrustedSender,findJob:id=>activeJobs.get(id),jobs:()=>[...activeJobs.values()],tracker:changes,workspace,persist:async()=>{await persistJobs();emitJobs();}});

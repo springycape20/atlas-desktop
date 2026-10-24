@@ -20,6 +20,10 @@ test('snapshot storage reached through an aliased Windows path is excluded from 
  const {root,cwd}=await fixture(t),alias=path.join(root,'alias');await fs.symlink(cwd,alias,process.platform==='win32'?'junction':'dir');const tracker=createChangeTracker(path.join(alias,'private-data'));
  await fs.writeFile(path.join(cwd,'app.js'),'hello\n');await tracker.capture('first',cwd);await tracker.capture('second',cwd);const report=await tracker.report('first',true);assert.equal(report.files.length,0);
 });
+
+test('review fingerprints track actual file changes without including snapshot storage',async t=>{
+ const {root,cwd}=await fixture(t),tracker=createChangeTracker(path.join(cwd,'data'));await fs.writeFile(path.join(cwd,'app.js'),'before\n');await tracker.capture('first',cwd);const before=await tracker.fingerprint('first');assert.equal(before.complete,true);await tracker.capture('second',cwd);assert.equal((await tracker.fingerprint('first')).value,before.value);await fs.writeFile(path.join(cwd,'app.js'),'after\n');assert.notEqual((await tracker.fingerprint('first')).value,before.value);
+});
 test('change IPC enforces trusted access and blocks saves while another task edits the same folder',async()=>{
  const handlers=new Map(),current={id:'job',changeId:'snapshot',cwd:path.resolve('project'),status:'completed'},other={id:'other',cwd:current.cwd,status:'running'};let saved=0;
  registerChangeIpc({ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},trusted:event=>event.trusted,findJob:id=>id===current.id?current:null,jobs:()=>[current,other],tracker:()=>({report:async()=>({files:[{path:'app.js',patch:{secret:'not sent'}}],added:1,removed:0}),file:async()=>({content:'code',editable:true}),save:async()=>{saved++;return{saved:true};}})});

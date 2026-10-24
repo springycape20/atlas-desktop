@@ -60,18 +60,18 @@ test('Colab resumes completed stages and aggregates only reported usage', async 
   let saved, calls = [];
   const initial = createCollaboration({progress(){},checkpoint:async rows=>{saved=structuredClone(rows);},runProvider:async provider=>{
     calls.push(provider); if(provider==='claude')throw Error('Interrupted');
-    return {output:'Completed implementation',usage:{inputTokens:10,outputTokens:5}};
+    return {output:'Completed implementation\nATLAS_COLAB_READY',usage:{inputTokens:10,outputTokens:5}};
   }});
   await assert.rejects(initial({task:'Build',settings:{}}), /Interrupted/);
   assert.equal(saved.length, 1);
   calls=[];
-  const resumed=createCollaboration({progress(){},runProvider:async(provider,prompt)=>{calls.push(provider);assert.match(prompt,/Completed implementation/);assert.match(prompt,/partial changes/);return {output:'Verified'};}});
+  const resumed=createCollaboration({progress(){},runProvider:async(provider,prompt)=>{calls.push(provider);assert.match(prompt,/Completed implementation/);assert.match(prompt,/partial changes/);return {output:'Verified\nATLAS_COLAB_READY'};}});
   const result=await resumed({task:'Build',settings:{},checkpoints:saved,maxRounds:3});
-  assert.deepEqual(calls,['claude','codex']);assert.equal(result.usage.inputTokens,10);assert.equal(result.usage.costReported,false);
+  assert.deepEqual(calls,['claude']);assert.equal(result.usage.inputTokens,10);assert.equal(result.usage.costReported,false);
 });
 test('comparison is read-only and its second perspective is independent', async () => {
   const calls=[];
-  const run=createCollaboration({progress(){},runProvider:async(provider,prompt,cwd,settings)=>{calls.push({prompt,settings});return {output:'Unique perspective '+calls.length};}});
+  const run=createCollaboration({progress(){},runProvider:async(provider,prompt,cwd,settings)=>{calls.push({prompt,settings});return {output:'Unique perspective '+calls.length+'\nATLAS_COLAB_READY'};}});
   await run({task:'Compare',mode:'compare',maxRounds:3,settings:{permissionBypass:true}});
   assert.ok(calls.every(call=>call.settings.readOnly&&call.settings.codexSandbox==='read-only'&&!call.settings.permissionBypass));
   assert.ok(!calls[1].prompt.includes('Unique perspective 1'));

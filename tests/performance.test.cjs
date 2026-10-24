@@ -113,7 +113,7 @@ async function mainHarness(t, options = {}) {
     mainWindow = { isDestroyed: () => false, webContents: { send: (_event, patch) => updates.push(patch) } };
     assistantService = require('./assistant-service').createService({ directory: app.getPath('userData'), notify() {} });
     providerHealth = new (require('./provider-health').ProviderHealth)(path.join(app.getPath('userData'),'provider-health.json'));
-    globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, readAppSettings, setupIpc, sender: mainWindow.webContents };
+    globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, readAppSettings, setupIpc, allowColab:()=>{findClaudeExecutable=()=>process.env.CODEX_EXECUTABLE;mainWindow.webContents.isDestroyed=()=>false;}, sender: mainWindow.webContents };
   `, context);
   return { ...context.harness, updates, events, quit, dir, paths, handlers };
 }
@@ -297,4 +297,12 @@ test('stopping during completion checks preserves cancelled status rather than r
   const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}},promise=h.handlers.get('atlas:chat')(event,{requestId:'stop-checks',prompt:'Use Codex to review the file.',cwd:h.dir});
   await started;const rejected=assert.rejects(promise,/Task stopped/);await h.handlers.get('atlas:jobs')(event,{action:'stop',id:'stop-checks'});await rejected;
   assert.equal(h.activeJobs.get('stop-checks').status,'cancelled');assert.equal(h.activeJobs.get('stop-checks').verification.status,'cancelled');
+});
+
+test('Colab attention outcomes are preserved in saved jobs and skip completion commands',async t=>{
+  let checkRuns=0;
+  const h=await mainHarness(t,{modules:{'./collaboration':{normalizePassLimit:require('../collaboration').normalizePassLimit,createCollaboration:()=>async()=>({output:'Review is stalled.',outcome:'needs_attention',limitation:'Same blocker repeated.',passes:6,usage:{reported:false}})},'./project-tools':{completionChecks:async()=>{checkRuns++;return {status:'passed',results:[]};}}}});h.setupIpc();h.allowColab();
+  const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}},started=await h.handlers.get('atlas:collab')(event,{task:'Fix a file',cwd:h.dir,isolated:false});
+  await h.activeJobs.get(started.id).promise;const job=h.activeJobs.get(started.id);assert.equal(job.status,'needs_attention');assert.equal(job.result.outcome,'needs_attention');assert.equal(job.verification.status,'not-checked');assert.equal(checkRuns,0);
+  assert(h.updates.some(update=>update.outcome==='needs_attention'&&update.limitation==='Same blocker repeated.'));
 });

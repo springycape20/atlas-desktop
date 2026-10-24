@@ -30,3 +30,7 @@ test('notification failures cannot fail a completed task',()=>{
  const h=harness();h.win.setProgressBar=()=>{throw Error('Unavailable');};h.win.flashFrame=()=>{throw Error('Unavailable');};
  const job={id:'done',status:'completed'};assert.doesNotThrow(()=>{h.service.started(job);h.service.finished(job);});
 });
+
+test('stalled Colab runs and pass limits notify as attention, never as task complete',()=>{
+ const h=harness();for(const status of ['needs_attention','limit_reached']){const job={id:status,status,collaboration:true};h.service.started(job);h.service.finished(job);}assert.equal(h.notices.length,2);assert(h.notices.every(notice=>notice.options.title==='ATLAS task needs attention'));
+});
