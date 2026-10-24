@@ -59,8 +59,8 @@ class CodexConnection {
     if(message.method==='item/started'&&p.item?.type==='fileChange'){t.fileItems ||= new Map();t.fileItems.set(p.item.id,p.item);}
     if(message.method==='item/completed'&&p.item?.type==='fileChange')t.fileItems?.delete(p.item.id);
     if(message.method==='thread/tokenUsage/updated') {
-      const usage=p.tokenUsage?.last;
-      if(usage)t.usage={...(Number.isFinite(usage.inputTokens)?{inputTokens:usage.inputTokens}:{}),...(Number.isFinite(usage.outputTokens)?{outputTokens:usage.outputTokens}:{})};
+      const usage=!t.resumed?p.tokenUsage?.total||p.tokenUsage?.last:p.tokenUsage?.last;
+      if(usage)t.usage={complete:!t.resumed&&Boolean(p.tokenUsage?.total),scope:!t.resumed&&p.tokenUsage?.total?'new thread total':'last model call; turn total unavailable',...(Number.isFinite(usage.inputTokens)?{inputTokens:usage.inputTokens}:{}),...(Number.isFinite(usage.outputTokens)?{outputTokens:usage.outputTokens}:{})};
     }
     if(message.method==='item/started'&&p.item?.type==='agentMessage'&&p.item.phase==='commentary')t.commentary.add(p.item.id);
     const turnId=p.turnId||p.turn?.id;
@@ -104,7 +104,7 @@ class CodexConnection {
     if(signal?.aborted)throw Error('Job cancelled.');
     if(this.turns.has(threadId))throw Error('This Codex conversation is already running.');
     return new Promise((resolve,reject)=>{
-      const t={onText,activity,onApproval,messages:new Map(),commentary:new Set(),turnId:null,cancelled:false};
+      const t={resumed:Boolean(sessionId),onText,activity,onApproval,messages:new Map(),commentary:new Set(),turnId:null,cancelled:false};
       const abort=()=>{t.cancelled=true;if(t.turnId&&!t.interrupting){t.interrupting=true;void this.request('turn/interrupt',{threadId,turnId:t.turnId}).catch(error=>t.finish(error));}};
       const timer=settings.timeoutSeconds > 0 ? setTimeout(()=>{abort();t.finish(Error('Codex response timed out. The turn was interrupted.'));},settings.timeoutSeconds*1000) : null;
       t.finish=(error,value)=>{if(this.turns.get(threadId)!==t)return;clearTimeout(timer);signal?.removeEventListener('abort',abort);this.turns.delete(threadId);error?reject(error):resolve(value);};

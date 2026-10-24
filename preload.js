@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('atlas', {
   onProviderUsage: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:provider-usage',listener);return()=>ipcRenderer.removeListener('atlas:provider-usage',listener);},
   providerHealth: request=>ipcRenderer.invoke('atlas:provider-health',request),
   jobs: request => ipcRenderer.invoke('atlas:jobs',request),
+  collabReport: request=>ipcRenderer.invoke('atlas:collab-report',request),
   collaborate: request => ipcRenderer.invoke('atlas:collab', request),
   modelCatalog: provider => ipcRenderer.invoke('atlas:model-catalog', provider),
   onCollaborationStatus: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('atlas:collab-status', listener); return () => ipcRenderer.removeListener('atlas:collab-status', listener); },
