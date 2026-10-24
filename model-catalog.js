@@ -15,7 +15,8 @@ function normalize(rows) {
 async function claudeModels(executable, spawnProcess=spawn) {
   const cwd=await fs.mkdtemp(path.join(os.tmpdir(),'atlas-models-'));
   try { return await new Promise((resolve,reject)=>{
-    const child=spawnProcess(executable,['--print','--input-format','stream-json','--output-format','stream-json','--verbose','--no-session-persistence','--settings','{"disableAllHooks":true}','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--tools',''],{cwd,windowsHide:true,shell:false,stdio:['pipe','pipe','pipe']});
+    const launch=require('./claude-runtime').launch(executable,['--print','--input-format','stream-json','--output-format','stream-json','--verbose','--no-session-persistence','--settings','{"disableAllHooks":true}','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--tools','']);
+    const child=spawnProcess(launch.executable,launch.args,{env:launch.env,cwd,windowsHide:true,shell:false,stdio:['pipe','pipe','pipe']});
     let settled=false;const finish=(error,rows)=>{if(settled)return;settled=true;clearTimeout(timer);child.stdin.end();child.kill();error?reject(error):resolve(rows);};
     const timer=setTimeout(()=>finish(Error('Claude model discovery timed out.')),15000);
     child.stdin.on('error',error=>finish(error));child.stderr.on('data',()=>{});
@@ -25,7 +26,8 @@ async function claudeModels(executable, spawnProcess=spawn) {
     }}catch{}});
     child.once('error',error=>finish(error));child.once('exit',()=>finish(Error('Claude model discovery closed before returning models.')));
     child.stdin.write(JSON.stringify({type:'control_request',request_id:'atlas-models',request:{subtype:'initialize',hooks:{}}})+'\n');
-  }); } finally { await fs.rm(cwd,{recursive:true,force:true}); }
+  // Windows can retain the working-directory handle briefly after child.kill().
+  }); } finally { await fs.rm(cwd,{recursive:true,force:true,maxRetries:10,retryDelay:100}); }
 }
 function createModelCatalog({directory,discover,now=Date.now}) {
   const file=path.join(directory,'model-catalog.json'),store=require('./atomic-store').createAtomicStore(file);let cache={},loaded,inflight={};

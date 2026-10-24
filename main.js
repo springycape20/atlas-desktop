@@ -228,7 +228,8 @@ function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText
     let errors = '';
     const decode = require('./assistant-core').createDecoder(provider, onText, activity=>{const current=jobContext.getStore();if(current){current.events.push({...activity,provider,at:Date.now()});current.events=current.events.slice(-100);emitJobs();}});
     let timedOut = false;
-    const child = spawn(executable, args, { cwd, windowsHide: true, shell: false, env, stdio: [input === null ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
+    const launch = provider === 'claude' ? require('./claude-runtime').launch(executable,args,env) : {executable,args,env};
+    const child = spawn(launch.executable, launch.args, { cwd, windowsHide: true, shell: false, env:launch.env, stdio: [input === null ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
     if (input !== null) {
       child.stdin.on('error', () => {}); // Early CLI exits are reported through close/stderr below.
       if(provider==='claude'&&args.includes('--input-format'))child.stdin.write(JSON.stringify({type:'user',message:{role:'user',content:input}})+'\n');
@@ -282,7 +283,7 @@ function runCommand(executable, args, cwd, provider, timeoutMs = 180_000, onText
       if(job){job.child=null;if(job.stopped)return reject(new Error(job.stopped==='paused'?'Job paused.':'Job cancelled.'));}
       if (timedOut) return reject(new Error(`${provider === 'codex' ? 'Codex' : 'Claude Code'} timed out after ${Math.round(timeoutMs / 60_000)} minutes. You can retry or choose the other provider explicitly.`));
       if (code === 0) resolve({ output: output.trim(), errors: errors.trim(), sessionId });
-      else { if(provider==='claude'){try{const result=output.split(/\r?\n/).filter(Boolean).map(line=>{try{return JSON.parse(line)}catch{return null}}).findLast(row=>row?.type==='result');if(result?.is_error)return reject(Error(result.result||result.errors?.join(' ')||'Claude request failed'));}catch{}} reject(new Error((errors.trim() || output.trim() || `${path.basename(executable)} exited with status ${code}`).slice(-12000))); }
+      else { if(provider==='claude'){try{const result=output.split(/\r?\n/).filter(Boolean).map(line=>{try{return JSON.parse(line)}catch{return null}}).findLast(row=>row?.type==='result');if(result?.is_error)return reject(Error(result.result||result.errors?.join(' ')||'Claude request failed'));}catch{}} reject(Object.assign(new Error((errors.trim() || output.trim() || `${path.basename(executable)} exited with status ${code}`).slice(-12000)),{stdout:output})); }
     });
     reportProviderProgress(provider, `Starting ${provider === 'codex' ? 'Codex' : 'Claude Code'}`);
   });
@@ -356,28 +357,21 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   finally{job?.signal?.removeEventListener('abort',abortParent);if(job)job.interrupt=previousInterrupt||null;}
 
 }
-function findClaudeExecutable() {
-  const candidates = [
-    process.env.CLAUDE_CODE_EXECUTABLE,
-    path.join(os.homedir(), '.local', 'bin', 'claude.exe'),
-    path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'),
-    ...(process.env.PATH || '').split(path.delimiter).filter(Boolean).map(directory => path.join(directory.replace(/^"|"$/g, ''), 'claude.exe')),
-  ];
-  return candidates.find(candidate => candidate && existsSync(candidate)) || null;
-}
-function launchProviderLogin(executable, args, provider) {
+function findClaudeExecutable() { return require('./claude-runtime').findClaude(); }
+function launchProviderLogin(executable, args, provider, cwd=app.getPath('home')) {
   if (!executable) throw new Error('Provider CLI was not found.');
   const quote = value => "'" + String(value).replace(/'/g, "''") + "'";
   const title = 'ATLAS - ' + (provider === 'codex' ? 'Codex' : 'Claude Code') + ' sign-in';
-  const command = '$Host.UI.RawUI.WindowTitle = ' + quote(title) + '; & ' + [executable, ...args].map(quote).join(' ');
+  const launch=provider==='claude'?require('./claude-runtime').launch(executable,args):{executable,args};
+  const command = '$Host.UI.RawUI.WindowTitle = ' + quote(title) + '; ' + '& ' + [launch.executable, ...launch.args].map(quote).join(' ');
   const terminal = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   if (!existsSync(terminal)) throw new Error('Windows PowerShell was not found.');
   const encoded = Buffer.from(command, 'utf16le').toString('base64');
-  const loginEnv = { ...process.env };
+  const loginEnv = { ...(launch.env||process.env) };
   for (const key of Object.keys(loginEnv)) if (key.toLowerCase() === 'psmodulepath') delete loginEnv[key];
   loginEnv.PSModulePath = path.join(path.dirname(terminal), 'Modules');
   // Start-Process allocates an interactive console instead of inheriting Node's NUL stdin.
-  const launcher = "$ErrorActionPreference = 'Stop'; $console = Start-Process -FilePath " + quote(terminal) + " -ArgumentList '-NoLogo -NoProfile -NoExit -EncodedCommand " + encoded + "' -WorkingDirectory " + quote(app.getPath('home')) + " -WindowStyle Normal -PassThru; Start-Sleep -Milliseconds 700; if ($console.HasExited) { throw 'The sign-in window closed immediately.' }";
+  const launcher = "$ErrorActionPreference = 'Stop'; $console = Start-Process -FilePath " + quote(terminal) + " -ArgumentList '-NoLogo -NoProfile -NoExit -EncodedCommand " + encoded + "' -WorkingDirectory " + quote(cwd) + " -WindowStyle Normal -PassThru; Start-Sleep -Milliseconds 700; if ($console.HasExited) { throw 'The sign-in window closed immediately.' }";
   return new Promise((resolve, reject) => {
     const child = spawn(terminal, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(launcher, 'utf16le').toString('base64')], {
       cwd: app.getPath('home'), windowsHide: true, shell: false, stdio: ['ignore', 'ignore', 'pipe'], env: loginEnv,
@@ -510,12 +504,10 @@ function setupIpc() {
     if (provider === 'codex') {
       await shell.openExternal(`codex://threads/${encodeURIComponent(sessionId)}`);
     } else {
-      const executable = process.env.CLAUDE_CODE_EXECUTABLE || path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
-      if (!existsSync(executable)) throw new Error('Claude Code CLI was not found.');
-      const command = `start "" "${executable}" --desktop --resume "${sessionId}"`;
-      const child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], { cwd, detached: true, windowsHide: true, shell: false, stdio: 'ignore', env: process.env });
-      child.once('error', error => reportProviderProgress(provider, `Could not open Claude Desktop: ${error.message}`));
-      child.unref();
+      const executable = findClaudeExecutable();
+      if (!executable) throw new Error('Claude Code CLI was not found.');
+      const launch=require('./claude-runtime').launch(executable,['--desktop','--resume',sessionId]);
+      await new Promise((resolve,reject)=>{const child=spawn(launch.executable,launch.args,{cwd,detached:true,windowsHide:true,shell:false,stdio:'ignore',env:launch.env});child.once('error',reject);child.once('spawn',()=>{child.unref();resolve();});});
     }
     return true;
   });
@@ -526,7 +518,7 @@ function setupIpc() {
     const claudeExecutable = findClaudeExecutable();
     const [codex, claude] = await Promise.all([
       codexExecutable ? runCommand(codexExecutable, ['login', 'status'], app.getPath('home'), 'codex', 15_000).then(result => { const statusText = `${result.output}\n${result.errors}`.trim(); return { loggedIn: /\blogged in\b/i.test(statusText) && !/\bnot logged in\b/i.test(statusText), detail: statusText.slice(0, 120) }; }).catch(() => ({ loggedIn: false, detail: 'Could not check Codex login.' })) : Promise.resolve({ loggedIn: false, detail: 'Codex CLI not found.' }),
-      claudeExecutable ? runCommand(claudeExecutable, ['auth', 'status', '--json'], app.getPath('home'), 'claude', 15_000).then(result => { const data = JSON.parse(result.output); return { loggedIn: data.loggedIn === true, detail: data.loggedIn ? `${data.authMethod || 'Account'}${data.subscriptionType ? ` · ${data.subscriptionType}` : ''}` : 'Not signed in.' }; }).catch(() => ({ loggedIn: false, detail: 'Could not check Claude Code login.' })) : Promise.resolve({ loggedIn: false, detail: 'Claude Code CLI not found.' }),
+      require('./claude-runtime').authStatus(claudeExecutable,async(exe,args,cwd)=>(await runCommand(exe,args,cwd,'claude',15000)).output,app.getPath('home')),
     ]);
     return { codex: { ...codex, installed: Boolean(codexExecutable) }, claude: { ...claude, installed: Boolean(claudeExecutable) } };
   });
@@ -536,12 +528,14 @@ function setupIpc() {
     if (provider !== 'codex' && provider !== 'claude') throw new Error('Unknown provider.');
     let executable = provider === 'codex' ? findCodexExecutable() : findClaudeExecutable();
     if (!executable && provider === 'claude') {
+      if(process.env.CLAUDE_CODE_EXECUTABLE)throw Error('CLAUDE_CODE_EXECUTABLE is set but could not be used. Correct or remove it and restart ATLAS.');
       await require('./provider-install').installClaudeCode();
+      await require('./claude-runtime').refreshWindowsPath(true);
       executable = findClaudeExecutable();
       if (!executable) throw new Error('The installer finished but Claude Code could not be found. Try installation again or set CLAUDE_CODE_EXECUTABLE.');
-      await runCommand(executable, ['--version'], app.getPath('home'), 'claude', 15000);
     }
     if (!executable) throw new Error(`${provider === 'codex' ? 'Codex' : 'Claude Code'} CLI was not found.`);
+    if(provider==='claude')try{await runCommand(executable,['--version'],app.getPath('home'),'claude',15000);}catch(error){throw Error(require('./claude-runtime').errorDetail(error));}
     const connected = request?.connected === true;
     const args = provider === 'codex'
       ? (connected ? ['login', 'status'] : ['login'])
@@ -786,6 +780,7 @@ app.whenReady().then(async () => {
   app.setAppUserModelId(APP_ID);
   try { await migrateLegacyUserData(); }
   catch (error) { console.error('Could not fully migrate existing ATLAS data:', error); }
+  await require('./claude-runtime').refreshWindowsPath();
   setupPermissions();
   assistantService = require('./assistant-service').createService({directory:app.getPath('userData'),launchApp:async name=>{ const targets={notepad:'notepad.exe',calculator:'calc.exe',explorer:'explorer.exe','file explorer':'explorer.exe'}; if(name==='settings')return shell.openExternal('ms-settings:'); await new Promise((resolve,reject)=>{const child=spawn(targets[name],[],{detached:true,stdio:'ignore',windowsHide:false});child.once('error',reject);child.once('spawn',()=>{child.unref();resolve()})}) },volume:async direction=>{const key=direction==='up'?175:direction==='down'?174:173;const script='Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class AtlasVolume { [DllImport("user32.dll")] public static extern void keybd_event(byte v, byte s, uint f, UIntPtr e); }\'; [AtlasVolume]::keybd_event('+key+',0,0,[UIntPtr]::Zero); [AtlasVolume]::keybd_event('+key+',0,2,[UIntPtr]::Zero)';await new Promise((resolve,reject)=>{const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true});child.once('error',reject);child.once('close',code=>code===0?resolve():reject(Error('Volume control failed')))})},notify:reminder=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:reminder',reminder);const {Notification}=require('electron');if(Notification.isSupported())new Notification({title:'ATLAS reminder',body:reminder.title}).show();}});
   for(const saved of assistantService.state.jobs||[]){activeJobs.set(saved.id,{...saved,status:saved.status==='running'?'paused':saved.status,child:null});}

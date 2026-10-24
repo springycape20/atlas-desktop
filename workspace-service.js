@@ -11,7 +11,7 @@ const trim = (value, limit) => typeof value === 'string' ? value.slice(0, limit)
 async function command(executable, args, cwd, extra = {}) {
   const { includeStderr, ...options } = extra;
   try { const result = await exec(executable, args, { cwd, windowsHide:true, shell:false, timeout:30000, maxBuffer:8*1024*1024, env:{...process.env,GIT_TERMINAL_PROMPT:'0'}, ...options }); return (result.stdout+(includeStderr?result.stderr:"")).trimEnd(); }
-  catch (error) { throw new Error((String(error.stderr || error.message)).slice(-3000)); }
+  catch (error) { throw Object.assign(new Error((String(error.stderr || error.message)).slice(-3000)),{stdout:error.stdout}); }
 }
 function createWorkspaceService(directory) {
   const store = require('./atomic-store').createAtomicStore(path.join(directory, 'workspace-data.json'));
