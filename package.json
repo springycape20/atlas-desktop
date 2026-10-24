@@ -7,7 +7,11 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/*.test.cjs",
-    "dist:win": "electron-builder --win nsis --x64 --publish never"
+    "dist:win": "electron-builder --win nsis --x64 --publish never",
+    "build:syntax": "node build/bundle-syntax.cjs",
+    "prestart": "npm run build:syntax",
+    "pretest": "npm run build:syntax",
+    "predist:win": "npm run build:syntax"
   },
   "devDependencies": {
     "electron": "^45.0.0",
@@ -16,7 +20,8 @@
   "dependencies": {
     "diff": "9.0.0",
     "electron-updater": "6.8.9",
-    "kokoro-js": "1.2.1"
+    "kokoro-js": "1.2.1",
+    "prismjs": "1.30.0"
   },
   "allowScripts": {
     "onnxruntime-node@1.21.0": true

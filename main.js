@@ -740,7 +740,7 @@ async function handleChat(event, data) {
 async function createWindow() {
   await protocol.handle('atlas', async request => {
     const url = new URL(request.url);
-    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js', '/productivity-ui.js'].includes(url.pathname)) {
+    if (url.host !== 'app' || !['/', '/index.html', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js', '/productivity-ui.js', '/code-syntax.js', '/syntax-worker.js', '/syntax-highlight.js'].includes(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
     const javascript = url.pathname.endsWith('.js');
