@@ -22,7 +22,10 @@ function createChatImporter({history,transaction,dialog,window,home,now=Date.now
   }
   async function commit(request){
     if(!Array.isArray(request.chats)||!request.chats.length||request.chats.length>MAX_CHATS)throw Error('Select between 1 and 100 conversations.');
+    const destination=request.destination||'assistant';if(!['assistant','colab'].includes(destination))throw Error('Choose Assistant or Colab.');
     const unique=new Map();for(const selected of request.chats){const chat=await read(selected);if(!chat.turns?.length)throw Error('This conversation has no importable messages.');unique.set(sourceKey(chat),chat);}
+    const prepared=[];for(const chat of unique.values()){let cwd=home;try{if(path.isAbsolute(chat.cwd)&&(await fs.stat(chat.cwd)).isDirectory())cwd=chat.cwd;}catch{}prepared.push({...chat,cwd});}
+    if(destination==='colab')return {destination,chats:prepared};
     const imported=[];let skipped=0;
     // Imports and normal chat saves share the same transaction queue. Never evict an
     // existing conversation to make room for an import, including concurrent imports.
@@ -33,7 +36,7 @@ function createChatImporter({history,transaction,dialog,window,home,now=Date.now
       for(const [key,chat]of unique){
         if(existing.has(key)){skipped++;imported.push(existing.get(key));continue;}
         let cwd=home;try{if(path.isAbsolute(chat.cwd)&&(await fs.stat(chat.cwd)).isDirectory())cwd=chat.cwd;}catch{}
-        const item={id:randomUUID(),title:chat.title,provider:'atlas',lastProvider:chat.provider,sessions:{codex:'',claude:''},cwd,updatedAt:now(),importSource:{provider:chat.provider,id:chat.id,sessionId:chat.sessionId||'',importedAt:now(),workspaceName:chat.workspaceName||'',workspaceId:chat.workspaceId||chat.cwd||'',truncated:Boolean(chat.truncated),originalTurnCount:chat.originalTurnCount||chat.turns.length},turns:chat.turns.slice(-80).map(turn=>({role:turn.role,content:turn.content,provider:turn.role==='assistant'?chat.provider:'',at:turn.at||chat.updatedAt||now()}))};
+        const item={id:randomUUID(),title:chat.title,provider:'atlas',lastProvider:chat.provider,sessions:{codex:'',claude:''},cwd,updatedAt:now(),importSource:{provider:chat.provider,id:chat.id,sessionId:chat.sessionId||'',importedAt:now(),workspaceName:chat.workspaceName||'',workspaceId:chat.workspaceId||chat.cwd||'',truncated:Boolean(chat.truncated),originalTurnCount:chat.originalTurnCount||chat.turns.length},turns:chat.turns.map(turn=>({role:turn.role,content:turn.content,provider:turn.role==='assistant'?chat.provider:'',at:turn.at||chat.updatedAt||now()}))};
         current.push(item);imported.push(item);
       }
       return current;

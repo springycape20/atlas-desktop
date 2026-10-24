@@ -105,11 +105,25 @@
   }
   const importKey=chat=>chat.provider+':'+chat.id+':'+Boolean(chat.fromFile);
   const importSelection=chat=>({provider:chat.provider,id:chat.id,fromFile:Boolean(chat.fromFile)});
-  async function importAndContinue(item){const result=await api.importChats({action:'import',chats:[importSelection(item)]});await continueChat(result.chats[0]);}
+  function chooseImportDestination(){
+    return new Promise(resolve=>{
+      const picker=element('dialog',undefined,'workspace-dialog import-destination');picker.setAttribute('aria-label','Choose import workspace');
+      const header=element('header'),heading=element('h2','Where should these chats go?'),content=element('div',undefined,'workspace-dialog-body'),actions=element('div',undefined,'workspace-actions');header.append(heading);content.append(element('p','Choose a workspace. The full text conversation will appear there, ready to continue.'),actions);picker.append(header,content);document.body.append(picker);
+      let choice=null;const finish=value=>{choice=value;picker.close();};for(const [value,label]of [['assistant','Assistant'],['colab','Colab'],[null,'Cancel']]){const action=element('button',label,'quiet-button');action.type='button';action.onclick=()=>finish(value);actions.append(action);}
+      picker.onclose=()=>{picker.remove();resolve(choice);};picker.showModal();
+    });
+  }
+  async function importToWorkspace(items){
+    const destination=await chooseImportDestination();if(!destination)return null;
+    const result=await api.importChats({action:'import',destination,chats:items.map(importSelection)});
+    if(destination==='colab')return window.atlasColab.importChats(result.chats);await window.atlasAssistant?.refresh();return result;
+  }
+  async function importAndContinue(item){const result=await importToWorkspace([item]);if(result)await continueChat(result.chats[0]);}
   async function showImport(){
+    if($id('settingsDialog').open)$id('settingsDialog').close();
     open('Import chats');modal.classList.add('import-dialog');
     const container=element('div',undefined,'chat-import'),tools=element('div',undefined,'workspace-actions'),filters=element('div',undefined,'import-filters'),list=element('div'),feedback=element('p'),actions=element('div',undefined,'workspace-actions import-actions');body.append(container);body.after(actions);
-    container.append(element('p','Select local Codex or Claude Code chats, or choose a Claude export file. Import creates a separate ATLAS copy you can continue.'),element('p','Text only · Latest 80 messages, up to 12,000 characters each · 100 saved chats maximum. Images, tool output and private reasoning are excluded. Follow-ups use recent context.'),tools,filters,feedback,list);
+    container.append(element('p','Select local Codex or Claude Code chats, or choose a Claude export file. Import creates a separate ATLAS copy you can continue.'),element('p','Full text history · Choose Assistant or Colab when importing. Assistant supports 100 saved chats; Colab keeps its own history. Images, tool output and private reasoning are excluded. Follow-ups use recent context.'),tools,filters,feedback,list);
     let chats=[],selected=new Set(),workspaceRows=[],page=0;const pageSize=60;
     const provider=element('select');provider.setAttribute('aria-label','Filter import provider');for(const [value,label]of [['','All clients'],['codex','Codex'],['claude','Claude']]){const option=element('option',label);option.value=value;provider.append(option);}
     const workspace=element('select');workspace.setAttribute('aria-label','Filter import workspace');workspace.append(new Option('All workspaces',''));const internal=element('input');internal.type='checkbox';const internalLabel=element('label');internalLabel.append(internal,document.createTextNode('Include internal agent sessions'));tools.append(internalLabel);
@@ -120,9 +134,9 @@
     function render(){
       page=Math.max(0,Math.min(page,Math.ceil(visible().length/pageSize)-1));list.replaceChildren();for(const chat of shown()){
         const row=element('section',undefined,'workspace-result'),label=element('label'),check=element('input');check.type='checkbox';check.disabled=chat.importable===false;check.checked=selected.has(importKey(chat));check.setAttribute('aria-label','Import '+chat.title);check.onchange=()=>{if(check.checked&&selected.size>=100){check.checked=false;status.textContent='Select up to 100 chats at a time.';return;}check.checked?selected.add(importKey(chat)):selected.delete(importKey(chat));update();};label.append(check,document.createTextNode(' '+chat.title));row.append(label,element('p',chat.provider.toUpperCase()+' · '+(chat.workspaceName||'No workspace')+' · '+(chat.turnCount==null?'Saved conversation':chat.turnCount+' messages')+(chat.archived?' · Archived':'')+(chat.internal?' · Internal session':'')),element('p',chat.cwd||''));if(chat.importable===false)row.append(element('p','Transcript unavailable for import on this PC. Open the client, or choose an exported transcript.'));else if(!chat.nativeName&&!chat.fromFile)row.append(element('small','No saved client name was found; showing a transcript title.'));
-        if(chat.truncated)row.append(element('p','Partial import: the most recent 80 messages, up to 12,000 characters each.'));
+        if(chat.truncated)row.append(element('p','Preview and import load the full available text conversation.'));
         const rowActions=element('div',undefined,'workspace-actions'),preview=element('div');row.append(rowActions,preview);
-        const previewButton=button('Preview',async()=>{preview.replaceChildren();const full=await api.importChats({action:'preview',chat:importSelection(chat)});preview.append(element('p',full.truncated?'Showing the bounded text that will be imported.':'Conversation preview'));for(const turn of full.turns){const section=element('section',undefined,'workspace-result');section.append(element('strong',turn.role==='user'?'YOU':chat.provider.toUpperCase()),element('pre',turn.content));preview.append(section);}preview.style.maxHeight='260px';preview.style.overflow='auto';},rowActions);previewButton.disabled=chat.importable===false;
+        const previewButton=button('Preview',async()=>{preview.replaceChildren();const full=await api.importChats({action:'preview',chat:importSelection(chat)});preview.append(element('p',full.truncated?'This source contains a partial conversation.':'Full conversation preview'));for(const turn of full.turns){const section=element('section',undefined,'workspace-result');section.append(element('strong',turn.role==='user'?'YOU':chat.provider.toUpperCase()),element('pre',turn.content));preview.append(section);}preview.style.maxHeight='260px';preview.style.overflow='auto';},rowActions);previewButton.disabled=chat.importable===false;
         const importButton=button('Import and continue',()=>importAndContinue(chat),rowActions);importButton.disabled=chat.importable===false;if(chat.sessionId)button('Open client',()=>api.openProviderSession({provider:chat.provider,sessionId:chat.sessionId,cwd:chat.cwd}),rowActions);list.append(row);
       }
       feedback.textContent=visible().length+' chats shown · '+selected.size+' selected.';update();
@@ -135,10 +149,10 @@
     button('Scan local clients',()=>load(false),tools);button('Choose export / transcript file',()=>load(true),tools);button('Claude export guide',()=>api.openLink('https://support.claude.com/en/articles/9450526-export-your-claude-data'),tools);
     button('Select shown (up to 100)',()=>{for(const chat of shown()){if(selected.size>=100)break;if(chat.importable!==false)selected.add(importKey(chat));}render();},actions);button('Clear selection',()=>{selected.clear();render();},actions);
     const submit=button('Import selected (0)',async()=>{
-      const result=await api.importChats({action:'import',chats:chats.filter(chat=>selected.has(importKey(chat))).map(importSelection)});if(!container.isConnected)return;
+      const result=await importToWorkspace(chats.filter(chat=>selected.has(importKey(chat))));if(!result||!container.isConnected)return;
       status.textContent=result.imported+' imported · '+result.skipped+' already in ATLAS.';selected.clear();render();
       for(const node of actions.querySelectorAll('.import-result-actions'))node.remove();const done=element('div',undefined,'workspace-actions import-result-actions');actions.append(done);
-      if(result.chats.length===1)button('Continue imported chat',()=>continueChat(result.chats[0]),done);button('Open history',showHistory,done);
+      if(result.chats.length)await continueChat(result.chats[0]);
     },actions);submit.disabled=true;const importAction=submit.onclick;submit.onclick=async()=>{await importAction();update();};
     const previous=button('Previous page',()=>{page--;render();},actions),next=button('Next page',()=>{page++;render();},actions);const resetPage=()=>{page=0;render();};provider.onchange=workspace.onchange=internal.onchange=resetPage;query.oninput=resetPage;await load(false);
   }

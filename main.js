@@ -311,7 +311,7 @@ async function persistAtlasHistory(items) {
     id: String(item.id).slice(0, 80), title: String(item.title || 'Conversation').slice(0, 100),
     provider: 'atlas', lastProvider: String(item.lastProvider || '').slice(0, 20), sessions: { codex: String(item.sessions?.codex || '').slice(0, 80), claude: String(item.sessions?.claude || '').slice(0, 80) }, cwd: String(item.cwd || '').slice(0, 1024),
     ...(item.importSource?{importSource:{provider:item.importSource.provider,id:String(item.importSource.id||'').slice(0,80),sessionId:String(item.importSource.sessionId||'').slice(0,100),importedAt:Number(item.importSource.importedAt)||Date.now(),workspaceName:String(item.importSource.workspaceName||'').slice(0,150),workspaceId:String(item.importSource.workspaceId||'').slice(0,1024),truncated:item.importSource.truncated===true,originalTurnCount:Number(item.importSource.originalTurnCount)||0}}:{}),
-    updatedAt: Number(item.updatedAt) || Date.now(), turns: item.turns.slice(-80).map(turn => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: String(turn.content || '').slice(0, 12000), provider: String(turn.provider || '').slice(0, 20), attachments:(Array.isArray(turn.attachments)?turn.attachments:[]).slice(0,8).map(({id,name,type,size})=>({id,name,type,size})), at: Number(turn.at) || Date.now() })),
+    updatedAt: Number(item.updatedAt) || Date.now(), turns: (item.importSource?item.turns:item.turns.slice(-80)).map(turn => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: item.importSource?String(turn.content || ''):String(turn.content || '').slice(0, 12000), provider: String(turn.provider || '').slice(0, 20), attachments:(Array.isArray(turn.attachments)?turn.attachments:[]).slice(0,8).map(({id,name,type,size})=>({id,name,type,size})), at: Number(turn.at) || Date.now() })),
   }));
   const file = atlasHistoryPath(), temp = `${file}.${randomUUID()}.tmp`;
   await writeFile(temp, JSON.stringify(trimmed), 'utf8');
@@ -681,7 +681,7 @@ async function handleChat(event, data) {
     if(availableProvider&&availableProvider!==route.provider){route.provider=availableProvider;route.reason='temporarily avoiding '+preferredProvider+' usage limit';}
     const historyRequested = historyLookupRequested(prompt);
     const referencedHistory = historyRequested ? await findReferencedProviderHistory(prompt) : [];
-    const earlierTurns = conversation.turns.slice(-12);
+    const earlierTurns = conversation.turns.slice(-12).map(turn=>({...turn,content:turn.content.slice(0,12000)}));
     const selectedAttachments=(await workspace().attachments(data.attachments||[])).map(({id,name,type,size})=>({id,name,type,size}));
     conversation.turns.push({ role: 'user', content: prompt, attachments:selectedAttachments, at: Date.now() });
     const providerChanged = Boolean(conversation.lastProvider && conversation.lastProvider !== route?.provider);

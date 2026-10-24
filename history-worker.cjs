@@ -4,13 +4,13 @@ const path = require('node:path');
 const os = { homedir: () => workerData?.home || require('node:os').homedir() };
 const { createHash } = require('node:crypto');
 const cache = new Map(); let cacheBytes = 0;
-function parseProviderTranscript(provider, file) {
-  const stat = statSync(file), key = provider + ':' + file;
+function parseProviderTranscript(provider, file, full=false) {
+  const stat = statSync(file), key = provider + ':' + file + ':' + full;
   const version = `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`;
   const old = cache.get(key);
   if (old?.version === version) { cache.delete(key); cache.set(key, old); return old.value; }
   if (old) { cacheBytes -= old.bytes; cache.delete(key); }
-  const value = parseProviderTranscriptUncached(provider, file);
+  const value = parseProviderTranscriptUncached(provider, file, full);
   const bytes = JSON.stringify(value).length * 2;
   cache.set(key, { version, value, bytes }); cacheBytes += bytes;
   while (cacheBytes > 32 * 1024 * 1024 || cache.size > 200) {
@@ -36,7 +36,7 @@ function providerFiles(provider, limit = 20) {
   }
   return files.sort((a, b) => b.modified - a.modified).slice(0, limit);
 }
-function parseProviderTranscriptUncached(provider, file) {
+function parseProviderTranscriptUncached(provider, file, full=false) {
   const resolved = path.resolve(file);
   if (!providerRoots(provider).some(base=>resolved.startsWith(base + path.sep)) || !existsSync(resolved)) throw new Error('Transcript is outside the provider history folder.');
   const stat = statSync(resolved); if (!stat.isFile() || stat.size > 8_000_000) throw new Error('Transcript is too large to open.');
@@ -47,7 +47,7 @@ function parseProviderTranscriptUncached(provider, file) {
     if (!zlib.zstdDecompressSync) throw new Error('This Electron runtime cannot read compressed Codex archives.');
     raw = zlib.zstdDecompressSync(bytes, { maxOutputLength: 32_000_000 }).toString('utf8');
   } else raw = bytes.toString('utf8');
-  return require('./transcript-import').jsonl(provider,raw,{id:createHash('sha256').update(resolved).digest('hex'),updatedAt:stat.mtimeMs});
+  return require('./transcript-import').jsonl(provider,raw,{id:createHash('sha256').update(resolved).digest('hex'),updatedAt:stat.mtimeMs,full});
 }
 function listProviderHistory(provider, query = '', limit=20) {
   return providerFiles(provider,limit).map(({ file }) => { try { const item = parseProviderTranscript(provider, file); if(query && !(item.title+' '+item.turns.map(turn=>turn.content).join(' ')).toLowerCase().includes(query))return null; return { id: item.id, title: item.title, provider, cwd: item.cwd, updatedAt: item.updatedAt, turnCount: item.turns.length, sessionId: item.sessionId, truncated:item.truncated,originalTurnCount:item.originalTurnCount,searchText: item.turns.map(turn => turn.content).join(' ').slice(-2500) }; } catch { return null; } }).filter(item => item && item.turnCount);
@@ -105,11 +105,11 @@ function readImportFile(file){
   const stat=statSync(file);if(!stat.isFile()||stat.size>32000000)throw Error('Choose a transcript or export under 32 MB.');
   const bytes=require('node:fs').readFileSync(file),raw=file.endsWith('.zst')?require('node:zlib').zstdDecompressSync(bytes,{maxOutputLength:32000000}).toString('utf8'):bytes.toString('utf8');
   let chats;
-  if(/\.json$/i.test(file)){chats=require('./transcript-import').claudeExport(raw);try{const projectsFile=path.join(path.dirname(file),'projects.json');if(statSync(projectsFile).size<4000000){const data=JSON.parse(require('node:fs').readFileSync(projectsFile,'utf8'));if(Array.isArray(data)){const names=new Map(data.filter(row=>row&&typeof row.uuid==='string'&&typeof row.name==='string').map(row=>[row.uuid,row.name]));for(const chat of chats)if(names.has(chat.workspaceId))chat.workspaceName=names.get(chat.workspaceId);}}}catch{}}
+  if(/\.json$/i.test(file)){chats=require('./transcript-import').claudeExport(raw,{full:true});try{const projectsFile=path.join(path.dirname(file),'projects.json');if(statSync(projectsFile).size<4000000){const data=JSON.parse(require('node:fs').readFileSync(projectsFile,'utf8'));if(Array.isArray(data)){const names=new Map(data.filter(row=>row&&typeof row.uuid==='string'&&typeof row.name==='string').map(row=>[row.uuid,row.name]));for(const chat of chats)if(names.has(chat.workspaceId))chat.workspaceName=names.get(chat.workspaceId);}}}catch{}}
   else{
     let provider='';for(const line of raw.replace(/^\uFEFF/,'').split(/\r?\n/).slice(0,100)){try{const row=JSON.parse(line);if(row.type==='session_meta'||row.type==='response_item'){provider='codex';break;}if(['user','assistant'].includes(row.type)&&row.message){provider='claude';break;}}catch{}}
     if(!provider)throw Error('This file is not a recognized Codex or Claude Code transcript.');
-    chats=[require('./transcript-import').jsonl(provider,raw,{id:createHash('sha256').update(raw).digest('hex'),updatedAt:stat.mtimeMs})];
+    chats=[require('./transcript-import').jsonl(provider,raw,{id:createHash('sha256').update(raw).digest('hex'),updatedAt:stat.mtimeMs,full:true})];
   }
   if(!chats.some(chat=>chat.turns.length))throw Error('No user or assistant messages were found in this file.');return chats;
 }
@@ -125,7 +125,7 @@ parentPort.on('message', async ({ id, method, args }) => {
       if (!['codex', 'claude'].includes(args.provider) || !/^[a-f0-9]{64}$/.test(args.id)) throw Error('Invalid provider history selection.');
       const file = providerFiles(args.provider, 20000).find(item => createHash('sha256').update(path.resolve(item.file)).digest('hex') === args.id)?.file;
       if (!file) throw Error('Provider transcript could not be found. It may have been moved or compressed.');
-      value = parseProviderTranscript(args.provider, file);const named=require('./provider-catalog').catalog({provider:args.provider,base:path.dirname(providerRoots(args.provider)[0]),roots:providerRoots(args.provider),files:[{file,modified:value.updatedAt}],parse:parseProviderTranscript}).chats.find(chat=>chat.id===args.id);if(named)value={...value,title:named.title,workspaceName:named.workspaceName,workspaceId:named.workspaceId};
+      value = parseProviderTranscript(args.provider, file, args.import===true);const named=require('./provider-catalog').catalog({provider:args.provider,base:path.dirname(providerRoots(args.provider)[0]),roots:providerRoots(args.provider),files:[{file,modified:value.updatedAt}],parse:parseProviderTranscript}).chats.find(chat=>chat.id===args.id);if(named)value={...value,title:named.title,workspaceName:named.workspaceName,workspaceId:named.workspaceId};
     } else throw Error('Unknown history operation.');
     parentPort.postMessage({ id, value });
   } catch (error) { parentPort.postMessage({ id, error: error.message }); }

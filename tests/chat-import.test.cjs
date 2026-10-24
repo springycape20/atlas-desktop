@@ -35,3 +35,16 @@ test('import capacity failures preserve existing conversations and cancellations
 test('selected transcript files recognize Codex JSONL and reject malformed or oversized files',async t=>{
  const f=await fixture(t),file=path.join(f.home,'chat.jsonl');await fs.writeFile(file,JSON.stringify({type:'response_item',payload:{role:'user',content:'hello'}}));assert.equal((await f.client.request('import-file',{file}))[0].provider,'codex');await fs.writeFile(file,'not a transcript');await assert.rejects(f.client.request('import-file',{file}),/not a recognized/);await fs.writeFile(file,'');await fs.truncate(file,32000001);await assert.rejects(f.client.request('import-file',{file}),/under 32 MB/);
 });
+test('full imports preserve long histories for either destination without creating Assistant copies for Colab',async t=>{
+ const f=await fixture(t),folder=path.join(f.home,'.codex','sessions');await fs.mkdir(folder,{recursive:true});const file=path.join(folder,'long.jsonl'),messages=Array.from({length:122},(_,i)=>({type:'response_item',payload:{role:i%2?'assistant':'user',content:i===0?'x'.repeat(15000):'Message '+i}}));await fs.writeFile(file,[{type:'session_meta',payload:{id:'long-native',cwd:f.home}},...messages].map(row=>JSON.stringify(row)).join('\n'));
+ const importer=createChatImporter({history:f.client,transaction:f.transaction,home:f.home}),selected=(await importer.scan()).chats[0];
+ assert.equal((await f.client.request('read',{provider:'codex',id:selected.id})).turns.length,80);
+ const full=await importer.read(selected);assert.equal(full.turns.length,122);assert.equal(full.turns[0].content.length,15000);assert.equal(full.truncated,false);
+ const colab=await importer.commit({destination:'colab',chats:[selected]});assert.equal(colab.chats[0].turns.length,122);assert.equal(f.state.length,0);
+ await assert.rejects(importer.commit({destination:'invalid',chats:[selected]}),/Assistant or Colab/);
+ const assistant=await importer.commit({destination:'assistant',chats:[selected]});assert.equal(assistant.imported,1);assert.equal(f.state[0].turns.length,122);assert.equal(f.state[0].turns[0].content.length,15000);
+});
+test('selected Claude exports keep the first message and full long replies',async t=>{
+ const f=await fixture(t),file=path.join(f.home,'conversations.json');await fs.writeFile(file,JSON.stringify([{uuid:'long-export',name:'Full export',chat_messages:Array.from({length:124},(_,i)=>({sender:i%2?'assistant':'human',text:i===1?'y'.repeat(14000):'Message '+i}))}]));
+ const chats=await f.client.request('import-file',{file});assert.equal(chats[0].turns.length,124);assert.equal(chats[0].turns[0].content,'Message 0');assert.equal(chats[0].turns[1].content.length,14000);
+});

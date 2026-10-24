@@ -320,3 +320,12 @@ test('Colab attention outcomes are preserved in saved jobs and skip completion c
   await h.activeJobs.get(started.id).promise;const job=h.activeJobs.get(started.id);assert.equal(job.status,'needs_attention');assert.equal(job.result.outcome,'needs_attention');assert.equal(job.verification.status,'not-checked');assert.equal(checkRuns,0);
   assert(h.updates.some(update=>update.outcome==='needs_attention'&&update.limitation==='Same blocker repeated.'));
 });
+test('imported full histories remain intact on disk after Assistant follow-ups',async t=>{
+ const source={id:'d'.repeat(64),provider:'claude',sessionId:'long-import',title:'Full project history',turns:Array.from({length:122},(_,i)=>({role:i%2?'assistant':'user',content:i===0?'First message '+ 'x'.repeat(16000):'Historical message '+i}))};let sent;
+ class FakeHistory{async request(){return source;}close(){}}
+ class FakeCodex{async run(request){sent=request;return {output:'Follow-up result',sessionId:'new-session'};}}
+ const h=await mainHarness(t,{modules:{'./history-client':{HistoryClient:FakeHistory},'./codex-connection':{CodexConnection:FakeCodex}}});h.setupIpc();const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}};
+ const result=await h.handlers.get('atlas:history-import')(event,{action:'import',destination:'assistant',chats:[{provider:'claude',id:source.id}]});
+ await h.handlers.get('atlas:chat')(event,{requestId:'long-import-followup',conversationId:result.chats[0].id,prompt:'Use Codex to continue.',cwd:h.dir});
+ const disk=JSON.parse(await fs.readFile(path.join(h.paths.userData,'conversations.json'),'utf8'))[0];assert.equal(disk.turns.length,124);assert.equal(disk.turns[0].content,source.turns[0].content);assert.equal(disk.turns.at(-1).content,'Follow-up result');assert(!sent.prompt.includes('First message'));assert(sent.prompt.includes('Historical message 121'));
+});
