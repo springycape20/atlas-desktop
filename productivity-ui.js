@@ -6,10 +6,11 @@
   let page='Queue',generation=0,queueState,pending=[],jobRows=[];
   function button(text,action,parent=body){const node=el('button',text,'quiet-button');node.type='button';node.onclick=async()=>{node.disabled=true;try{await action();}catch(error){status.textContent=error.message;}finally{node.disabled=false;}};parent.append(node);return node;}
   button('Close',()=>modal.close(),header);
-  const sections={Queue:showQueue,Plugins:showPlugins,'Project setup':showSetup,Search:showSearch,Checkpoints:showCheckpoints,Approvals:showApprovals};
+  const sections={Queue:showQueue,Tools:showIntegrations,Plugins:showPlugins,'Project setup':showSetup,Search:showSearch,Checkpoints:showCheckpoints,Approvals:showApprovals};
   for(const name of Object.keys(sections))button(name,()=>open(name),tabs);
   async function open(name){page=name;title.textContent=name;body.replaceChildren();status.textContent='';const version=++generation;if(!modal.open)modal.showModal();try{await sections[name](version);}catch(error){if(version===generation)status.textContent=error.message;}}
   const navButton=button('Workbench',()=>open('Queue'),document.querySelector('.workspace-nav'));navButton.className='nav-item';
+  const workbenchIcon=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [key,value]of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.5','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',focusable:'false'}))workbenchIcon.setAttribute(key,value);const workbenchPath=document.createElementNS(workbenchIcon.namespaceURI,'path');workbenchPath.setAttribute('d','M4 8h16v12H4zM9 8V4h6v4M4 13h16M10 13v3h4v-3');workbenchIcon.append(workbenchPath);navButton.prepend(workbenchIcon);
   const settingsSection=document.querySelector('#settingsDialog .setting-section');if(settingsSection)button('Installed plugins and tools',()=>open('Plugins'),settingsSection);
   const alertButton=button('Approvals',()=>open('Approvals'),document.body);alertButton.className='approval-alert';alertButton.hidden=true;
   const style=el('style');style.textContent='.productivity-dialog{box-sizing:border-box;height:min(680px,90vh);overflow:hidden}.productivity-dialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}.productivity-dialog>.workspace-dialog-body{min-height:0;max-height:none;overflow:auto}.productivity-dialog>footer{max-height:80px;overflow:auto}.productivity-dialog>nav{padding:8px 16px;margin:0;border-bottom:1px solid #29414a}.productivity-dialog>nav button{font-size:11px;padding:6px 10px}.productivity-dialog p{font:12px/1.6 Segoe UI,sans-serif;overflow-wrap:anywhere}.productivity-dialog select,.productivity-dialog textarea{box-sizing:border-box}.workbench-row{padding:12px 0;border-bottom:1px solid #29414a}.workbench-row h3{margin:0 0 5px}.workbench-row pre{max-height:28vh}.workbench-row details{margin-top:8px;font-size:12px}.workbench-state{color:#8bcec1}.approval-alert{position:fixed;right:18px;bottom:55px;z-index:40;background:#604321;color:#ffe0ad;border:1px solid #b58649;border-radius:9px;padding:10px 14px;cursor:pointer}.approval-alert[hidden]{display:none}.workbench-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.productivity-dialog label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}.productivity-dialog input[type=checkbox]{width:auto}.workbench-result{width:100%;text-align:left;margin:4px 0}.workbench-queue-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}.workbench-queue-form label:has(textarea){grid-column:1/-1}.workbench-queue-form>button{width:fit-content}.workbench-queue-form input:disabled,.workbench-queue-form select:disabled{opacity:.5}@media(max-width:650px){.workbench-queue-form{grid-template-columns:1fr}}.workbench-message{color:#a9c3cd;font-size:12px}';document.head.append(style);
@@ -37,6 +38,7 @@
       list.append(node);
     }if(!state.items.length)list.append(el('p','No queued tasks yet.'));}
   async function showPlugins(version){
+    button('Add or start tools for Colab',()=>open('Tools'));
     body.append(el('p','Uses the plugins already installed for each provider. Claude toggles change its shared configuration. Start a new chat after changing plugins.'));
     status.textContent='Scanning providers…';const result=await api.plugins({cwd:typeof cwd==='string'?cwd:undefined});if(version!==generation)return;
     for(const plugin of result.plugins){const node=row(plugin.name,plugin.provider+' · '+plugin.version+' · '+plugin.status);if(plugin.provider==='claude')button(plugin.enabled?'Disable in Claude':'Enable in Claude',async()=>{await api.plugins({action:'toggle',provider:plugin.provider,id:plugin.id,enabled:!plugin.enabled,cwd:typeof cwd==='string'?cwd:undefined});await open('Plugins');},node);}
@@ -44,6 +46,29 @@
     for(const server of result.servers){const node=row(server.name,'MCP · '+server.authStatus+' · '+server.tools+' tools');if(/notloggedin|not_logged_in/i.test(server.authStatus||''))button('Connect',async()=>{const result=await api.pluginConnect({name:server.name});await api.openLink(result.url);},node);}
     if(result.skills.length){const details=el('details');details.append(el('summary',result.skills.length+' available Codex skills'),el('pre',result.skills.map(skill=>(skill.enabled?'✓ ':'– ')+skill.name).join('\n')));body.append(details);}
     button('Refresh',()=>open('Plugins'));status.textContent=result.errors.join('\n')||'Provider plugins discovered. Availability can vary by project and provider permissions.';
+  }
+  async function showIntegrations(version){
+    body.append(el('p','Tools added here are available to Assistant and Colab. Colab can start enabled integrations when needed, and can request to add Windows computer control. Every tool action asks for approval. Read-only reviews cannot control apps.'));
+    status.textContent='Checking integrations…';const result=await api.integrations();if(version!==generation)return;
+    if(!result?.integrations){status.textContent='Restart ATLAS to load tools support.';return;}
+    if(result.windowsAvailable&&!result.integrations.some(item=>item.id==='windows')){
+      const node=row('Windows computer control','Inspect windows, open apps, click, type and capture the screen using Windows-MCP. Starting it may download Python 3.14 and Windows-MCP.');
+      button('Add Windows control',async()=>{await api.integrations({action:'save',integration:result.preset});await open('Tools');},node);
+      button('About Windows-MCP',()=>api.openLink('https://github.com/CursorTouch/Windows-MCP'),node);
+    }
+    if(result.windowsAvailable&&!result.runtimeInstalled){const node=row('Windows tool runtime','Downloads uv from astral.sh into ATLAS data. Your system PATH is unchanged.');button('Install runtime',async()=>{status.textContent='Installing uv… This may take a few minutes.';await api.integrations({action:'install'});await open('Tools');},node);button('Download instructions',()=>api.openLink('https://docs.astral.sh/uv/getting-started/installation/'),node);}
+    for(const item of result.integrations){
+      const node=row(item.name,(item.enabled?'Enabled':'Disabled')+' · '+item.status+' · '+item.tools+' tools'+(item.error?' · '+item.error:''));
+      button(item.enabled?'Disable':'Enable',async()=>{await api.integrations({action:'enable',id:item.id,enabled:!item.enabled});await open('Tools');},node);
+      if(item.enabled)button(item.status==='Ready'?'Check connection':'Start / check',async()=>{status.textContent='Starting '+item.name+'… First launch may download dependencies.';await api.integrations({action:'start',id:item.id});await open('Tools');},node);
+      if(item.status==='Ready'||item.status==='Starting')button('Stop and disable',async()=>{await api.integrations({action:'stop',id:item.id});await open('Tools');},node);
+      button('Remove',async()=>{await api.integrations({action:'remove',id:item.id});await open('Tools');},node);
+    }
+    const custom=el('details');custom.append(el('summary','Add another MCP integration'));body.append(custom);
+    const id=field('ID (lowercase, e.g. browser)','input',custom),name=field('Display name','input',custom),command=field('Executable (for a local stdio server)','input',custom),args=field('Arguments as a JSON array','input',custom),url=field('Or a streamable HTTP MCP URL','input',custom);args.value='[]';
+    custom.append(el('p','Only add a server you trust. Starting a local server runs its executable on this computer. Use existing provider connections for integrations requiring OAuth or secret headers.'));
+    button('Add integration',async()=>{await api.integrations({action:'save',integration:{id:id.value.trim(),name:name.value.trim(),command:command.value.trim(),args:JSON.parse(args.value||'[]'),url:url.value.trim(),enabled:true}});await open('Tools');},custom);
+    button('Refresh',()=>open('Tools'));status.textContent='Enabled tools start on demand and stay running until stopped or ATLAS closes. Approval bypass does not bypass ATLAS tool approvals.';
   }
   async function showSetup(version){
     const folderLabel=el('p','Choose an existing or empty project folder.');body.append(folderLabel);

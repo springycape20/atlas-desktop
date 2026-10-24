@@ -2,7 +2,7 @@ const path=require('node:path');
 const {detectProject}=require('./project-tools');
 const {createPluginDiscovery}=require('./plugin-discovery');
 const {createTaskQueue}=require('./task-queue');
-function registerProductivityIpc({ipcMain,app,dialog,window,trusted,workspace,jobs,approvals,findCodex,findClaude,codex,history,run,canRun}){
+function registerProductivityIpc({ipcMain,app,dialog,window,trusted,workspace,jobs,approvals,findCodex,findClaude,codex,history,run,canRun,integrations}){
   const send=(name,value)=>{const win=window();if(win&&!win.isDestroyed())win.webContents.send('atlas:'+name,value);};
   const queue=createTaskQueue({directory:app.getPath('userData'),run,canRun,notify:value=>send('queue',value)}),plugins=createPluginDiscovery({findCodex,findClaude,codex});
   const handle=(name,fn)=>ipcMain.handle('atlas:'+name,async(event,request={})=>{if(!trusted(event))throw Error('Untrusted app window.');return fn(request);});
@@ -12,6 +12,16 @@ function registerProductivityIpc({ipcMain,app,dialog,window,trusted,workspace,jo
   });
   handle('approvals',request=>request.action==='answer'?approvals.answer(request.id,request.choice,request.text):approvals.list());
   handle('plugins',request=>request.action==='toggle'?plugins.toggle(request):plugins.list(request.cwd));
+  handle('integrations',async request=>{
+    if(!integrations)throw Error('Restart ATLAS to load integration support.');
+    if(request.action==='save')return integrations.save(request.integration);
+    if(request.action==='enable')return integrations.enable(request.id,request.enabled);
+    if(request.action==='remove')return integrations.remove(request.id);
+    if(request.action==='stop'){await integrations.enable(request.id,false);return integrations.list();}
+    if(request.action==='start'){await integrations.start(request.id);return integrations.list();}
+    if(request.action==='install'){await integrations.installRuntime();return integrations.list();}
+    return integrations.list();
+  });
   handle('plugin-connect',async request=>{
     const status=await codex('mcpServerStatus/list',{limit:100});if(!(status.data||[]).some(row=>row.name===request.name))throw Error('Unknown MCP server. Refresh Plugins.');
     const result=await codex('mcpServer/oauth/login',{name:request.name});if(typeof result.authorizationUrl!=='string')throw Error('The provider did not return a sign-in URL.');return {url:result.authorizationUrl};

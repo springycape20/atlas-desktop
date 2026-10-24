@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('atlas', {
   taskQueue: request=>ipcRenderer.invoke('atlas:task-queue',request),
   approvals: request=>ipcRenderer.invoke('atlas:approvals',request),
   plugins: request=>ipcRenderer.invoke('atlas:plugins',request),
+  integrations: request=>ipcRenderer.invoke('atlas:integrations',request),
   pluginConnect: request=>ipcRenderer.invoke('atlas:plugin-connect',request),
   projectSetup: request=>ipcRenderer.invoke('atlas:project-setup',request),
   searchWork: request=>ipcRenderer.invoke('atlas:search-work',request),

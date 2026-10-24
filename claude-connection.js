@@ -6,6 +6,9 @@ class ClaudeConnection{
     if(this.closed)throw Error('Claude connection is closed. Retry to reconnect.');if(this.ready)return this.ready;
     const args=['--print','--input-format','stream-json','--output-format','stream-json','--verbose','--include-partial-messages','--permission-prompt-tool','stdio',this.resume?'--resume':'--session-id',this.sessionId];
     if(this.settings.claudeModel)args.push('--model',this.settings.claudeModel);
+    // The ATLAS gateway performs the action approval, avoiding a second prompt
+    // for the wrapper itself. Other provider tools keep their normal rules.
+    if(this.settings.atlasMcp)args.push('--mcp-config',JSON.stringify({mcpServers:{atlas_tools:{type:'http',url:this.settings.atlasMcp.url,headers:this.settings.atlasMcp.headers}}}),'--allowedTools',['integrations_list','integrations_add','integrations_start','integrations_call','integrations_stop'].map(name=>'mcp__atlas_tools__'+name).join(','));
     if(this.settings.readOnly)args.push('--tools','Read,Glob,Grep,WebSearch,WebFetch','--permission-mode','plan');else if(this.settings.permissionBypass)args.push('--dangerously-skip-permissions');
     const env=this.settings.effort?{...process.env,CLAUDE_CODE_EFFORT_LEVEL:this.settings.effort}:process.env,spec=this.launch(this.executable,args,env);
     const child=this.child=this.spawnProcess(spec.executable,spec.args,{cwd:this.cwd,env:spec.env,windowsHide:true,shell:false,stdio:['pipe','pipe','pipe']});
@@ -63,7 +66,7 @@ class ClaudeConnection{
 class ClaudeConnectionPool{
   constructor(options={}){this.options=options;this.workers=new Set();this.sessions=new Set();this.noReset=new Set();this.closed=false;}
   async run(options){
-    if(this.closed)throw Error('ATLAS is closing.');const key=JSON.stringify([options.executable,path.resolve(options.cwd),options.owner||'',options.settings.claudeModel||'',options.settings.effort||'',Boolean(options.settings.readOnly),Boolean(options.settings.permissionBypass)]),session=options.sessionId;
+    if(this.closed)throw Error('ATLAS is closing.');const key=JSON.stringify([options.executable,path.resolve(options.cwd),options.owner||'',options.settings.claudeModel||'',options.settings.effort||'',Boolean(options.settings.readOnly),Boolean(options.settings.permissionBypass),options.settings.atlasMcp||null]),session=options.sessionId;
     if(session&&this.sessions.has(session))throw Error('This Claude conversation is already working.');
     if(session)this.sessions.add(session);let worker;
     try{

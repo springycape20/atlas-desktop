@@ -54,6 +54,14 @@ function changes(){return changeTrackerService ||= require('./change-tracker').c
 async function beginChanges(job,previous){if(!job)return;try{job.cwd=await require('node:fs/promises').realpath(job.cwd);job.changeId=previous?.changeId&&previous.cwd===job.cwd?previous.changeId:await changes().capture(job.id,job.cwd);await persistJobs();}catch(error){job.changesError='Change tracking unavailable: '+error.message;}emitJobs();}
 const approvals=require('./approval-manager').createApprovalManager(value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:approvals',value);});
 let productivity, startAssistant;
+let integrationService;
+function integrations(){return integrationService ||= require('./integration-service').createIntegrationService({directory:app.getPath('userData'),approvals,activity:(job,event)=>{job.events.push({...event,at:Date.now()});job.events=job.events.slice(-100);emitJobs();}});}
+async function withIntegrations(provider,job,settings,signal,run){
+  const owner=job?.collaboration?'colab:'+job.colabChatId:'assistant:'+(job?.conversationId||job?.id||randomUUID());
+  const binding=await integrations().bind({provider,owner,job,readOnly:settings.readOnly===true,signal});
+  try{return await run({...settings,...(binding.config?{atlasMcp:binding.config}:{})},binding.config?'ATLAS tools: use atlas_tools integrations_list/add/start/call for MCP integrations. The windows preset can be added with user approval. Only propose other integrations when the user requests them; show their configuration for approval using integrations_add. Inspect tool schemas and current screen before acting. Each action needs approval. Never claim desktop access or success without a tool result. Read-only reviews cannot use these tools.\n\n':'');}
+  finally{binding.release();}
+}
 async function finishTask(job){
   approvals.cancelJob(job.id);
   if(job.changeId)try{await changes().seal(job.changeId);}catch(error){job.changesError='Checkpoint could not be finalized: '+error.message;}
@@ -147,6 +155,7 @@ app.on('before-quit', event => {
     if (job.promise) finishing.push(job.promise);
   }
   codexConnection?.close(); claudeConnections?.close(); providerHistory.close(); cancelVoiceRequests(); clearTimeout(jobsEmitTimer);
+  if(integrationService)finishing.push(integrationService.close());
   void (async () => {
     let timer;
     try { await Promise.race([Promise.allSettled(finishing), new Promise(resolve => { timer = setTimeout(resolve, 5000); })]); }
@@ -334,7 +343,7 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
     const job=jobContext.getStore(),controller=new AbortController(),oldInterrupt=job?.interrupt,abortParent=()=>controller.abort();
     job?.signal?.addEventListener('abort',abortParent,{once:true});if(job?.signal?.aborted||job?.stopped)controller.abort();if(job)job.interrupt=()=>controller.abort();
     reportProviderProgress('claude','Claude connected · working');
-    try{return await claudeConnections.run({executable,cwd,settings,prompt,sessionId:previousSessionId,owner:job?.collaboration?'colab:'+job.colabChatId:'assistant:'+(job?.conversationId||previousSessionId||randomUUID()),signal:controller.signal,onText,job:job||{},manager:approvals,onSession:id=>{if(job)job.sessionId=id;},activity:activity=>{if(job){job.events.push({...activity,provider:'claude',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}});}
+    try{return await withIntegrations('claude',job,settings,controller.signal,(connectedSettings,prefix)=>claudeConnections.run({executable,cwd,settings:connectedSettings,prompt:prefix+prompt,sessionId:previousSessionId,owner:job?.collaboration?'colab:'+job.colabChatId:'assistant:'+(job?.conversationId||previousSessionId||randomUUID()),signal:controller.signal,onText,job:job||{},manager:approvals,onSession:id=>{if(job)job.sessionId=id;},activity:activity=>{if(job){job.events.push({...activity,provider:'claude',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}}));}
     finally{job?.signal?.removeEventListener('abort',abortParent);if(job)job.interrupt=oldInterrupt||null;}
   }
 
@@ -348,8 +357,8 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   if(job?.signal?.aborted)controller.abort();
   if(job){job.interrupt=()=>controller.abort();if(job.stopped)controller.abort();}
   reportProviderProgress('codex','Codex connected · working');
-  try{return await codexConnection.run({prompt,cwd,settings,sessionId:previousSessionId,onText,signal:controller.signal,
-    onSession:id=>{if(job)job.sessionId=id;},onApproval:(method,params)=>require('./approval-manager').codexApproval(approvals,{id:job?.id,signal:controller.signal},method,params),activity:event=>{if(job){job.events.push({...event,provider:'codex',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}});}
+  try{return await withIntegrations('codex',job,settings,controller.signal,(connectedSettings,prefix)=>codexConnection.run({prompt:prefix+prompt,cwd,settings:connectedSettings,sessionId:previousSessionId,onText,signal:controller.signal,
+    onSession:id=>{if(job)job.sessionId=id;},onApproval:(method,params)=>require('./approval-manager').codexApproval(approvals,{id:job?.id,signal:controller.signal},method,params),activity:event=>{if(job){job.events.push({...event,provider:'codex',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}}));}
   finally{job?.signal?.removeEventListener('abort',abortParent);if(job)job.interrupt=previousInterrupt||null;}
 
 }
@@ -455,7 +464,7 @@ async function startCollaboration(event, input) {
 
 function setupIpc() {
   require('./chat-import').registerChatImportIpc({ipcMain,trusted:isTrustedSender,history:providerHistory,transaction:transactAtlasHistory,dialog,window:()=>mainWindow,home:app.getPath('home')});
-  productivity=require('./productivity-ipc').registerProductivityIpc({ipcMain,app,dialog,window:()=>mainWindow,trusted:isTrustedSender,workspace,jobs:()=>[...activeJobs.values()],approvals,findCodex:findCodexExecutable,findClaude:findClaudeExecutable,history:readAtlasHistory,codex:async(method,params)=>{const executable=findCodexExecutable();if(!executable)throw Error('Codex is not installed.');codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);await codexConnection.connect();return codexConnection.request(method,params);},run:async(row)=>{
+  productivity=require('./productivity-ipc').registerProductivityIpc({ipcMain,app,dialog,integrations:integrations(),window:()=>mainWindow,trusted:isTrustedSender,workspace,jobs:()=>[...activeJobs.values()],approvals,findCodex:findCodexExecutable,findClaude:findClaudeExecutable,history:readAtlasHistory,codex:async(method,params)=>{const executable=findCodexExecutable();if(!executable)throw Error('Codex is not installed.');codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);await codexConnection.connect();return codexConnection.request(method,params);},run:async(row)=>{
     const event={sender:mainWindow.webContents,senderFrame:{url:mainWindow.webContents.getURL()}};
     if(row.provider==='colab'){const result=await startCollaboration(event,{task:row.prompt,cwd:row.cwd,profileId:row.profileId,roles:row.roles,isolated:true});await activeJobs.get(result.id).promise;const job=activeJobs.get(result.id);return {jobId:result.id,checksFailed:job.verification?.status==='failed',needsAttention:job.result?.outcome!=='completed',reason:job.result?.limitation};}
     const id=randomUUID();await startAssistant(event,{requestId:id,prompt:row.prompt,cwd:row.cwd,profileId:row.profileId});return {jobId:id,checksFailed:activeJobs.get(id).verification?.status==='failed'};

@@ -1,12 +1,11 @@
-ATLAS 0.6.6 fixes Colab tasks endlessly reviewing and reopening each other's work.
+ATLAS 0.6.7 adds a cleaner sidebar and computer-control integrations for Codex and Claude.
 
-- A final approving review now ends the task immediately. A successful build/review takes two passes; proposal and compare workflows take four successful passes.
-- Fixes address evidenced blockers in the original task. Optional improvements remain notes and do not trigger more passes.
-- Repeated unresolved work, regression swapping, or known lack of workspace progress pauses for attention instead of looping. Unlimited passes remain available for tasks making progress, and optional pass caps still apply.
-- Missing or malformed completion verdicts receive one read-only clarification. If clarification fails, the task pauses with its work preserved.
-- Saved stages retain the next workflow step and fixed scope. Resuming cannot skip proposal or synthesis stages, and changed tracked files must be reviewed before acceptance.
-- A review cannot approve tracked workspace changes made during that review or after a review whose verdict is being clarified. These checks depend on a complete tracked-workspace fingerprint.
-- Needs-attention and pass-limit outcomes pause queues, show attention notifications, and never claim successful completion or run completion checks. Cancelled tasks keep their cancelled state.
-- Preserves the Workbench, plugins, checkpoints, code editor, usage circles, compact effort control, and other features from v0.6.5.
+- Matching folder, history, diagnostics and workbench icons align the bottom four sidebar entries with the existing navigation.
+- Colab > Tools manages local stdio and streamable HTTP MCP integrations. Colab can request to add integrations, start them, inspect tool schemas and call tools with your approval.
+- The Windows control preset installs its runtime into ATLAS data, starts on demand and stays running until stopped or ATLAS exits. It bypasses broken uv Python minor-version shortcuts and recovers from the first-install junction error. Read-only reviewers cannot control apps; desktop actions run one at a time and always require ATLAS approval.
+- Codex and Claude provider connections stay warm across messages while preserving separate chat context. Colab follow-ups reuse their active isolated worktree.
+- Colab returns concise, task-appropriate answers without exposing internal completion protocol or appending repetitive reviews. Economy/Balanced/Thorough presets, optional task criteria, token warnings and verified-check reuse reduce unnecessary repeated context.
+- Full local Codex/Claude chat imports offer Assistant or Colab as the destination, with native chat/workspace names, searchable history and result comparisons.
+- Dirty project folders offer explicit direct editing; broad parent folders are blocked during Git setup. Includes Claude connection diagnostics and offline code syntax highlighting.
 
-Stop any existing looping task before updating. Install over your existing version to preserve settings and conversations, or use Settings → App updates → Check for updates, then Download and Restart and install. After updating, review saved work before explicitly resuming a paused task. Windows x64.
+Install over your existing version to preserve conversations and settings. Packaged installations can use Settings > App updates > Check for updates, Download, then Restart and install. Windows x64. Close older ATLAS instances before updating. Computer control uses the separate open-source Windows-MCP integration; it does not reuse the private runtime of another desktop chat.

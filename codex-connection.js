@@ -98,6 +98,7 @@ class CodexConnection {
     if(sessionId&&this.turns.has(sessionId))throw Error('This Codex conversation is already running.');
     const approvalPolicy=settings.permissionBypass?'never':'on-request';
     const params={cwd,approvalPolicy,sandbox:settings.permissionBypass?'danger-full-access':settings.codexSandbox};
+    if(settings.atlasMcp)params.config={'mcp_servers.atlas_tools':{url:settings.atlasMcp.url,http_headers:settings.atlasMcp.headers,enabled:true,required:true,tool_timeout_sec:600}};
     if(settings.codexModel)params.model=settings.codexModel;
     const result=await this.request(sessionId?'thread/resume':'thread/start',sessionId?{...params,threadId:sessionId}:params);
     const threadId=result.thread.id;onSession(threadId);
