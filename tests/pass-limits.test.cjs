@@ -5,7 +5,7 @@ const status=(decision='ready',blockingIssues=[],text='Verified result')=>text+'
 
 test('an approving final reviewer ends the task after two passes without another build',async()=>{
   const calls=[],run=createCollaboration({progress(){},runProvider:async(provider,prompt,cwd,settings)=>{calls.push({provider,prompt,settings});return {output:status('ready',[],provider==='codex'?'Implemented task':'Accepted required work; optional polish can wait')};}});
-  const result=await run({task:'Build',settings:{}});assert.equal(result.outcome,'completed');assert.equal(calls.length,2);assert.equal(calls[1].settings.readOnly,true);assert.match(calls[1].prompt,/final reviewer/);assert(result.output.includes('Implemented task'));assert(result.output.includes('Accepted required work'));
+  const result=await run({task:'Build',settings:{}});assert.equal(result.outcome,'completed');assert.equal(calls.length,2);assert.equal(calls[1].settings.readOnly,true);assert.match(calls[1].prompt,/final reviewer/);assert(result.output.includes('Implemented task'));assert(!result.output.includes('Accepted required work'));assert(!result.output.includes('Review / current status'));
 });
 
 test('unlimited passes permit long tasks that keep resolving actual blockers',async()=>{

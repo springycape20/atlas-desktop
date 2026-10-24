@@ -142,6 +142,10 @@ Colab no longer waits for consecutive READY markers from both models or runs ano
 Project profiles now include **Completion checks** and an opt-in **Run completion checks after tasks** setting. These commands execute in the actual task folder (including isolated worktrees), with output and real exit codes saved in task details. Checks have a two-minute timeout per command, can be stopped with the task, and report passed, failed, cancelled, timed out, or not checked. Configure dependencies inside isolated worktrees before relying on their checks. Read-only Colab Plan/Compare modes skip automatic commands. Check results appear in task activity and Workbench; a provider's claim that tests passed is kept separate from ATLAS's own recorded checks.
 
 
+## Colab responses
+
+Colab shows one user-facing answer, with length matched to the request: short acknowledgements for response tests/greetings, concise outcomes for ordinary work, and full explanations/code/evidence when depth is needed. Internal status JSON, proposal selection, reviewer approval and protocol-repair chatter stay in saved stage reports instead of being appended to successful answers. Blocking issues and material limitations remain visible. Reviewers can supply a final `userResponse`; older stages fall back to the builder answer without adding the review transcript. A plain `test` is a response check; ask explicitly to run project tests when that is what you need.
+
 ## Colab efficiency
 
 Colab includes **Economy**, **Balanced** (default), and **Thorough** efficiency presets under **Models, effort and working folder**. Economy uses shorter handovers/history excerpts; Balanced uses normal implementation and independent review; Thorough adds independent proposals when Roles is Auto. Choosing a role explicitly overrides that automatic proposal selection. Presets never change your model selections or manual shared effort. **Adapt shared effort for blockers** is optional: it raises both providers to High for unresolved blockers, preserving higher selected effort. Pass and runtime limits remain unlimited by default.
