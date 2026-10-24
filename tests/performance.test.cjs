@@ -174,6 +174,20 @@ test('concurrent conversation saves merge and cached reads are isolated', async 
   assert.notEqual((await h.readAtlasHistory())[0].turns[0].content, 'unsaved');
 });
 
+test('imported history persists provenance, deduplicates after saves and supplies follow-up context',async t=>{
+ const source={id:'c'.repeat(64),provider:'codex',sessionId:'original-client-session',title:'Imported project plan',turns:[{role:'user',content:'The project uses SQLite and a blue interface.'},{role:'assistant',content:'I will use that plan.'}]};let sent;
+ class FakeHistory{async request(method){if(method==='read')return source;return [];}close(){}}
+ class FakeCodex{async run(request){sent=request;return {output:'Continued the imported plan.',sessionId:'new-atlas-session'};}}
+ const h=await mainHarness(t,{modules:{'./history-client':{HistoryClient:FakeHistory},'./codex-connection':{CodexConnection:FakeCodex}}});h.setupIpc();
+ const event={sender:h.sender,senderFrame:{url:'atlas://app/index.html'}},request={action:'import',chats:[{provider:'codex',id:source.id}]};
+ const imported=await h.handlers.get('atlas:history-import')(event,request),id=imported.chats[0].id;
+ await h.handlers.get('atlas:chat')(event,{requestId:'import-followup',conversationId:id,prompt:'Use Codex to continue that plan.',cwd:h.dir});
+ assert.match(sent.prompt,/SQLite and a blue interface/);assert.equal(sent.sessionId,'');
+ const saved=(await h.readAtlasHistory()).find(chat=>chat.id===id);assert.equal(saved.importSource.sessionId,'original-client-session');assert.equal(saved.sessions.codex,'new-atlas-session');assert.equal(saved.turns.length,4);
+ const again=await h.handlers.get('atlas:history-import')(event,request);assert.equal(again.skipped,1);assert.equal((await h.readAtlasHistory())[0].turns.length,4);
+ const disk=JSON.parse(await fs.readFile(path.join(h.paths.userData,'conversations.json'),'utf8'));assert.equal(disk[0].importSource.provider,'codex');
+});
+
 test('shutdown waits for finishing jobs and flushes their latest state', async t => {
   const h = await mainHarness(t);
   const job = { id: 'shutdown-job', status: 'running' };

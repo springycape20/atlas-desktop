@@ -19,30 +19,26 @@ function parseProviderTranscript(provider, file) {
   }
   return value;
 }
-function transcriptText(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content.filter(part => part && typeof part === 'object' && typeof part.text === 'string' && (!part.type || /text/i.test(part.type))).map(part => part.text).join('\n');
+function providerRoots(provider){
+  const base=provider==='codex'?(!workerData?.home&&process.env.CODEX_HOME)||path.join(os.homedir(),'.codex'):(!workerData?.home&&process.env.CLAUDE_CONFIG_DIR)||path.join(os.homedir(),'.claude');
+  return (provider==='codex'?['sessions','archived_sessions']:['projects']).map(name=>path.resolve(base,name));
 }
 function providerFiles(provider, limit = 20) {
-  const root = path.join(os.homedir(), provider === 'codex' ? '.codex' : '.claude', provider === 'codex' ? 'sessions' : 'projects');
-  if (!existsSync(root)) return [];
-  const files = [], queue = [{ dir: root, depth: 0 }];
+  const files = [], queue = providerRoots(provider).filter(existsSync).map(dir=>({dir,depth:0}));
   while (queue.length && files.length < 1000) {
     const { dir, depth } = queue.shift(); if (depth > 6) continue;
     let entries; try { entries = readdirSync(dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) queue.push({ dir: full, depth: depth + 1 });
+      if (entry.isDirectory() && entry.name !== 'subagents') queue.push({ dir: full, depth: depth + 1 });
       else if (entry.isFile() && (entry.name.endsWith('.jsonl') || entry.name.endsWith('.jsonl.zst'))) { try { files.push({ file: full, modified: statSync(full).mtimeMs }); } catch {} }
     }
   }
   return files.sort((a, b) => b.modified - a.modified).slice(0, limit);
 }
 function parseProviderTranscriptUncached(provider, file) {
-  const base = path.resolve(os.homedir(), provider === 'codex' ? '.codex/sessions' : '.claude/projects');
   const resolved = path.resolve(file);
-  if (!resolved.startsWith(base + path.sep) || !existsSync(resolved)) throw new Error('Transcript is outside the provider history folder.');
+  if (!providerRoots(provider).some(base=>resolved.startsWith(base + path.sep)) || !existsSync(resolved)) throw new Error('Transcript is outside the provider history folder.');
   const stat = statSync(resolved); if (!stat.isFile() || stat.size > 8_000_000) throw new Error('Transcript is too large to open.');
   const bytes = require('node:fs').readFileSync(resolved);
   let raw;
@@ -51,25 +47,10 @@ function parseProviderTranscriptUncached(provider, file) {
     if (!zlib.zstdDecompressSync) throw new Error('This Electron runtime cannot read compressed Codex archives.');
     raw = zlib.zstdDecompressSync(bytes, { maxOutputLength: 32_000_000 }).toString('utf8');
   } else raw = bytes.toString('utf8');
-  const turns = []; let cwd = '', sessionId = '', updatedAt = stat.mtimeMs;
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line || line.length > 1_000_000) continue;
-    let row; try { row = JSON.parse(line); } catch { continue; }
-    let role = '', content = '';
-    if (provider === 'codex') {
-      if (row.type === 'session_meta') { cwd = row.payload?.cwd || cwd; sessionId = row.payload?.session_id || row.payload?.id || sessionId; updatedAt = Date.parse(row.payload?.timestamp || row.timestamp) || updatedAt; }
-      if (row.type === 'response_item' && ['user', 'assistant'].includes(row.payload?.role) && (row.payload.role !== 'assistant' || !row.payload.phase || row.payload.phase === 'final_answer')) { role = row.payload.role; content = transcriptText(row.payload.content); }
-    } else {
-      if (!cwd && typeof row.cwd === 'string') cwd = row.cwd;
-      if (typeof row.sessionId === 'string') sessionId = row.sessionId;
-      if (['user', 'assistant'].includes(row.type) && !row.isSidechain && row.message) { role = row.type; content = transcriptText(row.message.content); }
-    }
-    if (role && content.trim() && !/^(?:<environment_context\b|<system-reminder\b|the following is the codex agent history)/i.test(content.trim()) && !/^\[(?:typing|blank_audio)\]/i.test(content.trim())) turns.push({ role, content: content.slice(0, 12000) });
-  }
-  return { id: createHash('sha256').update(resolved).digest('hex'), sessionId, title: turns.find(turn => turn.role === 'user')?.content.replace(/\s+/g, ' ').slice(0, 76) || 'Untitled conversation', provider, cwd, updatedAt, turns: turns.slice(-50) };
+  return require('./transcript-import').jsonl(provider,raw,{id:createHash('sha256').update(resolved).digest('hex'),updatedAt:stat.mtimeMs});
 }
-function listProviderHistory(provider, query = '') {
-  return providerFiles(provider).map(({ file }) => { try { const item = parseProviderTranscript(provider, file); if(query && !(item.title+' '+item.turns.map(turn=>turn.content).join(' ')).toLowerCase().includes(query))return null; return { id: item.id, title: item.title, provider, cwd: item.cwd, updatedAt: item.updatedAt, turnCount: item.turns.length, sessionId: item.sessionId, searchText: item.turns.map(turn => turn.content).join(' ').slice(-2500) }; } catch { return null; } }).filter(item => item && item.turnCount);
+function listProviderHistory(provider, query = '', limit=20) {
+  return providerFiles(provider,limit).map(({ file }) => { try { const item = parseProviderTranscript(provider, file); if(query && !(item.title+' '+item.turns.map(turn=>turn.content).join(' ')).toLowerCase().includes(query))return null; return { id: item.id, title: item.title, provider, cwd: item.cwd, updatedAt: item.updatedAt, turnCount: item.turns.length, sessionId: item.sessionId, truncated:item.truncated,originalTurnCount:item.originalTurnCount,searchText: item.turns.map(turn => turn.content).join(' ').slice(-2500) }; } catch { return null; } }).filter(item => item && item.turnCount);
 }
 async function findReferencedProviderHistory(prompt) {
   const ignored = new Set(['able', 'about', 'after', 'also', 'another', 'asked', 'chat', 'chats', 'claude', 'codex', 'conversation', 'conversations', 'could', 'earlier', 'find', 'from', 'history', 'last', 'local', 'look', 'old', 'older', 'past', 'please', 'previous', 'read', 'saved', 'session', 'sessions', 'specific', 'thread', 'threads', 'that', 'their', 'this', 'what', 'when', 'where', 'which', 'with']);
@@ -119,10 +100,25 @@ async function findReferencedProviderHistory(prompt) {
   });
 }
 
+function readImportFile(file){
+  if(typeof file!=='string'||!path.isAbsolute(file))throw Error('Choose a transcript file.');
+  const stat=statSync(file);if(!stat.isFile()||stat.size>32000000)throw Error('Choose a transcript or export under 32 MB.');
+  const bytes=require('node:fs').readFileSync(file),raw=file.endsWith('.zst')?require('node:zlib').zstdDecompressSync(bytes,{maxOutputLength:32000000}).toString('utf8'):bytes.toString('utf8');
+  let chats;
+  if(/\.json$/i.test(file))chats=require('./transcript-import').claudeExport(raw);
+  else{
+    let provider='';for(const line of raw.replace(/^\uFEFF/,'').split(/\r?\n/).slice(0,100)){try{const row=JSON.parse(line);if(row.type==='session_meta'||row.type==='response_item'){provider='codex';break;}if(['user','assistant'].includes(row.type)&&row.message){provider='claude';break;}}catch{}}
+    if(!provider)throw Error('This file is not a recognized Codex or Claude Code transcript.');
+    chats=[require('./transcript-import').jsonl(provider,raw,{id:createHash('sha256').update(raw).digest('hex'),updatedAt:stat.mtimeMs})];
+  }
+  if(!chats.some(chat=>chat.turns.length))throw Error('No user or assistant messages were found in this file.');return chats;
+}
+
 parentPort.on('message', async ({ id, method, args }) => {
   try {
     let value;
-    if (method === 'list') value = listProviderHistory(args.provider, typeof args.query==='string'?args.query.toLowerCase().slice(0,200):'');
+    if (method === 'list') {if(!['codex','claude'].includes(args.provider))throw Error('Choose a provider.');value = listProviderHistory(args.provider, typeof args.query==='string'?args.query.toLowerCase().slice(0,200):'',Math.max(1,Math.min(1000,Number(args.limit)||20)));}
+    else if(method==='import-file')value=readImportFile(args.file);
     else if (method === 'search') value = await findReferencedProviderHistory(args.prompt);
     else if (method === 'read') {
       if (!['codex', 'claude'].includes(args.provider) || !/^[a-f0-9]{64}$/.test(args.id)) throw Error('Invalid provider history selection.');

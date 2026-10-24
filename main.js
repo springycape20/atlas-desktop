@@ -303,12 +303,14 @@ async function readAtlasHistory() {
   } catch { return []; }
 }
 let historyWriteQueue=Promise.resolve();
+function transactAtlasHistory(change){const operation=historyWriteQueue.then(async()=>persistAtlasHistory(await change(await readAtlasHistory())));historyWriteQueue=operation.catch(()=>{});return operation;}
 function writeAtlasHistory(items){const operation=historyWriteQueue.then(async()=>{const all=await readAtlasHistory();const merged=new Map(all.map(item=>[item.id,item]));for(const item of items)merged.set(item.id,item);return persistAtlasHistory([...merged.values()]);});historyWriteQueue=operation.catch(()=>{});return operation;}
 async function persistAtlasHistory(items) {
   await mkdir(app.getPath('userData'), { recursive: true });
   const trimmed = items.slice(-100).map(item => ({
     id: String(item.id).slice(0, 80), title: String(item.title || 'Conversation').slice(0, 100),
     provider: 'atlas', lastProvider: String(item.lastProvider || '').slice(0, 20), sessions: { codex: String(item.sessions?.codex || '').slice(0, 80), claude: String(item.sessions?.claude || '').slice(0, 80) }, cwd: String(item.cwd || '').slice(0, 1024),
+    ...(item.importSource?{importSource:{provider:item.importSource.provider,id:String(item.importSource.id||'').slice(0,80),sessionId:String(item.importSource.sessionId||'').slice(0,100),importedAt:Number(item.importSource.importedAt)||Date.now(),truncated:item.importSource.truncated===true,originalTurnCount:Number(item.importSource.originalTurnCount)||0}}:{}),
     updatedAt: Number(item.updatedAt) || Date.now(), turns: item.turns.slice(-80).map(turn => ({ role: turn.role === 'assistant' ? 'assistant' : 'user', content: String(turn.content || '').slice(0, 12000), provider: String(turn.provider || '').slice(0, 20), attachments:(Array.isArray(turn.attachments)?turn.attachments:[]).slice(0,8).map(({id,name,type,size})=>({id,name,type,size})), at: Number(turn.at) || Date.now() })),
   }));
   const file = atlasHistoryPath(), temp = `${file}.${randomUUID()}.tmp`;
@@ -454,6 +456,7 @@ async function startCollaboration(event, input) {
 }
 
 function setupIpc() {
+  require('./chat-import').registerChatImportIpc({ipcMain,trusted:isTrustedSender,history:providerHistory,transaction:transactAtlasHistory,dialog,window:()=>mainWindow,home:app.getPath('home')});
   productivity=require('./productivity-ipc').registerProductivityIpc({ipcMain,app,dialog,window:()=>mainWindow,trusted:isTrustedSender,workspace,jobs:()=>[...activeJobs.values()],approvals,findCodex:findCodexExecutable,findClaude:findClaudeExecutable,history:readAtlasHistory,codex:async(method,params)=>{const executable=findCodexExecutable();if(!executable)throw Error('Codex is not installed.');codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);await codexConnection.connect();return codexConnection.request(method,params);},run:async(row)=>{
     const event={sender:mainWindow.webContents,senderFrame:{url:mainWindow.webContents.getURL()}};
     if(row.provider==='colab'){const result=await startCollaboration(event,{task:row.prompt,cwd:row.cwd,profileId:row.profileId,roles:row.roles,isolated:true});await activeJobs.get(result.id).promise;const job=activeJobs.get(result.id);return {jobId:result.id,checksFailed:job.verification?.status==='failed',needsAttention:job.result?.outcome!=='completed',reason:job.result?.limitation};}

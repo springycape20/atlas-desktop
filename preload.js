@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('atlas', {
   latestConversation: () => ipcRenderer.invoke('atlas:latest-conversation'),
   historyList: request => ipcRenderer.invoke('atlas:history-list', request),
   historyRead: request => ipcRenderer.invoke('atlas:history-read', request),
+  importChats: request => ipcRenderer.invoke('atlas:history-import', request),
   openProviderSession: request => ipcRenderer.invoke('atlas:open-provider-session', request),
   getSettings: () => ipcRenderer.invoke('atlas:get-settings'),
   providerAuthStatus: () => ipcRenderer.invoke('atlas:provider-auth-status'),
