@@ -25,6 +25,24 @@ test('existing repositories are inspected without replacing ignore rules',async 
   assert.equal(await fs.readFile(path.join(dir,'.gitignore'),'utf8'),'mine/\n');
   assert.equal((await service.repository(dir)).hasCommit,true);
 });
+
+test('Colab rejects broad folders and initializes only the chosen project under an accidental home repository',async t=>{
+ const dir=await temporary(t),home=path.join(dir,'user'),repo=path.join(home,'Documents','Game');await fs.mkdir(repo,{recursive:true});
+ await command('git',['-C',home,'init']);await fs.writeFile(path.join(home,'personal.txt'),'Personal file, outside the selected project.');await command('git',['-C',home,'add','--','personal.txt']);
+ const parentIndex=await command('git',['-C',home,'ls-files','--stage']),parentHead=await fs.readFile(path.join(home,'.git','HEAD'),'utf8');
+ await fs.writeFile(path.join(repo,'game.py'),'print("game")\n');const service=createWorkspaceService(path.join(dir,'data'),{home,env:{}});
+ await assert.rejects(service.repository(home),/dedicated project folder/);await assert.rejects(service.initializeRepository(path.join(home,'Documents')),/dedicated project folder/);
+ const status=await service.repository(repo);assert.equal(status.exists,false);assert.equal(status.needsOwnRepository,true);assert.equal(status.ancestorRoot,await fs.realpath(home));assert.equal(status.root,await fs.realpath(repo));
+ await assert.rejects(service.createWorktree(repo),/inside the selected project/);
+ await service.initializeRepository(repo);const local=await service.repository(repo);assert.equal(local.hasCommit,true);assert.equal(local.root,await fs.realpath(repo));
+ assert.equal(await command('git',['-C',home,'ls-files','--stage']),parentIndex);assert.equal(await fs.readFile(path.join(home,'.git','HEAD'),'utf8'),parentHead);
+ assert.equal(await command('git',['-C',repo,'ls-files','personal.txt']),'');const tree=await service.createWorktree(repo);assert.equal((await fs.readFile(path.join(tree.path,'game.py'),'utf8')).replace(/\r\n/g,'\n'),'print("game")\n');
+});
+
+test('safe monorepository subfolders keep using their actual project root',async t=>{
+ const dir=await temporary(t),home=path.join(dir,'home'),repo=path.join(home,'Projects','App'),child=path.join(repo,'src');await fs.mkdir(child,{recursive:true});
+ await command('git',['-C',repo,'init']);const service=createWorkspaceService(path.join(dir,'data'),{home,env:{}});await service.initializeRepository(repo);assert.equal((await service.repository(child)).root,await fs.realpath(repo));
+});
 test('model discovery coalesces requests, persists models and survives offline refresh',async t=>{
   const dir=await temporary(t);let calls=0,offline=false;
   const catalog=createModelCatalog({directory:dir,discover:async()=>{calls++;if(offline)throw Error('Offline');return [{id:'new-model',displayName:'New Model'},{id:'bad model'}];}});
@@ -68,6 +86,12 @@ test('Git setup requires confirmation and rejects untrusted windows',async()=>{
   assert.equal((await prepare({trusted:true},{cwd:'/project'})).ready,false);assert.equal(initializations,0);
   response=0;assert.equal((await prepare({trusted:true},{cwd:'/project'})).ready,true);assert.equal(initializations,1);
   await assert.rejects(prepare({trusted:false},{cwd:'/project'}),/Untrusted/);
+});
+
+test('inherited broad repositories prompt for a separate repository in the selected folder',async()=>{
+ const handlers=new Map();let prompt,initialized;
+ registerWorkspaceIpc({ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},trusted:()=>true,window:()=>null,service:()=>({repository:async()=>({exists:false,root:'C:\\Users\\Friend\\Documents\\Game',ancestorRoot:'C:\\Users\\Friend',needsOwnRepository:true}),initializeRepository:async folder=>{initialized=folder;}}),dialog:{showMessageBox:async(_window,options)=>{prompt=options;return {response:0};}}});
+ const result=await handlers.get('atlas:prepare-project')({},{cwd:'C:\\Users\\Friend\\Documents\\Game'});assert.equal(result.ready,true);assert.equal(initialized,'C:\\Users\\Friend\\Documents\\Game');assert.match(prompt.detail,/leave the parent repository intact/);assert.match(prompt.detail,/Parent repository/);
 });
 
 test('screenshot paste reads Electron async PNG clipboard and preserves bytes',async()=>{

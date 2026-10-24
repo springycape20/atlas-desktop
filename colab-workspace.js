@@ -195,7 +195,7 @@
     event.preventDefault(); const chat = current(), task = el('colabTask').value.trim();
     if (!historyReady || chat.busy || chat.preparing || !task) return;
     if (!chat.cwd) { chat.status = 'Choose a working folder before sending.'; el('colabConfig').open = true; render(); return; }
-    if(chat.isolated!==false&&!['plan','compare'].includes(chat.mode)){chat.preparing=true;render();try{const prepared=await window.atlas.prepareProject(chat.cwd);if(!prepared.ready)return;}catch(error){chat.status=error.message;return;}finally{chat.preparing=false;render();}}
+    if(chat.isolated!==false&&!['plan','compare'].includes(chat.mode)){chat.preparing=true;render();try{const prepared=await window.atlas.prepareProject(chat.cwd);if(!prepared.ready)return;}catch(error){chat.status=error.message.replace(/^Error invoking remote method '[^']+': Error: /,'');el('colabConfig').open=true;return;}finally{chat.preparing=false;render();}}
     const context = chat.messages.filter(message => !message.error).slice(-12).map(({ role, content }) => ({ role, content }));
     const attached=window.atlasWorkspace?.takeAttachments('colab',chat.id)||{request:{},files:[]};
     forceLatest.add(chat.id);chat.updatedAt=Date.now();chat.messages.push({ id:crypto.randomUUID(),at:Date.now(),role: 'user', content: task, attachments:attached.files }); chat.draft = ''; if(!chat.customTitle)chat.title = chat.messages.find(message => message.role === 'user').content.slice(0, 60);

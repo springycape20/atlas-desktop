@@ -13,7 +13,8 @@ async function command(executable, args, cwd, extra = {}) {
   try { const result = await exec(executable, args, { cwd, windowsHide:true, shell:false, timeout:30000, maxBuffer:8*1024*1024, env:{...process.env,GIT_TERMINAL_PROMPT:'0'}, ...options }); return (result.stdout+(includeStderr?result.stderr:"")).trimEnd(); }
   catch (error) { throw Object.assign(new Error((String(error.stderr || error.message)).slice(-3000)),{stdout:error.stdout}); }
 }
-function createWorkspaceService(directory) {
+function createWorkspaceService(directory,options={}) {
+  const projectRoots=require('./project-root').createProjectRootGuard(options);
   const store = require('./atomic-store').createAtomicStore(path.join(directory, 'workspace-data.json'));
   let data, loading, queue = Promise.resolve();
   async function state() {
@@ -63,10 +64,12 @@ function createWorkspaceService(directory) {
   const git=(folder,args)=>command('git',['-C',folder,...args]);
   const initialIgnore=['node_modules/','dist/','build/','vendor/','.venv/','venv/','__pycache__/','.env','.env.*','!.env.example','*.pem','*.key','credentials*.json','.DS_Store'];
   async function repository(cwd){
-    const folder=await fs.realpath(cwd);if(!(await fs.stat(folder)).isDirectory())throw Error('Choose a project folder.');
-    try{return {exists:true,root:await git(folder,['rev-parse','--show-toplevel']),hasCommit:Boolean(await git(folder,['rev-parse','--verify','HEAD']).catch(()=>''))};}
+    const folder=await projectRoots.assertProject(cwd);
+    let root;try{root=await fs.realpath(await git(folder,['rev-parse','--show-toplevel']));}
     catch(error){if(!/not a git repository/i.test(error.message))throw Error('Git is unavailable or the repository cannot be read. Install Git using Diagnostics, then restart ATLAS.');}
-    return {exists:false,root:folder};
+    if(!root)return {exists:false,root:folder};
+    if(await projectRoots.isProtected(root))return {exists:false,root:folder,ancestorRoot:root,needsOwnRepository:true};
+    return {exists:true,root,hasCommit:Boolean(await git(folder,['rev-parse','--verify','HEAD']).catch(()=>''))};
   }
   async function initializeRepository(cwd){return serial(async()=>{
     const status=await repository(cwd),folder=status.root;
@@ -82,7 +85,8 @@ function createWorkspaceService(directory) {
     return repository(folder);
   });}
   async function createWorktree(cwd){return serial(async()=>{
-    const root=await fs.realpath(await git(cwd,['rev-parse','--show-toplevel']));
+    const status=await repository(cwd);if(!status.exists||!status.hasCommit)throw Error('Set up a Git repository inside the selected project folder before starting isolated Colab. An unrelated parent repository cannot be used.');
+    const root=status.root;
     if((await git(root,['status','--porcelain'])).trim())throw Error('Isolated work starts from a clean Git checkout. Commit or stash your current changes first, or explicitly choose direct editing.');
     const id=randomUUID(),destination=path.join(directory,'worktrees',id),baseSha=await git(root,['rev-parse','HEAD']);
     const branch=await git(root,['symbolic-ref','--short','HEAD']).catch(()=> '');
