@@ -9,7 +9,7 @@ for(const file of ['integration-service.js','desktop-permissions.js','desktop-ac
 assert.ok(asar.extractFile(archive,path.join('node_modules','@modelcontextprotocol','sdk','package.json')).length>0,'Missing MCP SDK runtime');
 for (const file of ['claude-connection.js','colab-workspace-reuse.js','colab-answer.js','colab-efficiency.js','verification-cache.js','code-syntax.js','syntax-worker.js','syntax-highlight.js','claude-runtime.js','chat-import.js','transcript-import.js','colab-history.js','project-root.js','provider-catalog.js','assistant-chat.js']) assert.ok(asar.extractFile(archive,file).length>0,`Missing syntax highlighting runtime: ${file}`);
 assert.equal(packaged.version, version);
-if (process.env.GITHUB_REF_NAME) assert.equal(process.env.GITHUB_REF_NAME, `v${version}`);
+if (process.env.GITHUB_REF_TYPE === 'tag') assert.equal(process.env.GITHUB_REF_NAME, `v${version}`);
 for (const file of ['model-catalog.js', 'app-updates.js', 'settings-discovery.js', 'workspace-service.js', 'workspace-ipc.js', 'workspace-extras.js', 'colab-workspace.js', 'provider-install.js', 'collaboration.js', 'task-notifications.js', 'provider-usage.js', 'provider-usage-ui.js', 'change-tracker.js', 'change-ipc.js', 'change-editor.js', 'approval-manager.js', 'claude-control.js', 'task-queue.js', 'project-tools.js', 'plugin-discovery.js', 'productivity-ipc.js', 'productivity-ui.js', 'main.js', 'index.html']) {
   assert.ok(asar.extractFile(archive, file).length > 0, `Missing packaged app file: ${file}`);
 }

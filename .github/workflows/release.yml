@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual runs build and verify everything, then publish only a draft that
+  # creates no tag and is invisible to the in-app updater.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -40,6 +43,8 @@ jobs:
         run: node build/verify-release.cjs
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          draft: ${{ github.ref_type != 'tag' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('ci-draft-{0}', github.run_id) }}
           generate_release_notes: true
           body_path: build/release-notes.md
           fail_on_unmatched_files: true
