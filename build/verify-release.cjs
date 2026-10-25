@@ -7,6 +7,7 @@ const archive = path.join(__dirname, '..', 'dist', 'win-unpacked', 'resources', 
 const packaged = JSON.parse(asar.extractFile(archive, 'package.json').toString());
 for (const file of [
   'app-log.js',
+  'uninstall-entry.js',
   'app-ui.js',
   'integration-service.js',
   'desktop-permissions.js',
@@ -121,3 +122,16 @@ assert.ok(
   asar.extractFile(archive, path.join('node_modules', 'diff', 'package.json')).length > 0,
   'Missing change editor diff runtime',
 );
+
+// Packaged ATLAS must not run arbitrary scripts as Node.js; check the built executable itself.
+const { getCurrentFuseWire, FuseV1Options } = require('@electron/fuses');
+getCurrentFuseWire(path.join(__dirname, '..', 'dist', 'win-unpacked', 'ATLAS.exe'))
+  .then((wire) => {
+    for (const fuse of ['RunAsNode', 'EnableNodeOptionsEnvironmentVariable', 'EnableNodeCliInspectArguments'])
+      assert.equal(String.fromCharCode(wire[FuseV1Options[fuse]]), '0', `${fuse} must be disabled in ATLAS.exe`);
+    console.log('Verified ATLAS.exe fuses: run-as-Node, NODE_OPTIONS and --inspect are disabled.');
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

@@ -104,7 +104,12 @@
         "repo": "atlas-desktop",
         "releaseType": "release"
       }
-    ]
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false
+    }
   },
   "overrides": {
     "sharp": "0.35.5"
