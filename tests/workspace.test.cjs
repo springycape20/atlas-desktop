@@ -85,6 +85,8 @@ test('all renderer scripts parse, including the HTML inline scripts', async () =
   for(const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
 });
 
+test('the app page has no inline scripts and its policy blocks them',async()=>{const html=await fs.readFile(path.join(__dirname,'..','index.html'),'utf8');assert.equal([...html.matchAll(/<script(?![^>]*src=)[^>]*>/g)].length,0,'Move inline scripts into a served .js file');const policy=html.match(/Content-Security-Policy" content="([^"]+)"/)[1];assert.match(policy,/script-src 'self';/);assert.doesNotMatch(policy,/script-src[^;]*unsafe-inline/);});
+
 test('the real app protocol serves every renderer script while blocking private files and other hosts',async()=>{
   const root=path.join(__dirname,'..'),source=await fs.readFile(path.join(root,'main.js'),'utf8'),html=await fs.readFile(path.join(root,'index.html'),'utf8');
   const match=source.match(/await protocol\.handle\('atlas', async request => \{([\s\S]*?)\n  \}\);/);assert(match,'App protocol handler must be testable');
