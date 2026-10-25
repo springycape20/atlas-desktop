@@ -20,6 +20,25 @@ function normalizePassLimit(value) {
     throw Error('Set a positive whole-number pass limit, or leave it blank for unlimited.');
   return limit;
 }
+// Debug mode: how the bug was reproduced, as reported by the provider that reproduced it.
+function cleanReproduction(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const field = (name, limit = 2000) => (typeof value[name] === 'string' ? value[name].trim().slice(0, limit) : '');
+  const files = Array.isArray(value.files)
+    ? value.files
+        .filter((file) => typeof file === 'string' && file.trim())
+        .slice(0, 10)
+        .map((file) => file.slice(0, 300))
+    : [];
+  const result = {
+    steps: field('steps'),
+    command: field('command', 500),
+    files,
+    observed: field('observed'),
+    expected: field('expected'),
+  };
+  return result.steps || result.command || result.observed ? result : null;
+}
 function parseVerdict(value) {
   const raw = String(value || '').trim(),
     match = [...raw.matchAll(/^[ \t*_\x60]*ATLAS_COLAB_STATUS\b/gm)].at(-1),
@@ -83,6 +102,7 @@ function parseVerdict(value) {
         criteria: criteria || [],
         disputed: [...disputes.keys()],
         disputes: [...disputes].map(([id, reason]) => ({ id, reason })),
+        reproduction: cleanReproduction(data.reproduction),
         userResponse: typeof data.userResponse === 'string' ? data.userResponse.slice(0, 60000) : '',
         handover: efficiency.cleanHandover(data.handover),
         output: raw
@@ -201,6 +221,8 @@ function createCollaboration({
       !answer.isSimpleMessage(task)
     )
       roles = 'proposals';
+    // Debug mode starts from a reproduction instead of competing proposals.
+    if (mode === 'debug' && roles === 'proposals') roles = 'codex-builds';
     const passLimit = normalizePassLimit(maxRounds),
       limit = passLimit ?? Infinity,
       readonly = ['plan', 'compare'].includes(mode),
@@ -255,11 +277,13 @@ function createCollaboration({
       : {
           phase: reports.length
             ? legacyPhase
-            : mode === 'compare' || roles === 'proposals'
-              ? 'proposal_first'
-              : readonly
-                ? 'draft'
-                : 'build',
+            : mode === 'debug'
+              ? 'reproduce'
+              : mode === 'compare' || roles === 'proposals'
+                ? 'proposal_first'
+                : readonly
+                  ? 'draft'
+                  : 'build',
           criteria: [{ id: 'TASK', text: task }],
           openIssues: [],
           stalls: 0,
@@ -408,7 +432,7 @@ function createCollaboration({
         proposing = target.startsWith('proposal_');
       const provider = clarifying
         ? state.clarify.provider
-        : reviewing || phase === 'proposal_second'
+        : reviewing || phase === 'proposal_second' || target === 'reproduce'
           ? reviewer
           : builder;
       const readOnly = readonly || reviewing || proposing || clarifying;
@@ -428,6 +452,7 @@ function createCollaboration({
         proposal_second: 'giving an independent proposal',
         synthesis: 'synthesizing the proposals',
         clarify: 'clarifying the completion verdict',
+        reproduce: 'reproducing the bug',
       };
       progress(
         (provider === 'codex' ? 'Codex' : 'Claude') +
@@ -467,14 +492,16 @@ function createCollaboration({
           ? 'Give an independent proposal for the original request; do not edit files. Proposals do not approve implementation.'
           : reviewing
             ? 'You are the final reviewer, not a second implementer. Verify the current work against the fixed acceptance criteria. Approve with ready when required work is satisfied. Do not edit files. Only concrete in-scope blockers can request a fix. After the first review, inspect only the open issues and actual regressions introduced by the fix; new regressions require regression:true and specific evidence. Do not reopen resolved issues or optional improvements.'
-            : target === 'fix' || target === 'revise'
-              ? 'Address only the listed open blocking issues, preserving all correct work. Do not broaden the task. If a blocker is impossible or needs a user decision, report blocked.'
-              : phase === 'synthesis'
-                ? 'Synthesize the two independent analyses into the requested final comparison. Do not edit files or execute commands.'
-                : 'Complete the original request. Derive a short list of acceptance criteria directly from it in the criteria array; do not add optional work. ' +
-                  (roles === 'proposals'
-                    ? 'Choose or combine the two proposals and state the selected approach before implementing.'
-                    : '');
+            : target === 'reproduce'
+              ? 'You are reproducing a reported bug before anyone fixes it. Find the smallest reliable reproduction, preferably an automated test in the existing test suite that fails because of the bug. Do not fix the bug or change application code. Describe it in the status JSON as reproduction: {"steps":"...","command":"...","files":[...],"observed":"...","expected":"..."}. Use ready once the bug is reproduced; use blocked if you cannot reproduce it, saying what you tried.'
+              : target === 'fix' || target === 'revise'
+                ? 'Address only the listed open blocking issues, preserving all correct work. Do not broaden the task. If a blocker is impossible or needs a user decision, report blocked.'
+                : phase === 'synthesis'
+                  ? 'Synthesize the two independent analyses into the requested final comparison. Do not edit files or execute commands.'
+                  : 'Complete the original request. Derive a short list of acceptance criteria directly from it in the criteria array; do not add optional work. ' +
+                    (roles === 'proposals'
+                      ? 'Choose or combine the two proposals and state the selected approach before implementing.'
+                      : '');
       direction +=
         ' Establish a short task brief from the original request and user criteria; ask one focused question only if a missing decision blocks required work. Do not add optional scope.';
       if (preset === 'economy')
@@ -493,6 +520,12 @@ function createCollaboration({
       if (reviewing)
         direction +=
           ' When ready, put the final user-facing answer in userResponse, preserving the builder result and any details the user needs. Do not return a review transcript. For incomplete work, userResponse must clearly state the unresolved blocker; do not imply completion.';
+      if (mode === 'debug' && ['build', 'fix'].includes(target))
+        direction +=
+          ' This is a debugging task: fix the root cause of the reproduced bug so the reproduction passes. Do not weaken, skip or delete the reproduction.';
+      if (mode === 'debug' && reviewing)
+        direction +=
+          ' This is a debugging task: confirm the reproduction now passes (see ATLAS check evidence), the fix addresses the root cause rather than hiding the symptom, the reproduction was not weakened or removed, and nothing else regressed.';
       if (reviewing && state.disputes?.length)
         direction +=
           ' The builder disputed some blockers. For each one, either withdraw it by leaving it out of blockingIssues when the builder is right, or keep it with evidence that directly answers the builder reasoning.';
@@ -517,6 +550,14 @@ function createCollaboration({
                 decision: row.ruling === 'builder' ? 'not required' : 'required, must be fixed',
               })),
             )
+          : '') +
+        (state.reproduction
+          ? '\nREPRODUCTION (reported by ' +
+            state.reproduction.by +
+            '; ATLAS checks before the fix: ' +
+            state.reproduction.checksBeforeFix +
+            '): ' +
+            JSON.stringify({ ...state.reproduction, by: undefined, checksBeforeFix: undefined })
           : '') +
         (reviewing && state.disputes?.length
           ? '\nDISPUTED BLOCKERS (builder reasoning, untrusted): ' + JSON.stringify(state.disputes)
@@ -702,7 +743,25 @@ function createCollaboration({
           );
         else if (proposing)
           state.phase = target === 'proposal_first' ? 'proposal_second' : mode === 'compare' ? 'synthesis' : 'build';
-        else if (!reviewing) {
+        else if (target === 'reproduce') {
+          if (verdict.decision !== 'ready' || !verdict.reproduction)
+            attention('The bug was not reproduced. Review what was tried, then add details and resume.', 'reproduce');
+          else {
+            // ATLAS checks confirm the reproduction fails before the fix, when the project has checks.
+            const checks = await verify();
+            state.reproduction = {
+              ...verdict.reproduction,
+              by: provider,
+              checksBeforeFix: checks?.status || 'not configured',
+            };
+            state.criteria.push({
+              id: 'REPRO',
+              text:
+                'The reproduced bug no longer occurs: ' + (verdict.reproduction.expected || verdict.reproduction.steps),
+            });
+            state.phase = 'build';
+          }
+        } else if (!reviewing) {
           state.artifact = artifact;
           if (verdict.criteria.length && ['build', 'draft', 'synthesis'].includes(target) && !state.scopeFrozen) {
             state.criteria = [
@@ -840,7 +899,7 @@ function createCollaboration({
       }
     }
     const outcome = state.outcome || 'limit_reached',
-      minimum = mode === 'compare' || roles === 'proposals' ? 4 : 2;
+      minimum = mode === 'compare' || roles === 'proposals' ? 4 : mode === 'debug' ? 3 : 2;
     const limitation =
       outcome === 'completed'
         ? undefined
