@@ -3,6 +3,7 @@ const { app, BrowserWindow, protocol } = require('electron'),
   path = require('node:path'),
   os = require('node:os'),
   assert = require('node:assert/strict');
+require('./temp-cleanup.cjs').removeStaleTempFolders('atlas-approvals-browser-');
 const root = path.join(__dirname, '..'),
   temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-approvals-browser-'));
 app.disableHardwareAcceleration();
