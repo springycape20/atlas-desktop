@@ -1,9 +1,65 @@
-const test=require('node:test'),assert=require('node:assert/strict'),{spawn}=require('node:child_process'),{capture,terminate}=require('../integration-processes');
-test('controller cleanup rejects invalid process identities before running a command',async()=>{let called=false;const run=()=>{called=true;};await assert.rejects(capture(0,run));await assert.rejects(terminate([{pid:3,created:'malformed'}],run));assert.equal(called,false);});
-test('Windows controller cleanup removes only its original runtime processes and leaves a subsequently launched independent app', {skip:process.platform!=='win32'},async t=>{
- const code="const cp=require('child_process');const children=[];const make=(detached=false)=>{const p=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore',windowsHide:true,detached});children.push(p);return p.pid;};console.log('READY '+make());process.stdin.once('data',()=>console.log('APP '+make(true)));setInterval(()=>{},1000);";
- const parent=spawn(process.execPath,['-e',code],{stdio:['pipe','pipe','ignore'],windowsHide:true}),pids=[parent.pid];
- t.after(()=>{for(const pid of pids)try{process.kill(pid);}catch{}});
- let lines='';parent.stdout.on('data',chunk=>{lines+=chunk;});async function until(pattern){for(let i=0;i<200;i++){const match=lines.match(pattern);if(match)return Number(match[1]);await new Promise(resolve=>setTimeout(resolve,20));}throw Error('Child did not start');}
- const worker=await until(/READY (\d+)/);pids.push(worker);const baseline=await capture(parent.pid);assert(baseline.some(row=>row.pid===parent.pid));assert(baseline.some(row=>row.pid===worker));parent.stdin.write('launch');const app=await until(/APP (\d+)/);pids.push(app);assert(!baseline.some(row=>row.pid===app));await terminate(baseline);assert.doesNotThrow(()=>process.kill(app,0));for(const pid of [parent.pid,worker]){let exited=false;for(let i=0;i<50;i++){try{process.kill(pid,0);}catch{exited=true;break;}await new Promise(resolve=>setTimeout(resolve,20));}assert(exited,'Controller must exit: '+pid);}
+const test = require('node:test'),
+  assert = require('node:assert/strict'),
+  { spawn } = require('node:child_process'),
+  { capture, terminate } = require('../integration-processes');
+test('controller cleanup rejects invalid process identities before running a command', async () => {
+  let called = false;
+  const run = () => {
+    called = true;
+  };
+  await assert.rejects(capture(0, run));
+  await assert.rejects(terminate([{ pid: 3, created: 'malformed' }], run));
+  assert.equal(called, false);
 });
+test(
+  'Windows controller cleanup removes only its original runtime processes and leaves a subsequently launched independent app',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const code =
+      "const cp=require('child_process');const children=[];const make=(detached=false)=>{const p=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore',windowsHide:true,detached});children.push(p);return p.pid;};console.log('READY '+make());process.stdin.once('data',()=>console.log('APP '+make(true)));setInterval(()=>{},1000);";
+    const parent = spawn(process.execPath, ['-e', code], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true }),
+      pids = [parent.pid];
+    t.after(() => {
+      for (const pid of pids)
+        try {
+          process.kill(pid);
+        } catch {}
+    });
+    let lines = '';
+    parent.stdout.on('data', (chunk) => {
+      lines += chunk;
+    });
+    async function until(pattern) {
+      for (let i = 0; i < 200; i++) {
+        const match = lines.match(pattern);
+        if (match) return Number(match[1]);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw Error('Child did not start');
+    }
+    const worker = await until(/READY (\d+)/);
+    pids.push(worker);
+    const baseline = await capture(parent.pid);
+    assert(baseline.some((row) => row.pid === parent.pid));
+    assert(baseline.some((row) => row.pid === worker));
+    parent.stdin.write('launch');
+    const app = await until(/APP (\d+)/);
+    pids.push(app);
+    assert(!baseline.some((row) => row.pid === app));
+    await terminate(baseline);
+    assert.doesNotThrow(() => process.kill(app, 0));
+    for (const pid of [parent.pid, worker]) {
+      let exited = false;
+      for (let i = 0; i < 50; i++) {
+        try {
+          process.kill(pid, 0);
+        } catch {
+          exited = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert(exited, 'Controller must exit: ' + pid);
+    }
+  },
+);

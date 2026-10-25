@@ -1,5 +1,86 @@
-const test=require('node:test'),assert=require('node:assert/strict'),{validateSequence,glideCursor}=require('../desktop-interaction');
-test('desktop sequences stay small and exclude shell, files and unbounded waits',()=>{assert.equal(validateSequence([{tool:'Move',arguments:{loc:[10,20]}},{tool:'Click',arguments:{loc:[10,20]}}]).length,2);for(const steps of [[],Array.from({length:9},()=>({tool:'Click',arguments:{}})),[{tool:'PowerShell',arguments:{command:'x'}}],[{tool:'FileSystem',arguments:{mode:'delete',path:'x'}}],[{tool:'Wait',arguments:{duration:60}}],[{tool:'WaitFor',arguments:{condition:'text_exists'}}]])assert.throws(()=>validateSequence(steps));});
-test('cursor glide follows intermediate points in order and never sends a click',async()=>{const moves=[],controller=new AbortController();await glideCursor({tool:'Click',args:{loc:[700,400]},connection:{tools:[{name:'Move'}],call:async(name,args)=>{assert.equal(name,'Move');moves.push(args.loc);return {content:[]};}},cursorPosition:()=>({x:0,y:0}),signal:controller.signal,duration:0});assert(moves.length>2&&moves.length<=12);assert.deepEqual(moves.at(-1),[700,400]);assert(moves[0][0]>0&&moves[0][0]<700);for(let i=1;i<moves.length;i++)assert(moves[i][0]>=moves[i-1][0]&&moves[i][1]>=moves[i-1][1]);});
-test('stop cancels cursor interpolation and drags retain native input behavior',async()=>{const controller=new AbortController();let moves=0;const options={tool:'Click',args:{loc:[700,400]},connection:{tools:[{name:'Move'}],call:async()=>{moves++;controller.abort();return {content:[]};}},cursorPosition:()=>({x:0,y:0}),signal:controller.signal,duration:0};await assert.rejects(glideCursor(options));assert.equal(moves,1);for(const drag of [true,'true','True',1])await glideCursor({...options,tool:'Move',args:{loc:[700,400],drag}});assert.equal(moves,1);});
-test('failed hover prevents the following action and label-only input remains native',async()=>{const options={tool:'Click',args:{loc:[700,400]},connection:{tools:[{name:'Move'}],call:async()=>({isError:true})},cursorPosition:()=>({x:0,y:0}),signal:new AbortController().signal,duration:0};await assert.rejects(glideCursor(options),/No click or typing/);await glideCursor({...options,args:{label:1},cursorPosition:()=>{throw Error('Must not read cursor');}});});
+const test = require('node:test'),
+  assert = require('node:assert/strict'),
+  { validateSequence, glideCursor } = require('../desktop-interaction');
+test('desktop sequences stay small and exclude shell, files and unbounded waits', () => {
+  assert.equal(
+    validateSequence([
+      { tool: 'Move', arguments: { loc: [10, 20] } },
+      { tool: 'Click', arguments: { loc: [10, 20] } },
+    ]).length,
+    2,
+  );
+  for (const steps of [
+    [],
+    Array.from({ length: 9 }, () => ({ tool: 'Click', arguments: {} })),
+    [{ tool: 'PowerShell', arguments: { command: 'x' } }],
+    [{ tool: 'FileSystem', arguments: { mode: 'delete', path: 'x' } }],
+    [{ tool: 'Wait', arguments: { duration: 60 } }],
+    [{ tool: 'WaitFor', arguments: { condition: 'text_exists' } }],
+  ])
+    assert.throws(() => validateSequence(steps));
+});
+test('cursor glide follows intermediate points in order and never sends a click', async () => {
+  const moves = [],
+    controller = new AbortController();
+  await glideCursor({
+    tool: 'Click',
+    args: { loc: [700, 400] },
+    connection: {
+      tools: [{ name: 'Move' }],
+      call: async (name, args) => {
+        assert.equal(name, 'Move');
+        moves.push(args.loc);
+        return { content: [] };
+      },
+    },
+    cursorPosition: () => ({ x: 0, y: 0 }),
+    signal: controller.signal,
+    duration: 0,
+  });
+  assert(moves.length > 2 && moves.length <= 12);
+  assert.deepEqual(moves.at(-1), [700, 400]);
+  assert(moves[0][0] > 0 && moves[0][0] < 700);
+  for (let i = 1; i < moves.length; i++) assert(moves[i][0] >= moves[i - 1][0] && moves[i][1] >= moves[i - 1][1]);
+});
+test('stop cancels cursor interpolation and drags retain native input behavior', async () => {
+  const controller = new AbortController();
+  let moves = 0;
+  const options = {
+    tool: 'Click',
+    args: { loc: [700, 400] },
+    connection: {
+      tools: [{ name: 'Move' }],
+      call: async () => {
+        moves++;
+        controller.abort();
+        return { content: [] };
+      },
+    },
+    cursorPosition: () => ({ x: 0, y: 0 }),
+    signal: controller.signal,
+    duration: 0,
+  };
+  await assert.rejects(glideCursor(options));
+  assert.equal(moves, 1);
+  for (const drag of [true, 'true', 'True', 1])
+    await glideCursor({ ...options, tool: 'Move', args: { loc: [700, 400], drag } });
+  assert.equal(moves, 1);
+});
+test('failed hover prevents the following action and label-only input remains native', async () => {
+  const options = {
+    tool: 'Click',
+    args: { loc: [700, 400] },
+    connection: { tools: [{ name: 'Move' }], call: async () => ({ isError: true }) },
+    cursorPosition: () => ({ x: 0, y: 0 }),
+    signal: new AbortController().signal,
+    duration: 0,
+  };
+  await assert.rejects(glideCursor(options), /No click or typing/);
+  await glideCursor({
+    ...options,
+    args: { label: 1 },
+    cursorPosition: () => {
+      throw Error('Must not read cursor');
+    },
+  });
+});

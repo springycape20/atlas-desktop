@@ -1,55 +1,352 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
-const e=require('../colab-efficiency'),{createCollaboration}=require('../collaboration'),{createVerificationRunner,fingerprint}=require('../verification-cache');
-const status=(decision='ready',issues=[],summary='Result')=>summary+'\nATLAS_COLAB_STATUS '+JSON.stringify({decision,blockingIssues:issues});
-const issue={id:'F1',criterion:'TASK',summary:'Required fix',evidence:'app.js:10'};
-test('bounded handovers replace six-report replay while blockers stay intact and full reports remain saved',async()=>{
- let saved,calls=0;const prompts=[],run=createCollaboration({progress(){},checkpoint:async rows=>saved=rows,saveReport:async(_row,index)=>'/reports/'+index+'.txt',runProvider:async(_provider,prompt)=>{prompts.push(prompt);calls++;return {output:status(calls===2?'changes_requested':'ready',calls===2?[issue]:[],'REPORT '+calls+' '+ 'large report '.repeat(4000))};}});
- const result=await run({task:'Fix app',preset:'economy'});assert.equal(result.outcome,'completed');assert.equal(prompts.length,4);assert(prompts[2].includes('Required fix'));assert(prompts[2].includes('app.js:10'));assert(prompts[2].includes('/reports/0.txt'));assert(prompts[2].length<12000);assert(saved[0].output.length>40000);assert(result.usage.promptCharacters<result.usage.legacyPromptCharacters);
+const test = require('node:test'),
+  assert = require('node:assert/strict'),
+  fs = require('node:fs/promises'),
+  path = require('node:path'),
+  os = require('node:os');
+const e = require('../colab-efficiency'),
+  { createCollaboration } = require('../collaboration'),
+  { createVerificationRunner, fingerprint } = require('../verification-cache');
+const status = (decision = 'ready', issues = [], summary = 'Result') =>
+  summary + '\nATLAS_COLAB_STATUS ' + JSON.stringify({ decision, blockingIssues: issues });
+const issue = { id: 'F1', criterion: 'TASK', summary: 'Required fix', evidence: 'app.js:10' };
+test('bounded handovers replace six-report replay while blockers stay intact and full reports remain saved', async () => {
+  let saved,
+    calls = 0;
+  const prompts = [],
+    run = createCollaboration({
+      progress() {},
+      checkpoint: async (rows) => (saved = rows),
+      saveReport: async (_row, index) => '/reports/' + index + '.txt',
+      runProvider: async (_provider, prompt) => {
+        prompts.push(prompt);
+        calls++;
+        return {
+          output: status(
+            calls === 2 ? 'changes_requested' : 'ready',
+            calls === 2 ? [issue] : [],
+            'REPORT ' + calls + ' ' + 'large report '.repeat(4000),
+          ),
+        };
+      },
+    });
+  const result = await run({ task: 'Fix app', preset: 'economy' });
+  assert.equal(result.outcome, 'completed');
+  assert.equal(prompts.length, 4);
+  assert(prompts[2].includes('Required fix'));
+  assert(prompts[2].includes('app.js:10'));
+  assert(prompts[2].includes('/reports/0.txt'));
+  assert(prompts[2].length < 12000);
+  assert(saved[0].output.length > 40000);
+  assert(result.usage.promptCharacters < result.usage.legacyPromptCharacters);
 });
-test('history retrieval includes relevant older decisions without changing stored history',()=>{
- const turns=Array.from({length:100},(_,i)=>({role:i%2?'assistant':'user',content:i===0?'SQLite database: never use PostgreSQL.':'Unrelated message '+i+' '+ 'stuff '.repeat(500)})),copy=JSON.stringify(turns),selected=e.selectHistory('Use SQLite for database storage',turns,'economy');assert(selected.turns.some(turn=>turn.content.includes('never use PostgreSQL')));assert(selected.turns.some(turn=>turn.content.includes('message 99')));assert(selected.characters<=e.PRESETS.economy.history);assert.equal(JSON.stringify(turns),copy);
+test('history retrieval includes relevant older decisions without changing stored history', () => {
+  const turns = Array.from({ length: 100 }, (_, i) => ({
+      role: i % 2 ? 'assistant' : 'user',
+      content:
+        i === 0 ? 'SQLite database: never use PostgreSQL.' : 'Unrelated message ' + i + ' ' + 'stuff '.repeat(500),
+    })),
+    copy = JSON.stringify(turns),
+    selected = e.selectHistory('Use SQLite for database storage', turns, 'economy');
+  assert(selected.turns.some((turn) => turn.content.includes('never use PostgreSQL')));
+  assert(selected.turns.some((turn) => turn.content.includes('message 99')));
+  assert(selected.characters <= e.PRESETS.economy.history);
+  assert.equal(JSON.stringify(turns), copy);
 });
-test('Thorough proposals remain independent and explicit roles/model/effort are preserved',async()=>{
- const calls=[],run=createCollaboration({progress(){},runProvider:async(provider,prompt,_cwd,settings)=>{calls.push({provider,prompt,settings});return {output:status('ready',[],calls.length===1?'SECRET_FIRST_PROPOSAL':'Another proposal/result')};}});
- await run({task:'Implement feature',preset:'thorough',effort:'xhigh',codexModel:'manual-codex',claudeModel:'manual-claude'});assert.equal(calls.length,4);assert(!calls[1].prompt.includes('SECRET_FIRST_PROPOSAL'));assert(calls[2].prompt.includes('SECRET_FIRST_PROPOSAL'));assert(calls.every(call=>call.settings.effort==='xhigh'));assert.equal(calls[0].settings.codexModel,'manual-codex');calls.length=0;
- await run({task:'Implement feature',preset:'thorough',rolesExplicit:true,roles:'claude-builds',effort:'low'});assert.equal(calls.length,2);assert.equal(calls[0].provider,'claude');assert(calls.every(call=>call.settings.effort==='low'));
+test('Thorough proposals remain independent and explicit roles/model/effort are preserved', async () => {
+  const calls = [],
+    run = createCollaboration({
+      progress() {},
+      runProvider: async (provider, prompt, _cwd, settings) => {
+        calls.push({ provider, prompt, settings });
+        return {
+          output: status('ready', [], calls.length === 1 ? 'SECRET_FIRST_PROPOSAL' : 'Another proposal/result'),
+        };
+      },
+    });
+  await run({
+    task: 'Implement feature',
+    preset: 'thorough',
+    effort: 'xhigh',
+    codexModel: 'manual-codex',
+    claudeModel: 'manual-claude',
+  });
+  assert.equal(calls.length, 4);
+  assert(!calls[1].prompt.includes('SECRET_FIRST_PROPOSAL'));
+  assert(calls[2].prompt.includes('SECRET_FIRST_PROPOSAL'));
+  assert(calls.every((call) => call.settings.effort === 'xhigh'));
+  assert.equal(calls[0].settings.codexModel, 'manual-codex');
+  calls.length = 0;
+  await run({
+    task: 'Implement feature',
+    preset: 'thorough',
+    rolesExplicit: true,
+    roles: 'claude-builds',
+    effort: 'low',
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].provider, 'claude');
+  assert(calls.every((call) => call.settings.effort === 'low'));
 });
-test('explicit task criteria are frozen, and effort adapts only with opt in',async()=>{
- let calls=0;const efforts=[],prompts=[],run=createCollaboration({progress(){},runProvider:async(_p,prompt,_cwd,settings)=>{prompts.push(prompt);efforts.push(settings.effort);return {output:status(++calls===2?'changes_requested':'ready',calls===2?[issue]:[])};}});
- await run({task:'Build',brief:{criteria:'Works offline',outOfScope:'No cloud service'},adaptiveEffort:true,effort:'medium'});assert.deepEqual(efforts,['medium','medium','high','high']);assert(prompts[0].includes('Works offline'));assert(prompts[3].includes('No cloud service'));
+test('explicit task criteria are frozen, and effort adapts only with opt in', async () => {
+  let calls = 0;
+  const efforts = [],
+    prompts = [],
+    run = createCollaboration({
+      progress() {},
+      runProvider: async (_p, prompt, _cwd, settings) => {
+        prompts.push(prompt);
+        efforts.push(settings.effort);
+        return { output: status(++calls === 2 ? 'changes_requested' : 'ready', calls === 2 ? [issue] : []) };
+      },
+    });
+  await run({
+    task: 'Build',
+    brief: { criteria: 'Works offline', outOfScope: 'No cloud service' },
+    adaptiveEffort: true,
+    effort: 'medium',
+  });
+  assert.deepEqual(efforts, ['medium', 'medium', 'high', 'high']);
+  assert(prompts[0].includes('Works offline'));
+  assert(prompts[3].includes('No cloud service'));
 });
-test('reported, partial and estimated stage usage stay separate and invalid numbers are ignored',()=>{
- const usage=e.usageSummary([{provider:'codex',phase:'build',output:'abcd',metrics:{promptCharacters:40},usage:{inputTokens:10,outputTokens:2}},{provider:'claude',phase:'review',output:'abcd',metrics:{promptCharacters:40},usage:{inputTokens:5}},{provider:'codex',phase:'fix',output:'abcd',metrics:{promptCharacters:40},usage:{inputTokens:-2,outputTokens:Infinity}}]);assert.equal(usage.inputTokens,15);assert.equal(usage.outputTokens,2);assert.equal(usage.complete,false);assert.deepEqual(usage.stages.map(row=>row.source),['reported','partial','estimated']);assert.equal(usage.estimatedMissingTokens,12);
+test('reported, partial and estimated stage usage stay separate and invalid numbers are ignored', () => {
+  const usage = e.usageSummary([
+    {
+      provider: 'codex',
+      phase: 'build',
+      output: 'abcd',
+      metrics: { promptCharacters: 40 },
+      usage: { inputTokens: 10, outputTokens: 2 },
+    },
+    {
+      provider: 'claude',
+      phase: 'review',
+      output: 'abcd',
+      metrics: { promptCharacters: 40 },
+      usage: { inputTokens: 5 },
+    },
+    {
+      provider: 'codex',
+      phase: 'fix',
+      output: 'abcd',
+      metrics: { promptCharacters: 40 },
+      usage: { inputTokens: -2, outputTokens: Infinity },
+    },
+  ]);
+  assert.equal(usage.inputTokens, 15);
+  assert.equal(usage.outputTokens, 2);
+  assert.equal(usage.complete, false);
+  assert.deepEqual(
+    usage.stages.map((row) => row.source),
+    ['reported', 'partial', 'estimated'],
+  );
+  assert.equal(usage.estimatedMissingTokens, 12);
 });
-test('token warning pauses after a saved stage and resume keeps the pending review',async()=>{
- let saved,calls=0;const providers=[],run=createCollaboration({progress(){},checkpoint:async rows=>saved=structuredClone(rows),runProvider:async provider=>{calls++;providers.push(provider);return {output:status(),usage:{inputTokens:100,outputTokens:20}};}});
- const first=await run({task:'Build',tokenWarning:1});assert.equal(first.outcome,'needs_attention');assert.equal(first.tokenPaused,true);assert.equal(calls,1);const result=await run({task:'Build',tokenWarning:null,checkpoints:saved});assert.equal(result.outcome,'completed');assert.deepEqual(providers,['codex','claude']);
+test('token warning pauses after a saved stage and resume keeps the pending review', async () => {
+  let saved,
+    calls = 0;
+  const providers = [],
+    run = createCollaboration({
+      progress() {},
+      checkpoint: async (rows) => (saved = structuredClone(rows)),
+      runProvider: async (provider) => {
+        calls++;
+        providers.push(provider);
+        return { output: status(), usage: { inputTokens: 100, outputTokens: 20 } };
+      },
+    });
+  const first = await run({ task: 'Build', tokenWarning: 1 });
+  assert.equal(first.outcome, 'needs_attention');
+  assert.equal(first.tokenPaused, true);
+  assert.equal(calls, 1);
+  const result = await run({ task: 'Build', tokenWarning: null, checkpoints: saved });
+  assert.equal(result.outcome, 'completed');
+  assert.deepEqual(providers, ['codex', 'claude']);
 });
-test('token pause during clarification keeps clarification state on resume',async()=>{
- let saved;const calls=[],run=createCollaboration({progress(){},checkpoint:async rows=>saved=structuredClone(rows),runProvider:async provider=>{calls.push(provider);return {output:calls.length===1?'Missing status':status()};}});
- await run({task:'Build',tokenWarning:1});assert(saved.at(-1).state.clarify);const result=await run({task:'Build',tokenWarning:null,checkpoints:saved});assert.equal(result.outcome,'completed');assert.deepEqual(calls,['codex','codex','claude']);
+test('token pause during clarification keeps clarification state on resume', async () => {
+  let saved;
+  const calls = [],
+    run = createCollaboration({
+      progress() {},
+      checkpoint: async (rows) => (saved = structuredClone(rows)),
+      runProvider: async (provider) => {
+        calls.push(provider);
+        return { output: calls.length === 1 ? 'Missing status' : status() };
+      },
+    });
+  await run({ task: 'Build', tokenWarning: 1 });
+  assert(saved.at(-1).state.clarify);
+  const result = await run({ task: 'Build', tokenWarning: null, checkpoints: saved });
+  assert.equal(result.outcome, 'completed');
+  assert.deepEqual(calls, ['codex', 'codex', 'claude']);
 });
-test('review receives real check evidence and bounded diff context',async()=>{
- const prompts=[],run=createCollaboration({progress(){},verify:async()=>({status:'passed',results:[{command:'npm test',exitCode:0}]}),reviewContext:async limit=>'app.js\n'+ 'diff '.repeat(limit),runProvider:async(_p,prompt)=>{prompts.push(prompt);return {output:status()};}});await run({task:'Fix'});assert(prompts[1].includes('ATLAS CHECK EVIDENCE'));assert(prompts[1].includes('npm test'));assert(prompts[1].includes('app.js'));
+test('review receives real check evidence and bounded diff context', async () => {
+  const prompts = [],
+    run = createCollaboration({
+      progress() {},
+      verify: async () => ({ status: 'passed', results: [{ command: 'npm test', exitCode: 0 }] }),
+      reviewContext: async (limit) => 'app.js\n' + 'diff '.repeat(limit),
+      runProvider: async (_p, prompt) => {
+        prompts.push(prompt);
+        return { output: status() };
+      },
+    });
+  await run({ task: 'Fix' });
+  assert(prompts[1].includes('ATLAS CHECK EVIDENCE'));
+  assert(prompts[1].includes('npm test'));
+  assert(prompts[1].includes('app.js'));
 });
-test('check reuse requires identical complete fingerprints and config, never a failure or unknown snapshot',async()=>{
- let value='same',complete=true,runs=0,passed=true;const options={project:{autoCheck:true,checkCommands:'npm test'},cwd:'/project',reuse:true,environment:{TEST:'one'},readFingerprint:async()=>({value,complete}),run:async()=>{runs++;return {status:passed?'passed':'failed',results:[]};}},check=createVerificationRunner(options);
- assert.equal((await check()).reused,false);assert.equal((await check()).reused,true);assert.equal(runs,1);value='changed';await check();assert.equal(runs,2);complete=false;await check();await check();assert.equal(runs,4);complete=true;value='new';passed=false;await check();await check();assert.equal(runs,6);passed=true;const noOptIn=createVerificationRunner({...options,reuse:false});await noOptIn();await noOptIn();assert.equal(runs,8);
+test('check reuse requires identical complete fingerprints and config, never a failure or unknown snapshot', async () => {
+  let value = 'same',
+    complete = true,
+    runs = 0,
+    passed = true;
+  const options = {
+      project: { autoCheck: true, checkCommands: 'npm test' },
+      cwd: '/project',
+      reuse: true,
+      environment: { TEST: 'one' },
+      readFingerprint: async () => ({ value, complete }),
+      run: async () => {
+        runs++;
+        return { status: passed ? 'passed' : 'failed', results: [] };
+      },
+    },
+    check = createVerificationRunner(options);
+  assert.equal((await check()).reused, false);
+  assert.equal((await check()).reused, true);
+  assert.equal(runs, 1);
+  value = 'changed';
+  await check();
+  assert.equal(runs, 2);
+  complete = false;
+  await check();
+  await check();
+  assert.equal(runs, 4);
+  complete = true;
+  value = 'new';
+  passed = false;
+  await check();
+  await check();
+  assert.equal(runs, 6);
+  passed = true;
+  const noOptIn = createVerificationRunner({ ...options, reuse: false });
+  await noOptIn();
+  await noOptIn();
+  assert.equal(runs, 8);
 });
-test('verification fingerprint detects dependency/config changes and refuses incomplete scans',async t=>{
- const folder=await fs.mkdtemp(path.join(os.tmpdir(),'atlas-check-fingerprint-'));t.after(()=>fs.rm(folder,{recursive:true,force:true}));await fs.mkdir(path.join(folder,'node_modules'));await fs.writeFile(path.join(folder,'node_modules','dependency.js'),'before');const first=await fingerprint(folder);assert.equal(first.complete,true);await fs.writeFile(path.join(folder,'node_modules','dependency.js'),'after');assert.notEqual((await fingerprint(folder)).value,first.value);assert.equal((await fingerprint(folder,{maxFiles:1})).complete,false);
+test('verification fingerprint detects dependency/config changes and refuses incomplete scans', async (t) => {
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-check-fingerprint-'));
+  t.after(() => fs.rm(folder, { recursive: true, force: true }));
+  await fs.mkdir(path.join(folder, 'node_modules'));
+  await fs.writeFile(path.join(folder, 'node_modules', 'dependency.js'), 'before');
+  const first = await fingerprint(folder);
+  assert.equal(first.complete, true);
+  await fs.writeFile(path.join(folder, 'node_modules', 'dependency.js'), 'after');
+  assert.notEqual((await fingerprint(folder)).value, first.value);
+  assert.equal((await fingerprint(folder, { maxFiles: 1 })).complete, false);
 });
-test('fresh Codex threads report cumulative usage; resumed threads label last-call counts partial',()=>{
- const {CodexConnection}=require('../codex-connection'),connection=new CodexConnection('unused'),fresh={resumed:false},resumed={resumed:true};connection.turns.set('fresh',fresh);connection.turns.set('resumed',resumed);const notification=threadId=>({method:'thread/tokenUsage/updated',params:{threadId,tokenUsage:{total:{inputTokens:100,outputTokens:20},last:{inputTokens:10,outputTokens:2}}}});connection.receive(notification('fresh'));connection.receive(notification('resumed'));assert.equal(fresh.usage.inputTokens,100);assert.equal(fresh.usage.complete,true);assert.equal(resumed.usage.inputTokens,10);assert.equal(resumed.usage.complete,false);
+test('fresh Codex threads report cumulative usage; resumed threads label last-call counts partial', () => {
+  const { CodexConnection } = require('../codex-connection'),
+    connection = new CodexConnection('unused'),
+    fresh = { resumed: false },
+    resumed = { resumed: true };
+  connection.turns.set('fresh', fresh);
+  connection.turns.set('resumed', resumed);
+  const notification = (threadId) => ({
+    method: 'thread/tokenUsage/updated',
+    params: {
+      threadId,
+      tokenUsage: { total: { inputTokens: 100, outputTokens: 20 }, last: { inputTokens: 10, outputTokens: 2 } },
+    },
+  });
+  connection.receive(notification('fresh'));
+  connection.receive(notification('resumed'));
+  assert.equal(fresh.usage.inputTokens, 100);
+  assert.equal(fresh.usage.complete, true);
+  assert.equal(resumed.usage.inputTokens, 10);
+  assert.equal(resumed.usage.complete, false);
 });
-test('partial last-call reports use at least the text estimate for token warnings',()=>{const usage=e.usageSummary([{provider:'codex',phase:'build',output:'output',metrics:{promptCharacters:4000},usage:{inputTokens:10,outputTokens:2,complete:false}}]);assert.equal(usage.budgetTokens,1002);assert.equal(usage.complete,false);assert.equal(usage.stages[0].source,'partial');});
-test('worktree check fingerprints include shared Git data without disabling safe reuse',async t=>{
- const folder=await fs.mkdtemp(path.join(os.tmpdir(),'atlas-worktree-fingerprint-'));t.after(()=>fs.rm(folder,{recursive:true,force:true,maxRetries:5,retryDelay:100}));const {command}=require('../workspace-service'),git=args=>command('git',['-C',folder,...args]);await git(['init','-b','main']);await fs.writeFile(path.join(folder,'app.js'),'initial');await git(['add','--','app.js']);await git(['-c','user.name=ATLAS','-c','user.email=atlas@localhost','commit','-m','Fixture']);const worktree=path.join(folder,'..',path.basename(folder)+'-tree');t.after(async()=>{await git(['worktree','remove','--force',worktree]).catch(()=>{});});await git(['worktree','add','--detach',worktree,'HEAD']);const before=await fingerprint(worktree);assert.equal(before.complete,true);await git(['config','atlas.test-value','changed']);const after=await fingerprint(worktree);assert.equal(after.complete,true);assert.notEqual(before.value,after.value);
+test('partial last-call reports use at least the text estimate for token warnings', () => {
+  const usage = e.usageSummary([
+    {
+      provider: 'codex',
+      phase: 'build',
+      output: 'output',
+      metrics: { promptCharacters: 4000 },
+      usage: { inputTokens: 10, outputTokens: 2, complete: false },
+    },
+  ]);
+  assert.equal(usage.budgetTokens, 1002);
+  assert.equal(usage.complete, false);
+  assert.equal(usage.stages[0].source, 'partial');
 });
-test('changing a warning on resume grants the new interval without resetting stall guards',async()=>{
- let saved,calls=0;const run=createCollaboration({progress(){},checkpoint:async rows=>saved=structuredClone(rows),runProvider:async()=>({output:status(++calls===2?'changes_requested':'ready',calls===2?[issue]:[]),usage:{inputTokens:50,outputTokens:10}})});await run({task:'Build',tokenWarning:100});assert.equal(saved.at(-1).state.tokenPause,true);saved.at(-1).state.stalls=1;const result=await run({task:'Build',tokenWarning:1000,checkpoints:saved});assert.equal(result.outcome,'completed');assert.equal(saved.at(-1).state.warningAt,1120);assert.equal(saved.at(-1).state.stalls,1);
+test('worktree check fingerprints include shared Git data without disabling safe reuse', async (t) => {
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-worktree-fingerprint-'));
+  t.after(() => fs.rm(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
+  const { command } = require('../workspace-service'),
+    git = (args) => command('git', ['-C', folder, ...args]);
+  await git(['init', '-b', 'main']);
+  await fs.writeFile(path.join(folder, 'app.js'), 'initial');
+  await git(['add', '--', 'app.js']);
+  await git(['-c', 'user.name=ATLAS', '-c', 'user.email=atlas@localhost', 'commit', '-m', 'Fixture']);
+  const worktree = path.join(folder, '..', path.basename(folder) + '-tree');
+  t.after(async () => {
+    await git(['worktree', 'remove', '--force', worktree]).catch(() => {});
+  });
+  await git(['worktree', 'add', '--detach', worktree, 'HEAD']);
+  const before = await fingerprint(worktree);
+  assert.equal(before.complete, true);
+  await git(['config', 'atlas.test-value', 'changed']);
+  const after = await fingerprint(worktree);
+  assert.equal(after.complete, true);
+  assert.notEqual(before.value, after.value);
 });
-test('tiny excerpt budgets stay bounded',()=>{assert.equal(e.excerpt('abcdef',0),'');assert.equal(e.excerpt('abcdef',2),'ab');});
-test('long check output never hides a failing command in compact review evidence',async()=>{
- let review;const run=createCollaboration({progress(){},verify:async()=>({status:'failed',reportPath:'/checks.json',results:Array.from({length:12},(_,i)=>({command:'check-'+i,status:i===5?'failed':'passed',exitCode:i===5?1:0,output:'long output '.repeat(10000)}))}),runProvider:async(_p,prompt)=>{review=prompt;return{output:status()};}});await run({task:'Build'});assert(review.includes('check-5'));assert(review.includes('"exitCode":1'));assert(review.includes('/checks.json'));assert(review.length<16000);
+test('changing a warning on resume grants the new interval without resetting stall guards', async () => {
+  let saved,
+    calls = 0;
+  const run = createCollaboration({
+    progress() {},
+    checkpoint: async (rows) => (saved = structuredClone(rows)),
+    runProvider: async () => ({
+      output: status(++calls === 2 ? 'changes_requested' : 'ready', calls === 2 ? [issue] : []),
+      usage: { inputTokens: 50, outputTokens: 10 },
+    }),
+  });
+  await run({ task: 'Build', tokenWarning: 100 });
+  assert.equal(saved.at(-1).state.tokenPause, true);
+  saved.at(-1).state.stalls = 1;
+  const result = await run({ task: 'Build', tokenWarning: 1000, checkpoints: saved });
+  assert.equal(result.outcome, 'completed');
+  assert.equal(saved.at(-1).state.warningAt, 1120);
+  assert.equal(saved.at(-1).state.stalls, 1);
+});
+test('tiny excerpt budgets stay bounded', () => {
+  assert.equal(e.excerpt('abcdef', 0), '');
+  assert.equal(e.excerpt('abcdef', 2), 'ab');
+});
+test('long check output never hides a failing command in compact review evidence', async () => {
+  let review;
+  const run = createCollaboration({
+    progress() {},
+    verify: async () => ({
+      status: 'failed',
+      reportPath: '/checks.json',
+      results: Array.from({ length: 12 }, (_, i) => ({
+        command: 'check-' + i,
+        status: i === 5 ? 'failed' : 'passed',
+        exitCode: i === 5 ? 1 : 0,
+        output: 'long output '.repeat(10000),
+      })),
+    }),
+    runProvider: async (_p, prompt) => {
+      review = prompt;
+      return { output: status() };
+    },
+  });
+  await run({ task: 'Build' });
+  assert(review.includes('check-5'));
+  assert(review.includes('"exitCode":1'));
+  assert(review.includes('/checks.json'));
+  assert(review.length < 16000);
 });
