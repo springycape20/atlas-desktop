@@ -293,6 +293,8 @@ test('worktree check fingerprints include shared Git data without disabling safe
   const worktree = path.join(folder, '..', path.basename(folder) + '-tree');
   t.after(async () => {
     await git(['worktree', 'remove', '--force', worktree]).catch(() => {});
+    // The repository may already be gone, so remove the worktree folder directly too.
+    await fs.rm(worktree, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
   await git(['worktree', 'add', '--detach', worktree, 'HEAD']);
   const before = await fingerprint(worktree);

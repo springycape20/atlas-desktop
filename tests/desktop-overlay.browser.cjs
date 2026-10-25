@@ -5,6 +5,7 @@ const { app, BrowserWindow } = require('electron'),
   path = require('node:path'),
   assert = require('node:assert/strict');
 const { createDesktopOverlay } = require('../desktop-overlay');
+require('./temp-cleanup.cjs').removeStaleTempFolders('atlas-overlay-render-');
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-overlay-render-'));
 app.setPath('userData', directory);
 app.disableHardwareAcceleration();

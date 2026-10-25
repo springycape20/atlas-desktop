@@ -3,6 +3,7 @@ const fs = require('node:fs'),
   path = require('node:path'),
   os = require('node:os'),
   assert = require('node:assert/strict');
+require('./temp-cleanup.cjs').removeStaleTempFolders('atlas-assistant-browser-');
 const root = path.join(__dirname, '..'),
   temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-assistant-browser-'));
 app.disableHardwareAcceleration();

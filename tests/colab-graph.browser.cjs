@@ -4,6 +4,7 @@ const fs = require('node:fs'),
   os = require('node:os'),
   assert = require('node:assert/strict'),
   graph = require('../colab-graph');
+require('./temp-cleanup.cjs').removeStaleTempFolders('atlas-graph-browser-');
 const root = path.join(__dirname, '..'),
   temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-graph-browser-'));
 app.disableHardwareAcceleration();

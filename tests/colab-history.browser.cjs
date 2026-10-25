@@ -3,6 +3,7 @@ const fs = require('node:fs'),
   path = require('node:path'),
   os = require('node:os'),
   assert = require('node:assert/strict');
+require('./temp-cleanup.cjs').removeStaleTempFolders('atlas-colab-browser-');
 const root = path.join(__dirname, '..'),
   temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-colab-browser-'));
 app.disableHardwareAcceleration();
