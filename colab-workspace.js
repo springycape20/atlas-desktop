@@ -269,7 +269,7 @@
   const recovery = document.createElement('div');
   recovery.className = 'colab-recovery';
   recovery.innerHTML =
-    '<span id="colabUsage"></span><button class="quiet-button" id="colabResume" type="button" hidden>Resume saved stages</button><button class="quiet-button" id="colabReview" type="button" hidden>Review changes</button>';
+    '<span id="colabUsage"></span><button class="quiet-button" id="colabResume" type="button" hidden>Resume saved stages</button><div id="colabDispute" class="colab-dispute" role="group" aria-label="Disputed blockers" hidden></div><button class="quiet-button" id="colabReview" type="button" hidden>Review changes</button>';
   panel.querySelector('#colabForm').before(recovery);
   const runDetails = document.createElement('details');
   runDetails.className = 'colab-run-details';
@@ -277,6 +277,7 @@
   panel.querySelector('#colabForm').before(runDetails);
   runDetails.lastElementChild.append(efficiencyView, recovery);
   style.textContent +=
+    '.colab-dispute{flex-basis:100%;border:1px solid #4a6a74;border-radius:8px;padding:8px;margin:6px 0;font-size:12px}.colab-dispute h4{margin:0 0 4px;font-size:12px}.colab-dispute section{margin:6px 0;padding-top:6px;border-top:1px solid #253c45}.colab-dispute p{margin:3px 0;color:#c9dfe6;overflow-wrap:anywhere}.colab-dispute-choices{display:flex;gap:6px;flex-wrap:wrap}.colab-dispute [aria-pressed=true]{outline:2px solid #6fd3c1}' +
     '.colab-chat-main>.colab-config:not([open]){margin:4px 0;padding-bottom:5px}.colab-chat-main>.colab-browse{padding:5px 0}.colab-run-details{flex:0 0 auto;font:11px/1.5 Segoe UI,sans-serif;color:#91adb7;margin:2px 0;min-height:18px}.colab-run-details>summary{cursor:pointer}.colab-run-details-body{max-height:24vh;overflow:auto;padding:6px 0}.colab-run-details .colab-recovery{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}.colab-run-details .colab-recovery button{padding:4px 7px;font-size:10px}.colab-chat-main>.colab-composer{position:relative;padding:6px 0 0 35px;max-height:32vh;overflow:visible}.colab-composer .attachment-toolbar{position:absolute;left:0;top:10px}.colab-composer .attachment-project{display:none}.colab-composer textarea{height:40px;min-height:40px;max-height:140px;padding:8px 11px;font-size:12px;border-radius:9px}.colab-composer .colab-compose-footer{margin-top:4px;padding:0;position:static;gap:6px}.colab-compose-footer>button{padding:7px 12px;font-size:11px;min-height:32px}.colab-compose-footer [role=status]{font-size:10px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.colab-composer .attachment-toolbar{gap:6px;margin:0 0 4px}.colab-composer .attachment-add{width:28px;height:28px;min-height:28px;padding:0;font-size:20px;border-radius:8px}.colab-composer .attachment-project{font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.colab-composer .attachment-error:empty{display:none}.colab-composer .attachment-chips:empty{display:none}.colab-composer .attachment-bar{margin:0}.colab-work{margin:6px 0 10px;padding:5px 9px}.colab-work-list{max-height:18vh}.colab-work-step{padding:4px 0}.colab-work-note{display:none}';
 
   const el = (id) => panel.querySelector('#' + id);
@@ -774,7 +775,8 @@
       'Only the final summary appears when both models finish.';
     el('colabPin').textContent = chat.pinned ? 'Unpin' : 'Pin';
     const job = chat.lastJob;
-    el('colabResume').hidden = chat.busy || !job?.canResume;
+    el('colabResume').hidden = chat.busy || !job?.canResume || Boolean(job?.dispute);
+    renderDispute(chat);
     el('colabReview').hidden = chat.busy || !chat.workspaceId;
     const usage = chat.usage;
     el('colabUsage').textContent =
@@ -1098,6 +1100,7 @@
         canResume: Boolean(
           job.request && ['paused', 'failed', 'cancelled', 'needs_attention', 'limit_reached'].includes(job.status),
         ),
+        dispute: job.status === 'needs_attention' ? job.result?.dispute || null : null,
       };
       if (job.workspaceId) chat.workspaceId = job.workspaceId;
       if (job.result?.usage) {
@@ -1249,7 +1252,8 @@
             .join('\n\n'),
       })
       .catch((error) => toast(error.message));
-  el('colabResume').onclick = async () => {
+  el('colabResume').onclick = () => resumeRun();
+  async function resumeRun(extra = {}) {
     const chat = current();
     if (!chat.lastJob?.canResume) return;
     try {
@@ -1281,6 +1285,7 @@
         isolated: chat.isolated !== false,
         tokenWarning: chat.tokenWarning ?? null,
         maxRounds: chat.maxRounds ?? null,
+        ...extra,
       });
       chat.jobId = result.id;
       save();
@@ -1291,7 +1296,63 @@
       save();
       render();
     }
-  };
+  }
+  // A paused builder–reviewer disagreement: show both sides and resume with the user's ruling.
+  const disputeRulings = new Map();
+  function renderDispute(chat) {
+    const box = el('colabDispute'),
+      dispute = !chat.busy && chat.lastJob?.canResume ? chat.lastJob.dispute : null;
+    box.hidden = !dispute;
+    box.replaceChildren();
+    if (!dispute) return;
+    const name = (provider) => (provider === 'claude' ? 'Claude' : 'Codex'),
+      key = chat.lastJob.id;
+    if (disputeRulings.get('job') !== key) {
+      disputeRulings.clear();
+      disputeRulings.set('job', key);
+    }
+    const heading = document.createElement('h4');
+    heading.textContent =
+      name(dispute.builder) + ' and ' + name(dispute.reviewer) + ' disagree. Choose who is right to continue.';
+    box.append(heading);
+    for (const issue of dispute.issues) {
+      const card = document.createElement('section'),
+        title = document.createElement('strong'),
+        builderSide = document.createElement('p'),
+        reviewerSide = document.createElement('p'),
+        choices = document.createElement('div');
+      title.textContent = issue.id + ': ' + issue.summary;
+      builderSide.textContent = name(dispute.builder) + ' (builder): ' + issue.builderReason;
+      reviewerSide.textContent = name(dispute.reviewer) + ' (reviewer): ' + issue.reviewerEvidence;
+      choices.className = 'colab-dispute-choices';
+      for (const [side, label] of [
+        ['builder', name(dispute.builder) + ' is right'],
+        ['reviewer', name(dispute.reviewer) + ' is right'],
+      ]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'quiet-button';
+        button.textContent = label;
+        button.setAttribute('aria-pressed', String(disputeRulings.get(issue.id) === side));
+        button.onclick = () => {
+          disputeRulings.set(issue.id, side);
+          renderDispute(current());
+        };
+        choices.append(button);
+      }
+      card.append(title, builderSide, reviewerSide, choices);
+      box.append(card);
+    }
+    const proceed = document.createElement('button');
+    proceed.type = 'button';
+    proceed.textContent = 'Continue with these rulings';
+    proceed.disabled = !dispute.issues.every((issue) => disputeRulings.has(issue.id));
+    proceed.onclick = () =>
+      resumeRun({
+        rulings: Object.fromEntries(dispute.issues.map((issue) => [issue.id, disputeRulings.get(issue.id)])),
+      });
+    box.append(proceed);
+  }
   el('colabReview').onclick = () => window.atlasWorkspace?.review(current().workspaceId);
   let importQueue = Promise.resolve();
   function importChats(items) {
