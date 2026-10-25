@@ -269,15 +269,23 @@
   const recovery = document.createElement('div');
   recovery.className = 'colab-recovery';
   recovery.innerHTML =
-    '<span id="colabUsage"></span><button class="quiet-button" id="colabResume" type="button" hidden>Resume saved stages</button><div id="colabDispute" class="colab-dispute" role="group" aria-label="Disputed blockers" hidden></div><button class="quiet-button" id="colabReview" type="button" hidden>Review changes</button>';
+    '<span id="colabUsage"></span><button class="quiet-button" id="colabResume" type="button" hidden>Resume saved stages</button><button class="quiet-button" id="colabReview" type="button" hidden>Review changes</button>';
   panel.querySelector('#colabForm').before(recovery);
   const runDetails = document.createElement('details');
   runDetails.className = 'colab-run-details';
   runDetails.innerHTML = '<summary>Run details</summary><div class="colab-run-details-body"></div>';
   panel.querySelector('#colabForm').before(runDetails);
   runDetails.lastElementChild.append(efficiencyView, recovery);
+  // The dispute card waits on the user, so it sits above the message box instead of inside the collapsed Run details.
+  const disputeBox = document.createElement('div');
+  disputeBox.id = 'colabDispute';
+  disputeBox.className = 'colab-dispute';
+  disputeBox.setAttribute('role', 'group');
+  disputeBox.setAttribute('aria-label', 'Disputed blockers');
+  disputeBox.hidden = true;
+  panel.querySelector('#colabForm').before(disputeBox);
   style.textContent +=
-    '.colab-dispute{flex-basis:100%;border:1px solid #4a6a74;border-radius:8px;padding:8px;margin:6px 0;font-size:12px}.colab-dispute h4{margin:0 0 4px;font-size:12px}.colab-dispute section{margin:6px 0;padding-top:6px;border-top:1px solid #253c45}.colab-dispute p{margin:3px 0;color:#c9dfe6;overflow-wrap:anywhere}.colab-dispute-choices{display:flex;gap:6px;flex-wrap:wrap}.colab-dispute [aria-pressed=true]{outline:2px solid #6fd3c1}' +
+    '.colab-dispute{flex:0 0 auto;max-height:40vh;overflow:auto;border:1px solid #4a6a74;border-radius:8px;padding:8px;margin:6px 0;font-size:12px}.colab-dispute h4{margin:0 0 4px;font-size:12px}.colab-dispute section{margin:6px 0;padding-top:6px;border-top:1px solid #253c45}.colab-dispute p{margin:3px 0;color:#c9dfe6;overflow-wrap:anywhere}.colab-dispute-choices{display:flex;gap:6px;flex-wrap:wrap}.colab-dispute [aria-pressed=true]{outline:2px solid #6fd3c1}' +
     '.colab-chat-main>.colab-config:not([open]){margin:4px 0;padding-bottom:5px}.colab-chat-main>.colab-browse{padding:5px 0}.colab-run-details{flex:0 0 auto;font:11px/1.5 Segoe UI,sans-serif;color:#91adb7;margin:2px 0;min-height:18px}.colab-run-details>summary{cursor:pointer}.colab-run-details-body{max-height:24vh;overflow:auto;padding:6px 0}.colab-run-details .colab-recovery{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}.colab-run-details .colab-recovery button{padding:4px 7px;font-size:10px}.colab-chat-main>.colab-composer{position:relative;padding:6px 0 0 35px;max-height:32vh;overflow:visible}.colab-composer .attachment-toolbar{position:absolute;left:0;top:10px}.colab-composer .attachment-project{display:none}.colab-composer textarea{height:40px;min-height:40px;max-height:140px;padding:8px 11px;font-size:12px;border-radius:9px}.colab-composer .colab-compose-footer{margin-top:4px;padding:0;position:static;gap:6px}.colab-compose-footer>button{padding:7px 12px;font-size:11px;min-height:32px}.colab-compose-footer [role=status]{font-size:10px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.colab-composer .attachment-toolbar{gap:6px;margin:0 0 4px}.colab-composer .attachment-add{width:28px;height:28px;min-height:28px;padding:0;font-size:20px;border-radius:8px}.colab-composer .attachment-project{font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.colab-composer .attachment-error:empty{display:none}.colab-composer .attachment-chips:empty{display:none}.colab-composer .attachment-bar{margin:0}.colab-work{margin:6px 0 10px;padding:5px 9px}.colab-work-list{max-height:18vh}.colab-work-step{padding:4px 0}.colab-work-note{display:none}';
 
   const el = (id) => panel.querySelector('#' + id);
