@@ -1,17 +1,66 @@
-const {app,BrowserWindow,protocol}=require('electron');
-const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
-const root=path.join(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'atlas-colab-browser-'));
-app.disableHardwareAcceleration();app.setPath('userData',path.join(temp,'data'));
-protocol.registerSchemesAsPrivileged([{scheme:'atlas',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
-const chats=Array.from({length:14},(_,index)=>({id:'chat-'+index,title:'Project discussion '+index,cwd:index%2?'C:/Projects/Website':'C:/Projects/Game',projectName:index%2?'Website':'Game',createdAt:index+1,updatedAt:index+1,draft:'',messages:Array.from({length:72},(_,turn)=>({id:'message-'+index+'-'+turn,role:turn%2?'assistant':'user',content:(turn%2?'Result ':'Question ')+turn+' for project '+index+'\n'+('Earlier project details.\n').repeat(6),at:1700000000000+turn*1000})),busy:false}));
-chats[0].messages[2].id=chats[0].messages[0].id; // Imported duplicate IDs must not hide either message.
-const mock=`if(!localStorage.getItem('colabBrowserSeed')){localStorage.setItem('atlas.colab.chats.v1',JSON.stringify(${JSON.stringify({chats,selected:chats[0].id})}));localStorage.setItem('colabBrowserSeed','1');}
+const { app, BrowserWindow, protocol } = require('electron');
+const fs = require('node:fs'),
+  path = require('node:path'),
+  os = require('node:os'),
+  assert = require('node:assert/strict');
+const root = path.join(__dirname, '..'),
+  temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-colab-browser-'));
+app.disableHardwareAcceleration();
+app.setPath('userData', path.join(temp, 'data'));
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'atlas', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
+const chats = Array.from({ length: 14 }, (_, index) => ({
+  id: 'chat-' + index,
+  title: 'Project discussion ' + index,
+  cwd: index % 2 ? 'C:/Projects/Website' : 'C:/Projects/Game',
+  projectName: index % 2 ? 'Website' : 'Game',
+  createdAt: index + 1,
+  updatedAt: index + 1,
+  draft: '',
+  messages: Array.from({ length: 72 }, (_, turn) => ({
+    id: 'message-' + index + '-' + turn,
+    role: turn % 2 ? 'assistant' : 'user',
+    content:
+      (turn % 2 ? 'Result ' : 'Question ') +
+      turn +
+      ' for project ' +
+      index +
+      '\n' +
+      'Earlier project details.\n'.repeat(6),
+    at: 1700000000000 + turn * 1000,
+  })),
+  busy: false,
+}));
+chats[0].messages[2].id = chats[0].messages[0].id; // Imported duplicate IDs must not hide either message.
+const mock = `if(!localStorage.getItem('colabBrowserSeed')){localStorage.setItem('atlas.colab.chats.v1',JSON.stringify(${JSON.stringify({ chats, selected: chats[0].id })}));localStorage.setItem('colabBrowserSeed','1');}
 window.preparedResult={ready:false};window.collabCalls=[];window.atlas=new Proxy({collabReport:async()=>({provider:'codex',phase:'build',output:'Saved full stage report'}),prepareProject:async()=>preparedResult,collaborate:async request=>{collabCalls.push(request);return{id:'mock-direct-job'};},getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'windows'}),home:async()=>'C:/Projects',latestConversation:async()=>null,jobs:async()=>[],onJobs:()=>{},onCollaborationStatus:fn=>window.colabStatus=fn,providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'source',currentVersion:'test'}),chatMetadata:async()=>({})},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
-let win;const timeout=setTimeout(()=>{console.error('Colab browser test timed out');app.exit(1);},45000);timeout.unref();
-app.whenReady().then(async()=>{try{
- protocol.handle('atlas',request=>{const file=new URL(request.url).pathname.slice(1);if(file==='__test-mock.js')return new Response(mock,{headers:{'Content-Type':'application/javascript;charset=utf-8'}});if(!file)return new Response(fs.readFileSync(path.join(root,'index.html'),'utf8').replace('<head>','<head><script src="/__test-mock.js"></script>'),{headers:{'Content-Type':'text/html;charset=utf-8'}});return new Response(fs.readFileSync(path.join(root,file)),{headers:{'Content-Type':'application/javascript;charset=utf-8'}});});
- win=new BrowserWindow({show:false,width:1280,height:800,webPreferences:{backgroundThrottling:false}});await win.loadURL('atlas://app/');
- await win.webContents.executeJavaScript(`(async()=>{
+let win;
+const timeout = setTimeout(() => {
+  console.error('Colab browser test timed out');
+  app.exit(1);
+}, 45000);
+timeout.unref();
+app.whenReady().then(async () => {
+  try {
+    protocol.handle('atlas', (request) => {
+      const file = new URL(request.url).pathname.slice(1);
+      if (file === '__test-mock.js')
+        return new Response(mock, { headers: { 'Content-Type': 'application/javascript;charset=utf-8' } });
+      if (!file)
+        return new Response(
+          fs
+            .readFileSync(path.join(root, 'index.html'), 'utf8')
+            .replace('<head>', '<head><script src="/__test-mock.js"></script>'),
+          { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
+        );
+      return new Response(fs.readFileSync(path.join(root, file)), {
+        headers: { 'Content-Type': 'application/javascript;charset=utf-8' },
+      });
+    });
+    win = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { backgroundThrottling: false } });
+    await win.loadURL('atlas://app/');
+    await win.webContents.executeJavaScript(`(async()=>{
    await atlasColab.ready;if(atlasColab.history().length!==14)throw Error('Legacy chats were pruned');atlasColab.selectChat('chat-0');if(atlasColab.current().messages.length!==72)throw Error('Legacy messages were pruned');
    const transcript=document.querySelector('#colabTranscript');transcript.scrollTop=190;transcript.dispatchEvent(new Event('scroll'));const top=transcript.scrollTop;
    if(transcript.querySelectorAll('.colab-message').length!==72)throw Error('Duplicate imported IDs hid a message');const firstMessage=transcript.querySelector('.colab-message');
@@ -28,33 +77,84 @@ app.whenReady().then(async()=>{try{
    atlasColab.applyProfile({id:'web-profile',name:'Website',cwd:'C:/Projects/Website',effort:'medium'});if(atlasColab.current().cwd!=='C:/Projects/Website'||atlasColab.history().find(chat=>chat.id==='chat-0').turns.length!==73)throw Error('Switching project rewrote previous conversation');
    atlasColab.selectChat('chat-0');await atlasColabHistory.flush();
  })()`);
- await win.reload();await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
- await win.webContents.executeJavaScript(`(async()=>{await atlasColab.ready;atlasColab.selectChat('chat-0');if(atlasColab.history().length!==14||atlasColab.current().messages.length!==73||!atlasColab.current().messages[0].content.startsWith('Question 0')||atlasColab.current().messages.at(-1).content!=='New saved final result')throw Error('IndexedDB reload lost chat history');})()`);
- for(const [width,height]of [[1280,800],[800,600],[640,600]]){
-  win.setContentSize(width,height);for(let attempt=0;attempt<40;attempt++){const size=await win.webContents.executeJavaScript('[innerWidth,innerHeight]');if(size[0]===width&&size[1]===height)break;await new Promise(resolve=>setTimeout(resolve,50));}
-  const bounds=await win.webContents.executeJavaScript(`(()=>{const transcript=document.querySelector('#colabTranscript'),form=document.querySelector('#colabForm');return {height:transcript.clientHeight,formBottom:form.getBoundingClientRect().bottom,outerHeight:document.documentElement.scrollHeight,outerWidth:document.documentElement.scrollWidth,width:innerWidth,heightLimit:innerHeight};})()`);
-  assert(bounds.height>35&&bounds.formBottom<=height+1&&bounds.outerHeight<=height+1&&bounds.outerWidth<=width+1,JSON.stringify(bounds));
- }
- win.setContentSize(1280,800);await new Promise(resolve=>setTimeout(resolve,100));
- fs.writeFileSync(path.join(temp,'colab-history.png'),(await win.webContents.capturePage()).toPNG());
- await win.webContents.executeJavaScript(`(async()=>{
+    await win.reload();
+    await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+    await win.webContents.executeJavaScript(
+      `(async()=>{await atlasColab.ready;atlasColab.selectChat('chat-0');if(atlasColab.history().length!==14||atlasColab.current().messages.length!==73||!atlasColab.current().messages[0].content.startsWith('Question 0')||atlasColab.current().messages.at(-1).content!=='New saved final result')throw Error('IndexedDB reload lost chat history');})()`,
+    );
+    for (const [width, height] of [
+      [1280, 800],
+      [800, 600],
+      [640, 600],
+    ]) {
+      win.setContentSize(width, height);
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const size = await win.webContents.executeJavaScript('[innerWidth,innerHeight]');
+        if (size[0] === width && size[1] === height) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      const bounds = await win.webContents.executeJavaScript(
+        `(()=>{const transcript=document.querySelector('#colabTranscript'),form=document.querySelector('#colabForm');return {height:transcript.clientHeight,formBottom:form.getBoundingClientRect().bottom,outerHeight:document.documentElement.scrollHeight,outerWidth:document.documentElement.scrollWidth,width:innerWidth,heightLimit:innerHeight};})()`,
+      );
+      assert(
+        bounds.height > 35 &&
+          bounds.formBottom <= height + 1 &&
+          bounds.outerHeight <= height + 1 &&
+          bounds.outerWidth <= width + 1,
+        JSON.stringify(bounds),
+      );
+    }
+    win.setContentSize(1280, 800);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    fs.writeFileSync(path.join(temp, 'colab-history.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(`(async()=>{
   atlasColab.selectChat('chat-2');const task=document.querySelector('#colabTask'),form=document.querySelector('#colabForm');task.value='Continue my uncommitted work';task.dispatchEvent(new Event('input'));const before=atlasColab.current().messages.length;
   await form.onsubmit({preventDefault(){}});if(collabCalls.length||atlasColab.current().messages.length!==before||task.value!=='Continue my uncommitted work')throw Error('Cancel lost the task or started work');
   const change=(id,value)=>{const field=document.querySelector('#'+id);if(field.type==='checkbox')field.checked=value;else field.value=value;field.dispatchEvent(new Event(field.tagName==='TEXTAREA'?'input':'change'));};change('colabPreset','economy');change('colabTokenWarning','5000');change('colabAdaptiveEffort',true);change('colabReuseChecks',true);change('colabCriteria','Works offline');change('colabOutOfScope','No cloud');
   preparedResult={ready:true,isolated:false};await form.onsubmit({preventDefault(){}});if(collabCalls[0].preset!=='economy'||collabCalls[0].tokenWarning!==5000||!collabCalls[0].adaptiveEffort||!collabCalls[0].reuseChecks||collabCalls[0].brief.criteria!=='Works offline')throw Error('Efficiency controls not forwarded');if(collabCalls.length!==1||collabCalls[0].isolated!==false||atlasColab.current().isolated!==false||document.querySelector('#colabIsolated').checked)throw Error('Direct editing choice was not used');if(!document.querySelector('#colabEditingHint').textContent.includes('Direct editing'))throw Error('Editing mode not explained');
   colabStatus({id:'mock-direct-job',chatId:'chat-2',error:'Mock interrupted task'});await atlasColabHistory.flush();const saved=await atlasColabHistory.load({chats:[],selected:''});if(saved.chats.find(chat=>chat.id==='chat-2').isolated!==false)throw Error('Direct choice not saved');
  })()`);
- await win.webContents.executeJavaScript(`(async()=>{atlasColab.selectChat('chat-3');const usage=atlasEfficiency.usageSummary([{provider:'codex',phase:'build',output:'Done',usage:{inputTokens:20,outputTokens:5},metrics:{promptCharacters:400,legacyPromptCharacters:2000}},{provider:'claude',phase:'review',output:'Approved',metrics:{promptCharacters:400,legacyPromptCharacters:2000}}]);colabStatus({id:'usage-job',chatId:'chat-3',usage,result:'Completed with partial usage'});const details=document.querySelector('.colab-efficiency');if(details.hidden||!details.textContent.includes('estimated')||!details.textContent.includes('codex')||!details.textContent.includes('claude'))throw Error('Stage usage sources not shown');details.open=true;details.querySelector('button').click();await new Promise(resolve=>setTimeout(resolve,30));const report=document.querySelector('[aria-label="Saved Colab stage report"]');if(!report.open||!report.textContent.includes('Saved full stage report'))throw Error('Stage report missing');report.querySelector('button').click();})()`);
- for(const [width,height]of [[1280,800],[640,600]]){win.setContentSize(width,height);for(let attempt=0;attempt<40;attempt++){if(await win.webContents.executeJavaScript('innerWidth')===width)break;await new Promise(resolve=>setTimeout(resolve,50));}const size=await win.webContents.executeJavaScript('({bottom:document.querySelector("#colabForm").getBoundingClientRect().bottom,outer:document.documentElement.scrollHeight})');assert(size.bottom<=height+1&&size.outer<=height+1,JSON.stringify(size));}
- await win.webContents.executeJavaScript(`(async()=>{
+    await win.webContents.executeJavaScript(
+      `(async()=>{atlasColab.selectChat('chat-3');const usage=atlasEfficiency.usageSummary([{provider:'codex',phase:'build',output:'Done',usage:{inputTokens:20,outputTokens:5},metrics:{promptCharacters:400,legacyPromptCharacters:2000}},{provider:'claude',phase:'review',output:'Approved',metrics:{promptCharacters:400,legacyPromptCharacters:2000}}]);colabStatus({id:'usage-job',chatId:'chat-3',usage,result:'Completed with partial usage'});const details=document.querySelector('.colab-efficiency');if(details.hidden||!details.textContent.includes('estimated')||!details.textContent.includes('codex')||!details.textContent.includes('claude'))throw Error('Stage usage sources not shown');details.open=true;details.querySelector('button').click();await new Promise(resolve=>setTimeout(resolve,30));const report=document.querySelector('[aria-label="Saved Colab stage report"]');if(!report.open||!report.textContent.includes('Saved full stage report'))throw Error('Stage report missing');report.querySelector('button').click();})()`,
+    );
+    for (const [width, height] of [
+      [1280, 800],
+      [640, 600],
+    ]) {
+      win.setContentSize(width, height);
+      for (let attempt = 0; attempt < 40; attempt++) {
+        if ((await win.webContents.executeJavaScript('innerWidth')) === width) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      const size = await win.webContents.executeJavaScript(
+        '({bottom:document.querySelector("#colabForm").getBoundingClientRect().bottom,outer:document.documentElement.scrollHeight})',
+      );
+      assert(size.bottom <= height + 1 && size.outer <= height + 1, JSON.stringify(size));
+    }
+    await win.webContents.executeJavaScript(`(async()=>{
    const state={windowsAvailable:true,runtimeInstalled:false,integrations:[],preset:{id:'windows',name:'Windows computer control',command:'uvx',args:['windows-mcp','serve'],enabled:true}};const calls=[];
    atlas.integrations=async request=>{calls.push(request);if(request?.action==='save')state.integrations.push({...request.integration,status:'Stopped',tools:0});if(request?.action==='install')state.runtimeInstalled=true;if(request?.action==='start'){state.integrations[0].status='Ready';state.integrations[0].tools=7;}return state;};
    document.querySelector('#colabTools').click();await new Promise(resolve=>setTimeout(resolve,40));const dialog=document.querySelector('.productivity-dialog');if(!dialog.open||!dialog.textContent.includes('Add Windows control'))throw Error('Colab Tools menu missing');
    const click=async text=>{const button=[...dialog.querySelectorAll('button')].find(node=>node.textContent===text);if(!button)throw Error('Missing '+text);button.click();await new Promise(resolve=>setTimeout(resolve,40));};
    await click('Add Windows control');await click('Install runtime');await click('Start / check');if(!dialog.textContent.includes('Ready · 7 tools')||!calls.some(row=>row?.action==='start'))throw Error('Tool readiness missing');dialog.close();
  })()`);
- console.log('PASS: Colab Tools menu adds the Windows preset, installs its runtime and checks readiness.');
- console.log('PASS: Efficiency controls, optional brief/budget/check reuse, mixed reported/estimated stage usage, saved report viewer and responsive layout.');
- console.log('PASS: Dirty-project cancellation preserves draft and messages, explicit direct editing starts the task and persists its editing mode.');
- console.log('PASS: IndexedDB migration/reload, 14 chats and 73 turns, project selection, old-message search, comparison, live-update scroll preservation and three viewport sizes.');console.log('Preview: '+path.join(temp,'colab-history.png'));
- }catch(error){console.error(error);process.exitCode=1;}finally{clearTimeout(timeout);win?.destroy();app.exit(process.exitCode||0);}});
+    console.log('PASS: Colab Tools menu adds the Windows preset, installs its runtime and checks readiness.');
+    console.log(
+      'PASS: Efficiency controls, optional brief/budget/check reuse, mixed reported/estimated stage usage, saved report viewer and responsive layout.',
+    );
+    console.log(
+      'PASS: Dirty-project cancellation preserves draft and messages, explicit direct editing starts the task and persists its editing mode.',
+    );
+    console.log(
+      'PASS: IndexedDB migration/reload, 14 chats and 73 turns, project selection, old-message search, comparison, live-update scroll preservation and three viewport sizes.',
+    );
+    console.log('Preview: ' + path.join(temp, 'colab-history.png'));
+  } catch (error) {
+    console.error(error);
+    process.exitCode = 1;
+  } finally {
+    clearTimeout(timeout);
+    win?.destroy();
+    app.exit(process.exitCode || 0);
+  }
+});

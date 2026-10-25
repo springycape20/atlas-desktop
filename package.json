@@ -15,11 +15,14 @@
     "test:colab-ui": "electron tests/colab-history.browser.cjs",
     "test:graph-ui": "electron tests/colab-graph.browser.cjs",
     "test:approvals-ui": "electron tests/approvals.browser.cjs",
-    "test:assistant-ui": "electron tests/assistant-chat.browser.cjs"
+    "test:assistant-ui": "electron tests/assistant-chat.browser.cjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "electron": "^45.0.0",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "prettier": "3.9.10"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

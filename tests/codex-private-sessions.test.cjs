@@ -1,6 +1,73 @@
-const test=require('node:test'),assert=require('node:assert/strict'),{CodexConnection}=require('../codex-connection');
-function fixture(){const connection=new CodexConnection('unused'),calls=[];let count=0;connection.connect=async()=>{};connection.request=async(method,params)=>{calls.push({method,params});if(method==='thread/start'||method==='thread/resume')return {thread:{id:params.threadId||'private-'+(++count),ephemeral:params.ephemeral===true}};if(method==='turn/start'){queueMicrotask(()=>connection.receive({method:'turn/completed',params:{threadId:params.threadId,turn:{id:'turn',status:'completed'}}}));return {turn:{id:'turn'}};}throw Error('Unexpected method '+method);};return {connection,calls,run:options=>connection.run({prompt:'ATLAS internal pass',cwd:process.cwd(),settings:{codexSandbox:'read-only',timeoutSeconds:0},internal:true,...options})};}
-test('Colab starts temporary threads and continues them in memory without creating visible sessions',async()=>{const f=fixture(),first=await f.run();assert(f.connection.hasInternalSession(first.sessionId));await f.run({sessionId:first.sessionId});assert.equal(f.calls.filter(row=>row.method==='thread/start').length,1);assert.equal(f.calls.filter(row=>row.method==='thread/resume').length,0);assert.equal(f.calls.find(row=>row.method==='thread/start').params.ephemeral,true);assert.equal(f.calls.filter(row=>row.method==='turn/start')[1].params.threadId,first.sessionId);});
-test('saved legacy or expired internal sessions cannot resume into normal Codex history',async()=>{const f=fixture();await f.run({sessionId:'old-persisted-review'});assert.equal(f.calls[0].method,'thread/start');assert.equal(f.calls[0].params.ephemeral,true);assert(!f.calls.some(row=>row.method==='thread/resume'));const id=[...f.connection.internalSessions][0];f.connection.receive({method:'thread/closed',params:{threadId:id}});assert(!f.connection.hasInternalSession(id));await f.run({sessionId:id});assert.equal(f.calls.filter(row=>row.method==='thread/start').length,2);});
-test('normal Assistant conversations retain their persistent session behavior',async()=>{const f=fixture();await f.run({internal:false});await f.run({internal:false,sessionId:'assistant-existing'});assert.equal(f.calls[0].params.ephemeral,undefined);assert(f.calls.some(row=>row.method==='thread/resume'&&row.params.threadId==='assistant-existing'));});
-test('unconfirmed temporary sessions fail before submitting a model task',async()=>{const f=fixture(),request=f.connection.request;f.connection.request=async(method,params)=>method==='thread/start'?{thread:{id:'unconfirmed'}}:request(method,params);await assert.rejects(f.run(),/did not confirm/);assert(!f.calls.some(row=>row.method==='turn/start'));});
+const test = require('node:test'),
+  assert = require('node:assert/strict'),
+  { CodexConnection } = require('../codex-connection');
+function fixture() {
+  const connection = new CodexConnection('unused'),
+    calls = [];
+  let count = 0;
+  connection.connect = async () => {};
+  connection.request = async (method, params) => {
+    calls.push({ method, params });
+    if (method === 'thread/start' || method === 'thread/resume')
+      return { thread: { id: params.threadId || 'private-' + ++count, ephemeral: params.ephemeral === true } };
+    if (method === 'turn/start') {
+      queueMicrotask(() =>
+        connection.receive({
+          method: 'turn/completed',
+          params: { threadId: params.threadId, turn: { id: 'turn', status: 'completed' } },
+        }),
+      );
+      return { turn: { id: 'turn' } };
+    }
+    throw Error('Unexpected method ' + method);
+  };
+  return {
+    connection,
+    calls,
+    run: (options) =>
+      connection.run({
+        prompt: 'ATLAS internal pass',
+        cwd: process.cwd(),
+        settings: { codexSandbox: 'read-only', timeoutSeconds: 0 },
+        internal: true,
+        ...options,
+      }),
+  };
+}
+test('Colab starts temporary threads and continues them in memory without creating visible sessions', async () => {
+  const f = fixture(),
+    first = await f.run();
+  assert(f.connection.hasInternalSession(first.sessionId));
+  await f.run({ sessionId: first.sessionId });
+  assert.equal(f.calls.filter((row) => row.method === 'thread/start').length, 1);
+  assert.equal(f.calls.filter((row) => row.method === 'thread/resume').length, 0);
+  assert.equal(f.calls.find((row) => row.method === 'thread/start').params.ephemeral, true);
+  assert.equal(f.calls.filter((row) => row.method === 'turn/start')[1].params.threadId, first.sessionId);
+});
+test('saved legacy or expired internal sessions cannot resume into normal Codex history', async () => {
+  const f = fixture();
+  await f.run({ sessionId: 'old-persisted-review' });
+  assert.equal(f.calls[0].method, 'thread/start');
+  assert.equal(f.calls[0].params.ephemeral, true);
+  assert(!f.calls.some((row) => row.method === 'thread/resume'));
+  const id = [...f.connection.internalSessions][0];
+  f.connection.receive({ method: 'thread/closed', params: { threadId: id } });
+  assert(!f.connection.hasInternalSession(id));
+  await f.run({ sessionId: id });
+  assert.equal(f.calls.filter((row) => row.method === 'thread/start').length, 2);
+});
+test('normal Assistant conversations retain their persistent session behavior', async () => {
+  const f = fixture();
+  await f.run({ internal: false });
+  await f.run({ internal: false, sessionId: 'assistant-existing' });
+  assert.equal(f.calls[0].params.ephemeral, undefined);
+  assert(f.calls.some((row) => row.method === 'thread/resume' && row.params.threadId === 'assistant-existing'));
+});
+test('unconfirmed temporary sessions fail before submitting a model task', async () => {
+  const f = fixture(),
+    request = f.connection.request;
+  f.connection.request = async (method, params) =>
+    method === 'thread/start' ? { thread: { id: 'unconfirmed' } } : request(method, params);
+  await assert.rejects(f.run(), /did not confirm/);
+  assert(!f.calls.some((row) => row.method === 'turn/start'));
+});

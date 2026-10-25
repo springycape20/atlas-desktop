@@ -1,5 +1,52 @@
 // Native compatibility check: MCP handshake and ControlStatus only.
 // No screenshots, desktop input, config writes, or provider model calls.
 // Set ATLAS_WINDOWS_DATA when checking an installation with a different data path.
-const path=require('node:path'),{createIntegrationService}=require('../integration-service'),{assertDisabled}=require('../windows-tool-runtime'),{Client}=require('@modelcontextprotocol/sdk/client/index.js'),{StreamableHTTPClientTransport}=require('@modelcontextprotocol/sdk/client/streamableHttp.js');
-(async()=>{const controller=new AbortController(),root=process.env.ATLAS_WINDOWS_DATA||path.join(process.env.APPDATA,'atlas-local-desktop'),job={id:'atlas-runtime-smoke',signal:controller.signal},service=createIntegrationService({directory:root,approvals:{ask:async request=>{if(request.title==='Allow windows / ControlStatus?')return 'Allow once';throw Error('Unexpected smoke-test approval');}}});let client,binding;try{const entry=await service.start('windows');if(!entry.runtime)throw Error('The default managed Windows preset is not selected.');const normal=await entry.connection.call('ControlStatus',{},controller.signal);if(normal.structuredContent?.enabled!==true)throw Error('Normal runtime did not confirm control enabled.');binding=await service.bind({provider:'codex',owner:'runtime-smoke',job,signal:controller.signal});client=new Client({name:'atlas-runtime-smoke',version:'1'});await client.connect(new StreamableHTTPClientTransport(new URL(binding.config.url),{requestInit:{headers:binding.config.headers}}));const takeover=await client.callTool({name:'integrations_call',arguments:{id:'windows',tool:'ControlStatus',arguments:{}}});assertDisabled(takeover);console.log('PASS: Real managed Windows-MCP initializes; normal control is enabled; approved offline takeover confirms control disabled. Source: '+entry.runtime.revision);}finally{binding?.release();await client?.close();await service.close();}})().catch(error=>{console.error(error.message);process.exitCode=1;});
+const path = require('node:path'),
+  { createIntegrationService } = require('../integration-service'),
+  { assertDisabled } = require('../windows-tool-runtime'),
+  { Client } = require('@modelcontextprotocol/sdk/client/index.js'),
+  { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
+(async () => {
+  const controller = new AbortController(),
+    root = process.env.ATLAS_WINDOWS_DATA || path.join(process.env.APPDATA, 'atlas-local-desktop'),
+    job = { id: 'atlas-runtime-smoke', signal: controller.signal },
+    service = createIntegrationService({
+      directory: root,
+      approvals: {
+        ask: async (request) => {
+          if (request.title === 'Allow windows / ControlStatus?') return 'Allow once';
+          throw Error('Unexpected smoke-test approval');
+        },
+      },
+    });
+  let client, binding;
+  try {
+    const entry = await service.start('windows');
+    if (!entry.runtime) throw Error('The default managed Windows preset is not selected.');
+    const normal = await entry.connection.call('ControlStatus', {}, controller.signal);
+    if (normal.structuredContent?.enabled !== true) throw Error('Normal runtime did not confirm control enabled.');
+    binding = await service.bind({ provider: 'codex', owner: 'runtime-smoke', job, signal: controller.signal });
+    client = new Client({ name: 'atlas-runtime-smoke', version: '1' });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(binding.config.url), {
+        requestInit: { headers: binding.config.headers },
+      }),
+    );
+    const takeover = await client.callTool({
+      name: 'integrations_call',
+      arguments: { id: 'windows', tool: 'ControlStatus', arguments: {} },
+    });
+    assertDisabled(takeover);
+    console.log(
+      'PASS: Real managed Windows-MCP initializes; normal control is enabled; approved offline takeover confirms control disabled. Source: ' +
+        entry.runtime.revision,
+    );
+  } finally {
+    binding?.release();
+    await client?.close();
+    await service.close();
+  }
+})().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
