@@ -1151,6 +1151,15 @@ async function startCollaboration(event, input) {
     rolesExplicit: source.rolesExplicit === true,
     adaptiveEffort: source.adaptiveEffort === true,
     reuseChecks: source.reuseChecks === true,
+    // A ruling on a paused builder–reviewer dispute applies only to the resume it was sent with.
+    rulings:
+      previous && input?.rulings && typeof input.rulings === 'object'
+        ? Object.fromEntries(
+            Object.entries(input.rulings)
+              .slice(0, 30)
+              .filter(([id, side]) => /^[\w.-]{1,80}$/.test(id) && ['builder', 'reviewer'].includes(side)),
+          )
+        : {},
     tokenWarning: efficiency.tokenLimit(source.tokenWarning),
     brief: {
       criteria: typeof source.brief?.criteria === 'string' ? source.brief.criteria.slice(0, 4000) : '',

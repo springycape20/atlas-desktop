@@ -39,3 +39,5 @@ jobs:
           npm run test:graph-ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:approvals-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:dispute-ui

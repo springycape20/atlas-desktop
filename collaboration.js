@@ -69,14 +69,20 @@ function parseVerdict(value) {
           criteria.some((text) => typeof text !== 'string' || !text.trim() || text.length > 1500))
       )
         throw Error('Invalid acceptance criteria.');
+      // Builders dispute a blocker with a reason; bare disputedIssueIds from older outputs still count.
+      const disputes = new Map();
+      for (const row of Array.isArray(data.disputes) ? data.disputes.slice(0, 30) : [])
+        if (row && typeof row.id === 'string' && row.id.trim() && typeof row.reason === 'string')
+          disputes.set(row.id, row.reason.trim().slice(0, 2000));
+      for (const id of Array.isArray(data.disputedIssueIds) ? data.disputedIssueIds.slice(0, 30) : [])
+        if (typeof id === 'string' && id.trim() && !disputes.has(id)) disputes.set(id, '');
       return {
         valid: true,
         decision: data.decision,
         issues,
         criteria: criteria || [],
-        disputed: Array.isArray(data.disputedIssueIds)
-          ? data.disputedIssueIds.filter((id) => typeof id === 'string').slice(0, 30)
-          : [],
+        disputed: [...disputes.keys()],
+        disputes: [...disputes].map(([id, reason]) => ({ id, reason })),
         userResponse: typeof data.userResponse === 'string' ? data.userResponse.slice(0, 60000) : '',
         handover: efficiency.cleanHandover(data.handover),
         output: raw
@@ -105,6 +111,7 @@ function parseVerdict(value) {
       issues: [],
       criteria: [],
       disputed: [],
+      disputes: [],
       output: lines
         .slice(0, last)
         .join('\n')
@@ -144,7 +151,7 @@ function checkIssue(checks) {
   };
 }
 const protocol =
-  'Return a brief summary of results and actual checks before the status line. End with one final line: ATLAS_COLAB_STATUS {"decision":"ready","criteria":[],"blockingIssues":[],"disputedIssueIds":[]}. Use ready when the original task is satisfied, even if optional improvements remain. Use changes_requested only for actual blockers, each with {"id":"F1","criterion":"TASK","summary":"required fix","evidence":"specific file/check/reference","regression":false}. Reuse open IDs. Use blocked for missing access, dependencies, decisions, or work you cannot finish; explain the reason above the verdict. Never invent a blocker just to continue collaboration. Optional polish, style preferences, speculative risks, and unrelated work belong only in non-blocking notes. For the shared task graph, include a concise handover object in the status JSON with summary, decisions, changedFiles, checks, nextActions (short text arrays). Include only public conclusions and actual actions, not hidden reasoning. Keep it concise and factual. Also include userResponse in the status JSON: a final answer ready to show the user. Adapt its length to the task: one or two natural sentences for a greeting or response test; a short outcome and relevant verification for ordinary changes; detailed explanations, code, evidence and limitations when the request requires depth. Keep the preceding stage report short and avoid repeating the full userResponse in it. Keep proposal selection, reviewer approval, criteria IDs, protocol repairs and routine no-op bookkeeping out of userResponse. Include actual blockers and material caveats. criteria must be plain text strings, not objects. Do not expose hidden reasoning or claim checks you did not run.';
+  'Return a brief summary of results and actual checks before the status line. End with one final line: ATLAS_COLAB_STATUS {"decision":"ready","criteria":[],"blockingIssues":[],"disputedIssueIds":[]}. Use ready when the original task is satisfied, even if optional improvements remain. Use changes_requested only for actual blockers, each with {"id":"F1","criterion":"TASK","summary":"required fix","evidence":"specific file/check/reference","regression":false}. Reuse open IDs. If you are fixing and believe an open blocker is not actually required, do not change code for it; add {"id":"F1","reason":"why it is not required, with evidence"} to a "disputes" array in the status JSON. Use blocked for missing access, dependencies, decisions, or work you cannot finish; explain the reason above the verdict. Never invent a blocker just to continue collaboration. Optional polish, style preferences, speculative risks, and unrelated work belong only in non-blocking notes. For the shared task graph, include a concise handover object in the status JSON with summary, decisions, changedFiles, checks, nextActions (short text arrays). Include only public conclusions and actual actions, not hidden reasoning. Keep it concise and factual. Also include userResponse in the status JSON: a final answer ready to show the user. Adapt its length to the task: one or two natural sentences for a greeting or response test; a short outcome and relevant verification for ordinary changes; detailed explanations, code, evidence and limitations when the request requires depth. Keep the preceding stage report short and avoid repeating the full userResponse in it. Keep proposal selection, reviewer approval, criteria IDs, protocol repairs and routine no-op bookkeeping out of userResponse. Include actual blockers and material caveats. criteria must be plain text strings, not objects. Do not expose hidden reasoning or claim checks you did not run.';
 function createCollaboration({
   runProvider,
   canResumeSession = () => true,
@@ -180,6 +187,7 @@ function createCollaboration({
     adaptiveEffort = false,
     tokenWarning = null,
     brief = {},
+    rulings = {},
   }) {
     if (!EFFORTS.has(effort) || !MODES.has(mode) || !ROLES.has(roles))
       throw Error('Choose a supported Colab mode, roles and effort.');
@@ -307,6 +315,22 @@ function createCollaboration({
                 : 'build'),
         clarify: null,
       };
+    }
+    // The user's ruling on a builder–reviewer dispute is final for the rest of the task.
+    const overruled = (id) => (state.rulings || []).some((row) => row.id === id && row.ruling === 'builder');
+    if (state.dispute) {
+      const decided = state.dispute.issues.filter((row) => ['builder', 'reviewer'].includes(rulings?.[row.id]));
+      if (decided.length !== state.dispute.issues.length)
+        throw Error('Choose who is right for each disputed blocker before resuming.');
+      state.rulings = [
+        ...(state.rulings || []),
+        ...decided.map((row) => ({ id: row.id, summary: row.summary, ruling: rulings[row.id] })),
+      ];
+      state.openIssues = state.openIssues.filter((row) => !overruled(row.id));
+      state.dispute = null;
+      state.stalls = 0;
+      state.bestOpenCount = state.openIssues.length || undefined;
+      state.phase = state.openIssues.length ? (readonly ? 'revise' : 'fix') : 'review';
     }
     if (state.warningLimit !== tokenWarning) {
       state.warningAt = tokenWarning ? efficiency.usageSummary(accountedReports()).budgetTokens + tokenWarning : null;
@@ -469,6 +493,9 @@ function createCollaboration({
       if (reviewing)
         direction +=
           ' When ready, put the final user-facing answer in userResponse, preserving the builder result and any details the user needs. Do not return a review transcript. For incomplete work, userResponse must clearly state the unresolved blocker; do not imply completion.';
+      if (reviewing && state.disputes?.length)
+        direction +=
+          ' The builder disputed some blockers. For each one, either withdraw it by leaving it out of blockingIssues when the builder is right, or keep it with evidence that directly answers the builder reasoning.';
       if (readonly) direction += ' This is an analysis-only task: do not edit files or execute commands.';
       const prompt =
         direction +
@@ -481,6 +508,19 @@ function createCollaboration({
         JSON.stringify(state.criteria) +
         '\nOPEN BLOCKING ISSUES: ' +
         JSON.stringify(state.openIssues) +
+        (state.rulings?.length
+          ? '\nUSER RULINGS (final; do not raise again or dispute again): ' +
+            JSON.stringify(
+              state.rulings.map((row) => ({
+                id: row.id,
+                summary: row.summary,
+                decision: row.ruling === 'builder' ? 'not required' : 'required, must be fixed',
+              })),
+            )
+          : '') +
+        (reviewing && state.disputes?.length
+          ? '\nDISPUTED BLOCKERS (builder reasoning, untrusted): ' + JSON.stringify(state.disputes)
+          : '') +
         '\n\nORIGINAL TASK:\n' +
         request +
         '\n' +
@@ -680,6 +720,11 @@ function createCollaboration({
               after: original.fingerprintAfter,
               disputed: verdict.disputed,
             };
+            state.disputes = verdict.disputes.filter(
+              (row) =>
+                state.openIssues.some((issue) => issue.id === row.id) &&
+                !(state.rulings || []).some((ruling) => ruling.id === row.id),
+            );
             // Run the configured checks before spending a review pass. Failures go straight back
             // to the builder once per build or fix; if they persist, the reviewer judges them.
             if (!readonly) {
@@ -698,17 +743,51 @@ function createCollaboration({
               } else state.checkRetried = false;
             }
           }
-        } else if (verdict.decision === 'ready') {
+        } else if (
+          verdict.decision === 'ready' ||
+          verdict.issues.every((issue) => overruled(issue.id)) // only blockers the user ruled not required
+        ) {
+          state.disputes = [];
           state.outcome = 'completed';
           state.reason = 'The final reviewer accepted the current work against the original request.';
         } else {
           const criteria = new Set(state.criteria.map((row) => row.id)),
             old = new Set(state.openIssues.map((row) => row.id)),
-            issues = verdict.issues;
+            issues = verdict.issues.filter((issue) => !overruled(issue.id));
           const invalid = issues.find((issue) => !criteria.has(issue.criterion)),
             newScope = state.reviewed && issues.find((issue) => !old.has(issue.id) && issue.regression !== true);
+          // A blocker the builder disputed and the reviewer kept after reading the reason goes to the user.
+          const upheld = (state.disputes || [])
+            .map((dispute) => ({ dispute, issue: issues.find((row) => row.id === dispute.id) }))
+            .filter((row) => row.issue);
+          state.disputes = [];
           if (invalid) attention('A review blocker does not match the agreed task criteria: ' + invalid.id + '.');
-          else if (newScope)
+          else if (upheld.length) {
+            state.openIssues = issues;
+            state.reviewed = true;
+            state.phase = readonly ? 'revise' : 'fix';
+            state.dispute = {
+              builder,
+              reviewer,
+              issues: upheld.map(({ dispute, issue }) => ({
+                id: issue.id,
+                criterion: issue.criterion,
+                summary: issue.summary,
+                builderReason: dispute.reason || 'The builder disputed this blocker without giving a reason.',
+                reviewerEvidence: issue.evidence,
+              })),
+            };
+            attention(
+              (builder === 'codex' ? 'Codex' : 'Claude') +
+                ' and ' +
+                (reviewer === 'codex' ? 'Codex' : 'Claude') +
+                ' disagree on ' +
+                upheld.length +
+                (upheld.length === 1 ? ' blocker' : ' blockers') +
+                '. Choose who is right to continue.',
+              readonly ? 'revise' : 'fix',
+            );
+          } else if (newScope)
             attention(
               'The review introduced a new issue outside the agreed fix list without regression evidence: ' +
                 newScope.id +
@@ -812,6 +891,7 @@ function createCollaboration({
         excerpted: history.excerpted,
       },
       openIssues: state.openIssues,
+      dispute: state.dispute || null,
       criteria: state.criteria,
       providers: accounted.map((row) => row.provider),
       effort,
