@@ -17,6 +17,7 @@
     revise: 'Revise plan',
     synthesis: 'Combine proposals',
     clarify: 'Clarify verdict',
+    reproduce: 'Reproduce bug',
   };
   function build({ task = '', reports = [], state = {}, active = null, outcome = '', verification = null } = {}) {
     const nodes = [],
@@ -144,8 +145,9 @@
         origin: 'provider reported',
         rank: index - first + 1,
       });
-      edge('task', id, phase.startsWith('proposal_') ? 'proposes' : 'contains');
-      if (phase.startsWith('proposal_')) proposals.push(id);
+      edge('task', id, phase.startsWith('proposal_') ? 'proposes' : phase === 'reproduce' ? 'reproduces' : 'contains');
+      // A reproduction informs the fix the same way proposals inform a build.
+      if (phase.startsWith('proposal_') || phase === 'reproduce') proposals.push(id);
       else if (['build', 'draft', 'synthesis'].includes(phase)) {
         for (const proposal of proposals) edge(proposal, id, 'informs');
         artifact = id;
