@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-npm install
+npm ci
 if errorlevel 1 (
   echo Electron runtime installation failed.
   pause
