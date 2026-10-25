@@ -5,6 +5,9 @@ const inside=(root,file)=>{const rel=path.relative(key(root),key(file));return !
 // Resolve the nearest existing parent too, so new files through junctions use
 // the same protection as existing files. Keep lexical paths for denial history.
 async function canonical(file){let current=path.resolve(file),tail=[];for(;;){try{return path.join(await fs.realpath(current),...tail.reverse());}catch(error){if(!['ENOENT','ENOTDIR'].includes(error.code))throw error;const parent=path.dirname(current);if(parent===current)throw error;tail.push(path.basename(current));current=parent;}}}
+// Denials recorded through an alias (junction, 8.3 short name) must still
+// match the canonical targets below, so compare both forms.
+async function canonicalDenials(denied){return [...new Set((await Promise.all(denied.map(async file=>[file,await canonical(file).catch(()=>file)]))).flat())];}
 async function resolveExecutable(name,cwd,env){
  if(path.isAbsolute(name)||/[\\/]/.test(name))return canonical(path.resolve(cwd,name));
  const dirs=[path.join(cwd,'.venv','Scripts')];
@@ -15,7 +18,7 @@ async function resolveExecutable(name,cwd,env){
  throw Error('Executable not found: '+name);
 }
 async function assessDesktopAction(tool,args={},cwd,{denied=[],env=process.env}={}){
- const paths=[],normalized={...args};let reason='',write=false;
+ const paths=[],normalized={...args};let reason='',write=false;denied=await canonicalDenials(denied);
  const add=async value=>{if(typeof value!=='string'||!value||value.includes('\0'))throw Error('A concrete file path is required.');const lexical=path.resolve(cwd||process.cwd(),value),actual=await canonical(lexical);paths.push(lexical,actual);return actual;};
  try{
   if(!args||typeof args!=='object'||Array.isArray(args))throw Error('Invalid tool arguments.');
@@ -60,4 +63,4 @@ async function assessDesktopAction(tool,args={},cwd,{denied=[],env=process.env}=
   return {auto:!reason,arguments:normalized,paths:[...new Set(paths)],denialPaths:[...new Set(tool==='App'&&paths.length>2?paths.slice(2):paths)],reason};
  }catch(error){return {auto:false,arguments:args,paths:[...new Set(paths)],reason:error.message};}
 }
-module.exports={assessDesktopAction,canonical,inside,resolveExecutable};
+module.exports={assessDesktopAction,canonical,canonicalDenials,inside,resolveExecutable};

@@ -53,7 +53,7 @@ async function assessPowerShell(args,cwd,{denied=[],env=process.env,assessFile})
  const paths=[];
  try{
   if(!cwd)throw Error('Select a working folder for automatic PowerShell commands.');
-  const {canonical,inside}=require('./desktop-action-policy'),root=await canonical(cwd);
+  const {canonical,canonicalDenials,inside}=require('./desktop-action-policy'),root=await canonical(cwd);denied=await canonicalDenials(denied);
   if(denied.some(file=>inside(file,root)))throw Error('This command uses a previously denied folder.');
   if(Object.keys(args).some(key=>!['command','timeout'].includes(key)))throw Error('Unknown PowerShell options require approval.');
   if(args.timeout!==undefined&&(!Number.isInteger(args.timeout)||args.timeout<1||args.timeout>120))throw Error('Use a PowerShell timeout between 1 and 120 seconds.');
