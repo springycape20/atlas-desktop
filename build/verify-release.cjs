@@ -135,3 +135,33 @@ getCurrentFuseWire(path.join(__dirname, '..', 'dist', 'win-unpacked', 'ATLAS.exe
     console.error(error);
     process.exit(1);
   });
+
+// The updater rejects a download whose hash differs from latest.yml, so it must describe this exact file.
+const installerPath = path.join(__dirname, '..', 'dist', `ATLAS-Setup-${version}.exe`),
+  listed = manifest.files.find((file) => decodeURIComponent(file.url) === `ATLAS-Setup-${version}.exe`);
+assert.equal(
+  listed.sha512,
+  require('node:crypto').createHash('sha512').update(fs.readFileSync(installerPath)).digest('base64'),
+  'latest.yml sha512 does not match the installer',
+);
+assert.equal(listed.size, fs.statSync(installerPath).size, 'latest.yml size does not match the installer');
+console.log('Verified latest.yml matches the installer byte for byte.');
+
+// Once SignPath signing is configured, every release must be validly signed by the SignPath Foundation.
+if (process.env.ATLAS_REQUIRE_SIGNATURE === '1') {
+  for (const file of [installerPath, path.join(__dirname, '..', 'dist', 'win-unpacked', 'ATLAS.exe')]) {
+    const script = `$s = Get-AuthenticodeSignature -LiteralPath '${file.replace(/'/g, "''")}'; @{ status = [string]$s.Status; subject = [string]$s.SignerCertificate.Subject } | ConvertTo-Json -Compress`;
+    const result = JSON.parse(
+      require('node:child_process').execFileSync(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', script],
+        {
+          encoding: 'utf8',
+        },
+      ),
+    );
+    assert.equal(result.status, 'Valid', `${path.basename(file)} is not validly signed: ${result.status}`);
+    assert.match(result.subject, /SignPath Foundation/, `${path.basename(file)} is signed by ${result.subject}`);
+    console.log(`Verified signature on ${path.basename(file)}: ${result.subject}`);
+  }
+}

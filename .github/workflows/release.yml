@@ -16,6 +16,11 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+    # SignPath signing turns on once the SIGNPATH_ORGANIZATION_ID repository variable and the
+    # SIGNPATH_API_TOKEN secret exist (see docs/SIGNING.md). Until then releases stay unsigned.
+    env:
+      SIGNING: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      ATLAS_REQUIRE_SIGNATURE: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' && '1' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,7 +45,66 @@ jobs:
       - name: Download speech runtime and models
         shell: pwsh
         run: ./Setup-ATLAS.ps1 -SkipDependencies
-      - run: npm run dist:win
+      # A full build writes app-update.yml for the updater. With signing on, ATLAS.exe is then
+      # signed and the installer rebuilt from that signed app, keeping app-update.yml.
+      - name: Build the app and installer
+        env:
+          UPDATER_PUBLISHER: ${{ vars.SIGNPATH_UPDATER_PUBLISHER }}
+        run: |
+          npm run build:syntax
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $extra = @()
+          # Set only after a signed release confirms the certificate's publisher name: the updater
+          # then refuses any update not signed by that publisher.
+          if ($env:UPDATER_PUBLISHER) { $extra = @("-c.win.signtoolOptions.publisherName=$env:UPDATER_PUBLISHER") }
+          npx electron-builder --win nsis --x64 --publish never @extra
+      - name: Upload ATLAS.exe for signing
+        id: unsigned-app
+        if: env.SIGNING == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-app-exe
+          path: dist/win-unpacked/ATLAS.exe
+          if-no-files-found: error
+      - name: Sign ATLAS.exe with SignPath
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'atlas-desktop' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: app-exe
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          # Each signing request waits for manual approval in SignPath.
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist/win-unpacked
+      - name: Rebuild the installer from the signed app
+        if: env.SIGNING == 'true'
+        run: npx electron-builder --win nsis --x64 --publish never --prepackaged dist/win-unpacked
+      - name: Upload the installer for signing
+        id: unsigned-installer
+        if: env.SIGNING == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-installer
+          path: dist/ATLAS-Setup-*.exe
+          if-no-files-found: error
+      - name: Sign the installer with SignPath
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'atlas-desktop' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist/signed
+      - name: Refresh updater files for the signed installer
+        if: env.SIGNING == 'true'
+        run: node build/finalize-signed-installer.cjs dist/signed
       - name: Verify packaged version and new app files
         run: node build/verify-release.cjs
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
