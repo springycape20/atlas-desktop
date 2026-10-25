@@ -11,6 +11,27 @@ test('controller cleanup rejects invalid process identities before running a com
   await assert.rejects(terminate([{ pid: 3, created: 'malformed' }], run));
   assert.equal(called, false);
 });
+test('a stalled process query is retried once in a fresh PowerShell', async () => {
+  const calls = [],
+    run = (_file, _args, options, done) => {
+      calls.push(options.timeout);
+      if (calls.length === 1) done(Object.assign(Error('stalled'), { killed: true }));
+      else done(null, '[{"pid":5,"created":"637000000000000000"}]');
+    };
+  assert.deepEqual(await capture(5, run), [{ pid: 5, created: '637000000000000000' }]);
+  assert.deepEqual(calls, [12000, 12000]);
+});
+test('process tracking reports why PowerShell failed after the retry', async () => {
+  let calls = 0;
+  const timedOut = (_file, _args, _options, done) => {
+      calls++;
+      done(Object.assign(Error('stalled'), { killed: true }));
+    },
+    exited = (_file, _args, _options, done) => done(Object.assign(Error('failed'), { code: 1 }));
+  await assert.rejects(capture(5, timedOut), /PowerShell timed out/);
+  assert.equal(calls, 2);
+  await assert.rejects(terminate([{ pid: 5, created: '1' }], exited), /PowerShell exited with 1/);
+});
 test(
   'Windows controller cleanup removes only its original runtime processes and leaves a subsequently launched independent app',
   { skip: process.platform !== 'win32' },

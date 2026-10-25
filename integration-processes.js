@@ -1,14 +1,31 @@
 const { execFile } = require('node:child_process'),
   path = require('node:path');
-function powershell(script, run = execFile) {
+function powershellOnce(script, run) {
   return new Promise((resolve, reject) => {
     run(
       path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
       { windowsHide: true, timeout: 12000, maxBuffer: 512 * 1024 },
-      (error, stdout) => (error ? reject(Error('Could not track the Windows controller processes.')) : resolve(stdout)),
+      (error, stdout) => (error ? reject(error) : resolve(stdout)),
     );
   });
+}
+// The first process query on a cold system can stall in WMI past the timeout. Both
+// commands are safe to repeat (terminate re-checks each start time), so retry once.
+async function powershell(script, run = execFile) {
+  let failure;
+  for (let attempt = 0; attempt < 2; attempt++)
+    try {
+      return await powershellOnce(script, run);
+    } catch (error) {
+      failure = error;
+    }
+  const cause = failure.killed
+    ? 'timed out'
+    : failure.code !== undefined
+      ? 'exited with ' + failure.code
+      : failure.message;
+  throw Error(`Could not track the Windows controller processes (PowerShell ${cause}).`);
 }
 async function capture(pid, run) {
   if (!Number.isSafeInteger(pid) || pid < 1) throw Error('Windows controller process ID is unavailable.');
