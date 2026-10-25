@@ -2281,20 +2281,27 @@ app.whenReady().then(async () => {
   setupIpc();
   await createWindow();
   appLog.info(`Window loaded after ${Date.now() - startedAt}ms`);
-  if (app.isPackaged && process.platform === 'win32')
-    require('./uninstall-entry')
-      .syncUninstallVersion({
-        appId: APP_ID,
-        productName: 'ATLAS',
-        version: app.getVersion(),
-        installDir: path.dirname(process.execPath),
-      })
-      .then(
-        (result) =>
-          result.changed &&
-          appLog.info(`Corrected the Windows Apps list version from ${result.from} to ${app.getVersion()}`),
-      )
-      .catch((error) => appLog.warn('Could not check the Windows Apps list entry:', error.message));
+  if (app.isPackaged && process.platform === 'win32') {
+    // Right after an in-app update the entry was not yet settled when this first ran, so
+    // check again once the installer has finished, and log every outcome.
+    const checkAppsEntry = (when) =>
+      require('./uninstall-entry')
+        .syncUninstallVersion({
+          appId: APP_ID,
+          productName: 'ATLAS',
+          version: app.getVersion(),
+          installDir: path.dirname(process.execPath),
+        })
+        .then((result) =>
+          appLog.info(
+            `Windows Apps list check (${when}): ` +
+              (result.changed ? `corrected from ${result.from} to ${app.getVersion()}` : result.reason),
+          ),
+        )
+        .catch((error) => appLog.warn(`Windows Apps list check (${when}) failed:`, error.message));
+    void checkAppsEntry('at startup');
+    setTimeout(() => void checkAppsEntry('30 s after startup'), 30000).unref();
+  }
   // Speech is initialized by the first spoken response, rather than on launch.
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

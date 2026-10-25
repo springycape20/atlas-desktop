@@ -30,8 +30,11 @@ async function syncUninstallVersion({ appId, productName, version, installDir, r
       .toLowerCase()
       .includes(path.resolve(installDir).toLowerCase())
   )
-    return { changed: false, reason: 'entry belongs to another installation' };
-  if (values.DisplayVersion === version) return { changed: false };
+    return {
+      changed: false,
+      reason: 'entry points at ' + (values.UninstallString || 'no uninstaller') + ', not this installation',
+    };
+  if (values.DisplayVersion === version) return { changed: false, reason: 'already shows ' + version };
   for (const [name, value] of [
     ['DisplayVersion', version],
     ['DisplayName', productName + ' ' + version],
