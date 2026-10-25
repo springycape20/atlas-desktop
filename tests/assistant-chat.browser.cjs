@@ -119,7 +119,7 @@ app.whenReady().then(async () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
     fs.writeFileSync(path.join(temp, 'assistant-chat.png'), (await win.webContents.capturePage()).toPNG());
     await win.webContents.executeJavaScript(
-      `(async()=>{atlasAssistant.newChat();if(document.querySelectorAll('.assistant-past .assistant-turn').length||conversationId)throw Error('New chat retained old conversation');await atlasAssistant.open('${first}');if(document.querySelectorAll('.assistant-past .assistant-turn').length!==44)throw Error('Saved follow-ups missing');atlasColab.selectChat(atlasColab.current().id);if(!document.querySelector('.assistant-workspace').hidden)throw Error('Assistant did not hide for Colab');atlasColab.selectAssistant();if(document.querySelector('.assistant-workspace').hidden)throw Error('Assistant did not return');})()`,
+      `(async()=>{atlasAssistant.newChat();if(document.querySelectorAll('.assistant-past .assistant-turn').length||conversationId)throw Error('New chat retained old conversation');await atlasAssistant.open('${first}');if(document.querySelectorAll('.assistant-past .assistant-turn').length!==44)throw Error('Saved follow-ups missing');await atlasColab.ready;atlasColab.selectChat(atlasColab.current().id);if(!document.querySelector('.assistant-workspace').hidden)throw Error('Assistant did not hide for Colab');atlasColab.selectAssistant();if(document.querySelector('.assistant-workspace').hidden)throw Error('Assistant did not return');})()`,
     );
     await win.webContents.executeJavaScript(`(async()=>{
   const wait=async predicate=>{for(let i=0;i<100;i++){if(predicate())return;await new Promise(r=>setTimeout(r,20));}throw Error('Import UI did not finish');};
