@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "electron": "^45.0.0",
-    "electron-builder": "26.0.12"
+    "electron-builder": "26.18.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
