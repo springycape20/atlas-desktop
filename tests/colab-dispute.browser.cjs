@@ -89,7 +89,7 @@ app.whenReady().then(async () => {
       pushJobs({removed:[],upsert:[${JSON.stringify(job)}]});
       await new Promise(r=>setTimeout(r,100));
       const box=document.querySelector('#colabDispute'),buttons=()=>[...box.querySelectorAll('button')];
-      if(box.hidden)throw Error('Dispute card is hidden');
+      if(box.hidden)throw Error('Dispute card is hidden');if(!box.getClientRects().length||box.closest('details:not([open])'))throw Error('Dispute card is not visible on screen');
       if(!document.querySelector('#colabResume').hidden)throw Error('Generic resume should be replaced by the dispute card');
       if(!box.textContent.includes('Codex and Claude disagree'))throw Error('Heading missing: '+box.textContent);
       if(!box.textContent.includes('Codex (builder): transport.js already retries'))throw Error('Builder side missing');
