@@ -2281,6 +2281,20 @@ app.whenReady().then(async () => {
   setupIpc();
   await createWindow();
   appLog.info(`Window loaded after ${Date.now() - startedAt}ms`);
+  if (app.isPackaged && process.platform === 'win32')
+    require('./uninstall-entry')
+      .syncUninstallVersion({
+        appId: APP_ID,
+        productName: 'ATLAS',
+        version: app.getVersion(),
+        installDir: path.dirname(process.execPath),
+      })
+      .then(
+        (result) =>
+          result.changed &&
+          appLog.info(`Corrected the Windows Apps list version from ${result.from} to ${app.getVersion()}`),
+      )
+      .catch((error) => appLog.warn('Could not check the Windows Apps list entry:', error.message));
   // Speech is initialized by the first spoken response, rather than on launch.
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
