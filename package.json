@@ -1,6 +1,6 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.6.7",
+  "version": "0.6.8",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
@@ -13,6 +13,8 @@
     "pretest": "npm run build:syntax",
     "predist:win": "npm run build:syntax",
     "test:colab-ui": "electron tests/colab-history.browser.cjs",
+    "test:graph-ui": "electron tests/colab-graph.browser.cjs",
+    "test:approvals-ui": "electron tests/approvals.browser.cjs",
     "test:assistant-ui": "electron tests/assistant-chat.browser.cjs"
   },
   "devDependencies": {

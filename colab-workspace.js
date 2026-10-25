@@ -68,6 +68,9 @@
 
   const toolbar=document.createElement('div');toolbar.className='colab-chat-actions';toolbar.innerHTML='<button class="quiet-button" id="colabRename" type="button">Rename</button><button class="quiet-button" id="colabPin" type="button">Pin</button><button class="quiet-button" id="colabExport" type="button">Export</button>';panel.querySelector('.colab-chat-header').append(toolbar);
   const recovery=document.createElement('div');recovery.className='colab-recovery';recovery.innerHTML='<span id="colabUsage"></span><button class="quiet-button" id="colabResume" type="button" hidden>Resume saved stages</button><button class="quiet-button" id="colabReview" type="button" hidden>Review changes</button>';panel.querySelector('#colabForm').before(recovery);
+  const runDetails=document.createElement('details');runDetails.className='colab-run-details';runDetails.innerHTML='<summary>Run details</summary><div class="colab-run-details-body"></div>';panel.querySelector('#colabForm').before(runDetails);runDetails.lastElementChild.append(efficiencyView,recovery);
+  style.textContent += '.colab-chat-main>.colab-config:not([open]){margin:4px 0;padding-bottom:5px}.colab-chat-main>.colab-browse{padding:5px 0}.colab-run-details{flex:0 0 auto;font:11px/1.5 Segoe UI,sans-serif;color:#91adb7;margin:2px 0;min-height:18px}.colab-run-details>summary{cursor:pointer}.colab-run-details-body{max-height:24vh;overflow:auto;padding:6px 0}.colab-run-details .colab-recovery{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}.colab-run-details .colab-recovery button{padding:4px 7px;font-size:10px}.colab-chat-main>.colab-composer{position:relative;padding:6px 0 0 35px;max-height:32vh;overflow:visible}.colab-composer .attachment-toolbar{position:absolute;left:0;top:10px}.colab-composer .attachment-project{display:none}.colab-composer textarea{height:40px;min-height:40px;max-height:140px;padding:8px 11px;font-size:12px;border-radius:9px}.colab-composer .colab-compose-footer{margin-top:4px;padding:0;position:static;gap:6px}.colab-compose-footer>button{padding:7px 12px;font-size:11px;min-height:32px}.colab-compose-footer [role=status]{font-size:10px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.colab-composer .attachment-toolbar{gap:6px;margin:0 0 4px}.colab-composer .attachment-add{width:28px;height:28px;min-height:28px;padding:0;font-size:20px;border-radius:8px}.colab-composer .attachment-project{font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.colab-composer .attachment-error:empty{display:none}.colab-composer .attachment-chips:empty{display:none}.colab-composer .attachment-bar{margin:0}.colab-work{margin:6px 0 10px;padding:5px 9px}.colab-work-list{max-height:18vh}.colab-work-step{padding:4px 0}.colab-work-note{display:none}';
+
 
   const el = id => panel.querySelector('#' + id);
   // The textarea already has an accessible label; keep the visual surface uncluttered.
@@ -109,11 +112,13 @@
     el('colabChooseFolder').disabled = chat.busy||!historyReady;
   }
   function sizeComposer(){
-    const input=el('colabTask'),limit=Math.max(48,Math.min(180,Math.floor(window.innerHeight*.24)));
-    input.style.height='auto';input.style.height=Math.max(48,Math.min(limit,input.scrollHeight))+'px';input.style.overflowY=input.scrollHeight>limit?'auto':'hidden';
+    const input=el('colabTask'),limit=Math.max(40,Math.min(140,Math.floor(window.innerHeight*.24)));
+    input.style.height='auto';input.style.height=Math.max(40,Math.min(limit,input.scrollHeight))+'px';input.style.overflowY=input.scrollHeight>limit?'auto':'hidden';
   }
   window.addEventListener('resize',sizeComposer);
+  function rememberGraph(chat,job){if(!job.graph)return false;chat.graphRuns ||= [];const id=job.graphRunId||job.id,previous=chat.graphRuns.find(run=>run.id===id);if(previous){if(job.graph.revision&&previous.graph.revision===job.graph.revision)return false;previous.graph=job.graph;}else chat.graphRuns.push({id,startedAt:job.startedAt||Date.now(),graph:job.graph});chat.graphRuns=chat.graphRuns.slice(-20);return true;}
   function captureActivity(chat,job){
+    rememberGraph(chat,job);
     chat.activityRuns ||= [];let run=chat.activityRuns.find(run=>run.id===job.id);
     if(!run){run={id:job.id,status:job.status,expanded:job.status==='running',events:[]};chat.activityRuns.push(run);}
     if(run.status==='running'&&job.status!=='running')run.expanded=false;
@@ -146,39 +151,46 @@
     note.className='colab-work-note';note.textContent='Recent provider-reported actions and progress summaries.';details.append(summary,list,note);
     details.addEventListener('toggle',()=>{if(details.isConnected){run.expanded=details.open;save();}});return details;
   }
+  const messageNodes=new Map(),activityNodes=new Map(),sidebarNodes=new Map(),searchText=new Map();
+  const {memo,reconcile:reconcileNodes}=window.atlasChatRender;
   function render() {
     const chat = current(), list = el('colabChats'), transcript = el('colabTranscript');
-    const sidebarTop=list.scrollTop;list.replaceChildren();
+    const sidebarTop=list.scrollTop,sidebar=[];
     const projects=new Map(chats.filter(item=>item.cwd).map(item=>[projectKey(item.cwd),item.projectName||String(item.cwd||'').split(/[\\/]/).filter(Boolean).at(-1)||item.cwd]));
     projectPicker.replaceChildren(new Option('All projects',''),...Array.from(projects,([key,label])=>new Option(label+' · '+key,key)));if(projectFilter&&!projects.has(projectFilter))projectFilter='';projectPicker.value=projectFilter;
     const query=el('colabSearch').value.toLowerCase();
-    for (const item of [...chats].reverse().sort((a,b)=>Number(Boolean(b.pinned))-Number(Boolean(a.pinned))||(b.updatedAt||0)-(a.updatedAt||0)).filter(chat=>(!projectFilter||projectKey(chat.cwd)===projectFilter)&&(chat.title+' '+chat.messages.map(m=>m.content).join(' ')).toLowerCase().includes(query))) {
+    for (const item of [...chats].reverse().sort((a,b)=>Number(Boolean(b.pinned))-Number(Boolean(a.pinned))||(b.updatedAt||0)-(a.updatedAt||0)).filter(chat=>(!projectFilter||projectKey(chat.cwd)===projectFilter)&&(!query||memo(searchText,chat.id,[chat.title,...chat.messages.map(m=>m.content)],()=>(chat.title+' '+chat.messages.map(m=>m.content).join(' ')).toLowerCase()).includes(query)))) {
+      sidebar.push(memo(sidebarNodes,item.id,[item.title,item.pinned,item.busy,item.messages.length,item.projectName,item.cwd,selected,historyReady],()=>{
       const button = document.createElement('button'); button.type = 'button'; button.className = 'colab-chat-item'; button.setAttribute('aria-current', String(item.id === selected));
       const title = document.createElement('span'), detail = document.createElement('small'); title.textContent = (item.pinned?'★ ':'')+item.title; detail.textContent = (item.busy ? 'Working…' : item.messages.length+' messages')+' · '+(item.projectName||String(item.cwd||'').split(/[\\/]/).filter(Boolean).at(-1)||'No project');button.title=item.cwd||'No project';
-      button.append(title, detail); button.disabled=!historyReady;button.onclick = () => { selected = item.id; save(); render(); }; list.append(button);
+      button.append(title, detail); button.disabled=!historyReady;button.onclick = () => { selected = item.id; save(); render(); };return button;}));
     }
-    list.scrollTop=sidebarTop;
+    reconcileNodes(list,sidebar);list.scrollTop=sidebarTop;const alive=new Set(chats.map(chat=>chat.id));for(const key of sidebarNodes.keys())if(!alive.has(key)){sidebarNodes.delete(key);searchText.delete(key);}
     if(renderedChat&&wasVisible&&!panel.hidden)scrollPositions.set(renderedChat,{top:transcript.scrollTop,atBottom:transcript.scrollHeight-transcript.scrollTop-transcript.clientHeight<60});
     const switched=renderedChat!==chat.id,priorScroll=scrollPositions.get(chat.id);renderedChat=chat.id;wasVisible=!panel.hidden;
+    if(switched){messageNodes.clear();activityNodes.clear();}
     const atBottom=forceLatest.delete(chat.id)||!priorScroll||priorScroll.atBottom;
     if(switched){el('colabFind').value='';matchIndex=0;}
     panel.querySelector('.colab-chat-header h1').textContent=chat.title||'Colab';panel.querySelector('.colab-chat-header h1').title=chat.title||'Colab';panel.querySelector('.colab-chat-header p').textContent='Codex + Claude · '+(chat.projectName||chat.cwd||'Choose a project');
     const activityScroll=new Map([...transcript.querySelectorAll('.colab-work')].map(details=>{const list=details.querySelector('.colab-work-list');return [details.dataset.jobId,{top:list.scrollTop,atBottom:list.scrollHeight-list.scrollTop-list.clientHeight<30}];}));
-    transcript.replaceChildren();
+    const transcriptNodes=[],place=node=>transcriptNodes.push(node),activity=run=>memo(activityNodes,run.id,[run,run.status,run.expanded,JSON.stringify(run.events),JSON.stringify(run.openCommands||[])],()=>activityView(run));
     if (!chat.messages.length) {
       const empty = document.createElement('div'); empty.className = 'colab-empty'; const title = document.createElement('strong'); title.textContent = 'Two perspectives. One conversation.';
-      empty.append(title, document.createTextNode('Describe your task. Codex works, Claude reviews, and you receive their final summary here.')); transcript.append(empty);
+      empty.append(title, document.createTextNode('Describe your task. Codex works, Claude reviews, and you receive their final summary here.'));place(empty);
     }
     const shownRuns=new Set();
-    for (const message of chat.messages) {
+    for (const [messageIndex,message] of chat.messages.entries()) {
       const run=message.role==='assistant'&&(chat.activityRuns||[]).find(run=>run.id===message.jobId);
-      if(run&&!shownRuns.has(run.id)){transcript.append(activityView(run));shownRuns.add(run.id);}
+      if(run&&!shownRuns.has(run.id)){place(activity(run));shownRuns.add(run.id);}
+      const cachedArticle=memo(messageNodes,(message.id||'legacy')+':'+messageIndex,[message.role,message.error,message.provider,message.content,message.at,JSON.stringify(message.attachments||[]),(comparisons.get(chat.id)||[]).includes(message.id)],()=>{
       const article = document.createElement('article'); article.dataset.messageId=message.id||'';article.className = 'colab-message ' + (message.error ? 'error' : message.role === 'user' ? 'user' : 'assistant');
       const label = document.createElement('strong'), content = document.createElement('p'); label.textContent = message.role === 'user' ? 'You' : message.error ? 'Could not complete this task' : message.provider ? message.provider.toUpperCase()+' · Imported' : 'Colab · Codex + Claude'; content.textContent = message.content;
       if(message.at&&Number.isFinite(new Date(message.at).getTime())){const time=document.createElement('time');time.dateTime=new Date(message.at).toISOString();time.textContent=new Date(message.at).toLocaleString();label.append(time);}article.append(label, content);
-      if(message.role==='assistant'&&!message.error){const actions=document.createElement('div'),copy=document.createElement('button'),compare=document.createElement('button');actions.className='colab-message-actions';copy.type=compare.type='button';copy.className=compare.className='quiet-button';copy.textContent='Copy result';copy.onclick=()=>void navigator.clipboard.writeText(message.content).catch(error=>toast(error.message));const chosen=comparisons.get(chat.id)||[];compare.textContent=chosen.includes(message.id)?'Selected for comparison':'Compare';compare.setAttribute('aria-pressed',String(chosen.includes(message.id)));compare.onclick=()=>{const values=comparisons.get(chat.id)||[];comparisons.set(chat.id,values.includes(message.id)?values.filter(id=>id!==message.id):[...values.slice(-1),message.id]);render();};actions.append(copy,compare);article.append(actions);}window.atlasWorkspace?.messageAttachments(article,message.attachments); transcript.append(article);
+      if(message.role==='assistant'&&!message.error){const actions=document.createElement('div'),copy=document.createElement('button'),compare=document.createElement('button');actions.className='colab-message-actions';copy.type=compare.type='button';copy.className=compare.className='quiet-button';copy.textContent='Copy result';copy.onclick=()=>void navigator.clipboard.writeText(message.content).catch(error=>toast(error.message));const chosen=comparisons.get(chat.id)||[];compare.textContent=chosen.includes(message.id)?'Selected for comparison':'Compare';compare.setAttribute('aria-pressed',String(chosen.includes(message.id)));compare.onclick=()=>{const values=comparisons.get(chat.id)||[];comparisons.set(chat.id,values.includes(message.id)?values.filter(id=>id!==message.id):[...values.slice(-1),message.id]);render();};actions.append(copy,compare);article.append(actions);}window.atlasWorkspace?.messageAttachments(article,message.attachments);return article;});place(cachedArticle);
     }
-    for(const run of chat.activityRuns||[])if(!shownRuns.has(run.id))transcript.append(activityView(run));
+    for(const run of chat.activityRuns||[])if(!shownRuns.has(run.id))place(activity(run));
+    reconcileNodes(transcript,transcriptNodes);
+    const liveMessages=new Set(chat.messages.map((message,i)=>(message.id||'legacy')+':'+i)),liveRuns=new Set((chat.activityRuns||[]).map(run=>run.id));for(const key of messageNodes.keys())if(!liveMessages.has(key))messageNodes.delete(key);for(const key of activityNodes.keys())if(!liveRuns.has(key))activityNodes.delete(key);
     for(const details of transcript.querySelectorAll('.colab-work')){const list=details.querySelector('.colab-work-list'),prior=activityScroll.get(details.dataset.jobId);list.scrollTop=!prior||prior.atBottom?list.scrollHeight:prior.top;}
     if (atBottom) transcript.scrollTop = transcript.scrollHeight;else transcript.scrollTop=priorScroll.top;refreshFind();refreshBrowse();
     if(el('colabTask').value!==(chat.draft||''))el('colabTask').value=chat.draft||'';sizeComposer();
@@ -225,7 +237,9 @@
   function update(value) {
     if(!historyReady){pendingUpdates.push(value);return;}
     const chat = chats.find(chat => chat.id === value.chatId || chat.jobId === value.id);
-    if (!chat || chat.finishedJob === value.id || chat.finishedJobs?.includes(value.id)) return;
+    if(!chat)return;
+    if(value.graph){const changed=rememberGraph(chat,{id:value.id,graphRunId:value.graphRunId,graph:value.graph,startedAt:value.startedAt||Date.now()});if(value.status===undefined&&value.result===undefined&&!value.error){if(changed){save();window.dispatchEvent(new Event('atlas-colab-chat-change'));}return;}}
+    if(chat.finishedJob === value.id || chat.finishedJobs?.includes(value.id)) return;
     chat.jobId = value.id; chat.status = value.limitation||value.status||'Working…';
     if(value.workspaceId)chat.workspaceId=value.workspaceId;if(value.usage){chat.usage=value.usage;chat.usageJobId=value.id;}
     if (typeof value.result === 'string' || value.error) {
@@ -250,7 +264,7 @@
   }).catch(error=>{historyError='Saved history could not be opened. The existing local backup was kept. '+error.message;}).then(async()=>{
     for(const chat of chats){chat.rolesExplicit??=Boolean(chat.roles&&chat.roles!=='codex-builds');if(chat.passLimitVersion!==2){chat.maxRounds=null;chat.passLimitVersion=2;}for(const message of chat.messages){message.id ||= crypto.randomUUID();}chat.createdAt ||= chat.messages[0]?.at||chat.lastJob?.startedAt||Date.now();chat.updatedAt ||= chat.lastJob?.startedAt||chat.createdAt;}
     historyReady=true;render();
-    try{const jobs=await window.atlas.jobs();reconcile([...pendingJobs.values(),...jobs]);for(const value of pendingUpdates)update(value);for(const chat of chats)if(chat.busy&&!jobs.some(job=>job.id===chat.jobId&&job.status==='running')){chat.busy=false;chat.status='Previous run is no longer active. Send a follow-up to continue.';}save();render();}catch{for(const chat of chats)chat.busy=false;render();}pendingJobs.clear();pendingUpdates.length=0;
+    try{const jobs=await window.atlas.jobs();reconcile([...pendingJobs.values(),...jobs]);for(const value of pendingUpdates)update(value);for(const chat of chats)if(chat.busy&&!jobs.some(job=>job.id===chat.jobId&&job.status==='running')){chat.busy=false;chat.status='Previous run is no longer active. Send a follow-up to continue.';}for(const chat of chats)for(const run of chat.graphRuns||[])if(['working','preparing'].includes(run.graph.outcome)&&!jobs.some(job=>(job.graphRunId||job.id)===run.id&&job.status==='running'))run.graph=window.atlasColabGraph.terminal(run.graph,'paused');save();render();}catch{for(const chat of chats)chat.busy=false;render();}pendingJobs.clear();pendingUpdates.length=0;
   });
   for(const [id,key] of [['colabMode','mode'],['colabRoles','roles'],['colabPasses','maxRounds']])el(id).onchange=()=>{current()[key]=key==='mode'||key==='roles'?el(id).value:(el(id).value===''?null:Number(el(id).value));if(key==='roles'){current().rolesExplicit=el(id).value!=='auto';if(el(id).value==='auto')current().roles='codex-builds';}save();};el('colabIsolated').onchange=()=>{current().isolated=el('colabIsolated').checked;save();render();};
   for(const [id,key]of [['colabPreset','preset'],['colabTokenWarning','tokenWarning'],['colabAdaptiveEffort','adaptiveEffort'],['colabReuseChecks','reuseChecks']])el(id).onchange=()=>{current()[key]=el(id).type==='checkbox'?el(id).checked:key==='tokenWarning'?(el(id).value===''?null:Number(el(id).value)):el(id).value;save();};for(const[id,key]of [['colabCriteria','criteria'],['colabOutOfScope','outOfScope']])el(id).oninput=()=>{current().brief||={};current().brief[key]=el(id).value;save();};
@@ -277,7 +291,7 @@
       return {imported:added.length,skipped,chats:results.map(chat=>({id:chat.id,title:chat.title,provider:'colab',turnCount:chat.messages.length}))};
     });importQueue=operation.catch(()=>{});return operation;
   }
-  window.atlasColab = {ready,importChats,captureActivity,activityView,refreshMessages:render,setCatalog:value=>{for(const provider of ['codex','claude'])if(value[provider]?.models?.length)catalog[provider]=value[provider].models;refreshModels();},refreshModels,selectAssistant:()=>select('assistant'),current:()=>structuredClone(current()),history:()=>chats.map(chat=>({provider:'colab',id:chat.id,title:chat.title,pinned:chat.pinned,cwd:chat.cwd,turns:chat.messages,updatedAt:chat.updatedAt||chat.lastJob?.startedAt||chat.createdAt||0})),selectChat:id=>{if(!historyReady){void ready.then(()=>window.atlasColab.selectChat(id));return;}const chat=chats.find(chat=>chat.id===id);if(!chat)return;if(projectFilter&&projectFilter!==projectKey(chat.cwd))projectFilter=projectKey(chat.cwd);selected=id;save();select('colab');},metadata:(id,value)=>{const chat=chats.find(chat=>chat.id===id);if(chat){Object.assign(chat,value);chat.customTitle=true;save();render();}},applyProfile:profile=>{if(!historyReady)throw Error('Colab history is loading. Try again in a moment.');let chat=current();if((chat.messages.length||chat.busy)&&projectKey(chat.cwd)!==projectKey(profile.cwd)){const existing=[...chats].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).find(item=>projectKey(item.cwd)===projectKey(profile.cwd));if(existing){selected=existing.id;chat=existing;}else chat=makeChat();}projectFilter=projectKey(profile.cwd);if(!chat.busy)Object.assign(chat,{cwd:profile.cwd,projectName:profile.name,profileId:profile.id,codexModel:profile.codexModel,claudeModel:profile.claudeModel,effort:profile.effort});save();render();}};
+  window.atlasColab = {ready,importChats,captureActivity,activityView,refreshMessages:render,setCatalog:value=>{for(const provider of ['codex','claude'])if(value[provider]?.models?.length)catalog[provider]=value[provider].models;refreshModels();},refreshModels,selectAssistant:()=>select('assistant'),current:()=>structuredClone(current()),graphHistory:()=>({chatId:current().id,runs:current().graphRuns||[]}),history:()=>chats.map(chat=>({provider:'colab',id:chat.id,title:chat.title,pinned:chat.pinned,cwd:chat.cwd,turns:chat.messages,updatedAt:chat.updatedAt||chat.lastJob?.startedAt||chat.createdAt||0})),selectChat:id=>{if(!historyReady){void ready.then(()=>window.atlasColab.selectChat(id));return;}const chat=chats.find(chat=>chat.id===id);if(!chat)return;if(projectFilter&&projectFilter!==projectKey(chat.cwd))projectFilter=projectKey(chat.cwd);selected=id;save();select('colab');},metadata:(id,value)=>{const chat=chats.find(chat=>chat.id===id);if(chat){Object.assign(chat,value);chat.customTitle=true;save();render();}},applyProfile:profile=>{if(!historyReady)throw Error('Colab history is loading. Try again in a moment.');let chat=current();if((chat.messages.length||chat.busy)&&projectKey(chat.cwd)!==projectKey(profile.cwd)){const existing=[...chats].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).find(item=>projectKey(item.cwd)===projectKey(profile.cwd));if(existing){selected=existing.id;chat=existing;}else chat=makeChat();}projectFilter=projectKey(profile.cwd);if(!chat.busy)Object.assign(chat,{cwd:profile.cwd,projectName:profile.name,profileId:profile.id,codexModel:profile.codexModel,claudeModel:profile.claudeModel,effort:profile.effort});save();render();}};
   select('assistant'); render();
   for (const provider of ['codex', 'claude']) void window.atlas.modelCatalog(provider).then(models => { if (Array.isArray(models) && models.length) { catalog[provider] = models; refreshModels(); } }).catch(() => {});
 })();

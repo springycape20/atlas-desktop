@@ -5,7 +5,7 @@ const asar = require('@electron/asar');
 const { version } = require('../package.json');
 const archive = path.join(__dirname, '..', 'dist', 'win-unpacked', 'resources', 'app.asar');
 const packaged = JSON.parse(asar.extractFile(archive, 'package.json').toString());
-for(const file of ['integration-service.js','windows-tool-python.js'])assert.ok(asar.extractFile(archive,file).length>0,`Missing integration runtime: ${file}`);
+for(const file of ['integration-service.js','desktop-permissions.js','desktop-action-policy.js','desktop-interaction.js','desktop-overlay.js','powershell-policy.js','integration-processes.js','windows-tool-runtime.js','windows-tool-python.js','startup-lifecycle.js','chat-render.js','parallel-proposals.js','project-context.js','review-context.js','colab-graph.js','colab-graph-ui.js'])assert.ok(asar.extractFile(archive,file).length>0,`Missing application runtime: ${file}`);
 assert.ok(asar.extractFile(archive,path.join('node_modules','@modelcontextprotocol','sdk','package.json')).length>0,'Missing MCP SDK runtime');
 for (const file of ['claude-connection.js','colab-workspace-reuse.js','colab-answer.js','colab-efficiency.js','verification-cache.js','code-syntax.js','syntax-worker.js','syntax-highlight.js','claude-runtime.js','chat-import.js','transcript-import.js','colab-history.js','project-root.js','provider-catalog.js','assistant-chat.js']) assert.ok(asar.extractFile(archive,file).length>0,`Missing syntax highlighting runtime: ${file}`);
 assert.equal(packaged.version, version);

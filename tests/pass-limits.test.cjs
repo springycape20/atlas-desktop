@@ -92,7 +92,7 @@ test('workspace changes while proposals are paused cannot skip synthesis or impl
 });
 
 test('attention before an artifact exists resumes the failed stage rather than accepting an empty artifact',async()=>{
- let saved,calls=0;const run=createCollaboration({progress(){},checkpoint:async rows=>saved=rows,runProvider:async()=>({output:++calls===1?status('blocked',[],'Need a decision.'):status()})});const first=await run({task:'Build',roles:'proposals'});assert.equal(first.outcome,'needs_attention');const checkpoint=structuredClone(saved),second=await run({task:'Build',roles:'proposals',checkpoints:checkpoint});assert.equal(second.outcome,'completed');assert.equal(calls,5);
+ let saved,calls=0;const run=createCollaboration({progress(){},checkpoint:async rows=>saved=rows,runProvider:async()=>({output:++calls===1?status('blocked',[],'Need a decision.'):status()})});const first=await run({task:'Build',roles:'proposals'});assert.equal(first.outcome,'needs_attention');const checkpoint=structuredClone(saved),second=await run({task:'Build',roles:'proposals',checkpoints:checkpoint});assert.equal(second.outcome,'completed');assert.equal(calls,6); // A saved speculative pass without a fingerprint is accounted, then rerun safely.
 });
 
 test('a repaired fix verdict keeps the original fix fingerprints for progress checks',async()=>{

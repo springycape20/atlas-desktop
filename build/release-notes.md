@@ -1,11 +1,11 @@
-ATLAS 0.6.7 adds a cleaner sidebar and computer-control integrations for Codex and Claude.
+ATLAS 0.6.8 improves desktop control, permission prompts and Colab efficiency.
 
-- Matching folder, history, diagnostics and workbench icons align the bottom four sidebar entries with the existing navigation.
-- Colab > Tools manages local stdio and streamable HTTP MCP integrations. Colab can request to add integrations, start them, inspect tool schemas and call tools with your approval.
-- The Windows control preset installs its runtime into ATLAS data, starts on demand and stays running until stopped or ATLAS exits. It bypasses broken uv Python minor-version shortcuts and recovers from the first-install junction error. Read-only reviewers cannot control apps; desktop actions run one at a time and always require ATLAS approval.
-- Codex and Claude provider connections stay warm across messages while preserving separate chat context. Colab follow-ups reuse their active isolated worktree.
-- Colab returns concise, task-appropriate answers without exposing internal completion protocol or appending repetitive reviews. Economy/Balanced/Thorough presets, optional task criteria, token warnings and verified-check reuse reduce unnecessary repeated context.
-- Full local Codex/Claude chat imports offer Assistant or Colab as the destination, with native chat/workspace names, searchable history and result comparisons.
-- Dirty project folders offer explicit direct editing; broad parent folders are blocked during Git setup. Includes Claude connection diagnostics and offline code syntax highlighting.
+- Permission requests in the chat and approval bubble now offer **Allow**, **Allow once** and **Deny**. Each request explains what Allow remembers: routine desktop control for the chat, or the exact command/tool request for the current task. Allow once covers only that request, including the steps and final screenshot of an approved desktop sequence.
+- Remembered computer-control permission is shared by Codex and Claude within the chat and survives app restarts. Revoke it from Run details. System-file changes, previously denied files and commands whose effects cannot be verified still request explicit approval.
+- Desktop control keeps its connection alive, supports smoother mouse movement and short sequences, and shows a click-through border reading "Atlas is controlling this PC" while active. Managed PowerShell diagnostics and simple project edits use the approved chat scope; destructive and unrecognized commands still prompt.
+- Fixes Windows-MCP startup, Python runtime selection, active-user control compatibility, controller cleanup and local app cache contention.
+- Colab uses private temporary Codex sessions so internal stages do not flood the Codex chat list. Existing personal chats are preserved.
+- Compact Colab controls and expandable request details leave more room for messages. An in-app workflow graph shows the clients' progress and coordination.
+- Colab context preparation, proposal handling and review/check reuse reduce repeated work and unnecessary context while preserving task checks.
 
-Install over your existing version to preserve conversations and settings. Packaged installations can use Settings > App updates > Check for updates, Download, then Restart and install. Windows x64. Close older ATLAS instances before updating. Computer control uses the separate open-source Windows-MCP integration; it does not reuse the private runtime of another desktop chat.
+Install over your existing version to preserve conversations and settings. Packaged installations can use **Settings > App updates > Check for updates**, then download and restart to install. Windows x64. Close older ATLAS instances before updating. Computer control uses the separate Windows-MCP integration, not another chat application's private runtime.

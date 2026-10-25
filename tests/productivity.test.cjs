@@ -59,3 +59,11 @@ test('productivity endpoints reject untrusted renderers before running commands 
   const {root}=await fixture(t),handlers=new Map(),service=registerProductivityIpc({ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},app:{getPath:()=>root},window:()=>null,trusted:()=>false,workspace:()=>({}),jobs:()=>[],approvals:createApprovalManager(),findCodex:()=>null,findClaude:()=>null,codex:async()=>({}),history:async()=>[],run:async()=>{},canRun:()=>false});
   for(const [name,handler]of handlers)await assert.rejects(handler({},{}),/Untrusted/,name);await service.close();
 });
+
+test('only trusted ATLAS gateway wrapper tools skip redundant Claude approvals',async()=>{
+ for(const trustedAtlasTools of [false,true]){const writes=[],manager=createApprovalManager(),control=createClaudeControl({trustedAtlasTools,write:text=>writes.push(JSON.parse(text)),manager,job:{id:'task'}});
+ control.push(JSON.stringify({type:'control_request',request_id:'wrapper',request:{subtype:'can_use_tool',tool_name:'mcp__atlas_tools__integrations_call',input:{id:'windows',tool:'Screenshot'}}})+'\n');await tick();
+ if(trustedAtlasTools){assert.equal(manager.list().length,0);assert.equal(writes[0].response.response.behavior,'allow');}else{assert.equal(manager.list().length,1);manager.answer(manager.list()[0].id,'Deny');await tick();}
+ for(const name of ['Bash','mcp__windows__Click','mcp__atlas_tools__unknown']){control.push(JSON.stringify({type:'control_request',request_id:name,request:{subtype:'can_use_tool',tool_name:name,input:{}}})+'\n');assert.equal(manager.list().length,1);manager.answer(manager.list()[0].id,'Deny');await tick();}
+ }
+});

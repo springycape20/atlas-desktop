@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('atlas', {
   projectSetup: request=>ipcRenderer.invoke('atlas:project-setup',request),
   searchWork: request=>ipcRenderer.invoke('atlas:search-work',request),
   taskOpen: id=>ipcRenderer.invoke('atlas:task-open',{id}),
+  onDesktopPermissions: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:desktop-permissions',listener);return()=>ipcRenderer.removeListener('atlas:desktop-permissions',listener);},
   onApprovals: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:approvals',listener);return()=>ipcRenderer.removeListener('atlas:approvals',listener);},
   onQueue: callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('atlas:queue',listener);return()=>ipcRenderer.removeListener('atlas:queue',listener);},
   prepareProject: (cwd,options={})=>ipcRenderer.invoke('atlas:prepare-project',{...options,cwd}),

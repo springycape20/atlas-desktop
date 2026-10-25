@@ -14,6 +14,9 @@ function registerProductivityIpc({ipcMain,app,dialog,window,trusted,workspace,jo
   handle('plugins',request=>request.action==='toggle'?plugins.toggle(request):plugins.list(request.cwd));
   handle('integrations',async request=>{
     if(!integrations)throw Error('Restart ATLAS to load integration support.');
+    if(request.action==='desktop-permissions')return integrations.desktopPermissions();
+    if(request.action==='grant-desktop')return integrations.grantDesktop(request.owner);
+    if(request.action==='revoke-desktop')return integrations.revokeDesktop(request.owner);
     if(request.action==='save')return integrations.save(request.integration);
     if(request.action==='enable')return integrations.enable(request.id,request.enabled);
     if(request.action==='remove')return integrations.remove(request.id);

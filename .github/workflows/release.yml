@@ -23,6 +23,11 @@ jobs:
         run: npm run test:colab-ui
       - name: Verify Assistant chat and provider import browsing
         run: npm run test:assistant-ui
+      - name: Verify workflow graph and permission controls
+        run: |
+          npm run test:graph-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:approvals-ui
       - name: Download speech runtime and models
         shell: pwsh
         run: ./Setup-ATLAS.ps1 -SkipDependencies

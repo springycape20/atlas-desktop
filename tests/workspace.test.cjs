@@ -84,3 +84,11 @@ test('all renderer scripts parse, including the HTML inline scripts', async () =
   const html=await fs.readFile(path.join(__dirname,'..','index.html'),'utf8');
   for(const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
 });
+
+test('the real app protocol serves every renderer script while blocking private files and other hosts',async()=>{
+  const root=path.join(__dirname,'..'),source=await fs.readFile(path.join(root,'main.js'),'utf8'),html=await fs.readFile(path.join(root,'index.html'),'utf8');
+  const match=source.match(/await protocol\.handle\('atlas', async request => \{([\s\S]*?)\n  \}\);/);assert(match,'App protocol handler must be testable');
+  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor,handler=new AsyncFunction('request','readFile','path','__dirname',match[1]);
+  for(const script of html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)){const response=await handler({url:'atlas://app'+script[1]},fs.readFile,path,root);assert.equal(response.status,200,script[1]+' must be served');assert.match(response.headers.get('Content-Type'),/javascript/);new vm.Script(await response.text());}
+  for(const url of ['atlas://app/main.js','atlas://app/settings.json','atlas://other/index.html'])assert.equal((await handler({url},fs.readFile,path,root)).status,404,url);
+});

@@ -17,20 +17,7 @@ if (migrateToLocalAppData) app.setPath('userData', localUserDataPath);
 
 async function migrateLegacyUserData() {
   if (!migrateToLocalAppData || !existsSync(legacyUserDataPath)) return;
-  await mkdir(localUserDataPath, { recursive: true });
-  for (const entry of await readdir(legacyUserDataPath, { withFileTypes: true })) {
-    const source = path.join(legacyUserDataPath, entry.name);
-    const destination = path.join(localUserDataPath, entry.name);
-    if (existsSync(destination)) {
-      if (entry.isDirectory()) await cp(source, destination, { recursive: true, force: false, errorOnExist: false });
-      continue;
-    }
-    try { await rename(source, destination); }
-    catch (error) {
-      if (error.code !== 'EXDEV') throw error;
-      await cp(source, destination, { recursive: true, force: false, errorOnExist: false });
-    }
-  }
+  return require('./startup-lifecycle').migrateOnce(legacyUserDataPath,localUserDataPath);
 }
 
 protocol.registerSchemesAsPrivileged([{
@@ -39,6 +26,8 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 
 let mainWindow;
+const ownsInstance=require('./startup-lifecycle').singleInstance(app,()=>mainWindow);
+if(ownsInstance)require('./startup-lifecycle').configureChromiumCache(app);
 const taskNotifications=require('./task-notifications').createTaskNotifications({Notification,getWindow:()=>mainWindow});
 let modelCatalogService, updateService, providerUsageService;
 function providerUsage(){return providerUsageService ||= require('./provider-usage').createProviderUsage({codex:async()=>{const executable=findCodexExecutable();if(!executable)throw Error('Codex is not installed.');codexConnection ||= new (require('./codex-connection').CodexConnection)(executable);codexConnection.onRateLimits=data=>providerUsage().updateCodex(data);await codexConnection.connect();return codexConnection.request('account/rateLimits/read',{},10000);},notify:value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:provider-usage',value);}});}
@@ -54,15 +43,18 @@ function changes(){return changeTrackerService ||= require('./change-tracker').c
 async function beginChanges(job,previous){if(!job)return;try{job.cwd=await require('node:fs/promises').realpath(job.cwd);job.changeId=previous?.changeId&&previous.cwd===job.cwd?previous.changeId:await changes().capture(job.id,job.cwd);await persistJobs();}catch(error){job.changesError='Change tracking unavailable: '+error.message;}emitJobs();}
 const approvals=require('./approval-manager').createApprovalManager(value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:approvals',value);});
 let productivity, startAssistant;
-let integrationService;
-function integrations(){return integrationService ||= require('./integration-service').createIntegrationService({directory:app.getPath('userData'),approvals,activity:(job,event)=>{job.events.push({...event,at:Date.now()});job.events=job.events.slice(-100);emitJobs();}});}
+let integrationService,desktopIndicator;
+function controlIndicator(){return desktopIndicator ||= require('./desktop-overlay').createDesktopOverlay({BrowserWindow,screen,onError:error=>{console.error('ATLAS control indicator failed: '+error.message);void integrationService?.stop('windows').catch(()=>{});}});}
+async function desktopControlChanged(event){if(event.active){if(quitting||!mainWindow||mainWindow.isDestroyed())throw Error('ATLAS is closing; desktop control is unavailable.');return controlIndicator().begin(event);}if(event.jobId)desktopIndicator?.end(event.jobId);else desktopIndicator?.endOwner(event.owner);}
+function integrations(){return integrationService ||= require('./integration-service').createIntegrationService({directory:app.getPath('userData'),approvals,desktopControl:desktopControlChanged,cursorPosition:()=>{const point=screen.getCursorScreenPoint();return screen.dipToScreenPoint?screen.dipToScreenPoint(point):point;},permissionsChanged:value=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:desktop-permissions',value);},activity:(job,event)=>{job.events.push({...event,at:Date.now()});job.events=job.events.slice(-100);emitJobs();}});}
 async function withIntegrations(provider,job,settings,signal,run){
   const owner=job?.collaboration?'colab:'+job.colabChatId:'assistant:'+(job?.conversationId||job?.id||randomUUID());
   const binding=await integrations().bind({provider,owner,job,readOnly:settings.readOnly===true,signal});
-  try{return await run({...settings,...(binding.config?{atlasMcp:binding.config}:{})},binding.config?'ATLAS tools: use atlas_tools integrations_list/add/start/call for MCP integrations. The windows preset can be added with user approval. Only propose other integrations when the user requests them; show their configuration for approval using integrations_add. Inspect tool schemas and current screen before acting. Each action needs approval. Never claim desktop access or success without a tool result. Read-only reviews cannot use these tools.\n\n':'');}
+  try{return await run({...settings,...(binding.config?{atlasMcp:binding.config}:{})},binding.config?'ATLAS tools: use atlas_tools integrations_list/add/start/call for MCP integrations. The windows preset can be added with user approval. Only propose other integrations when the user requests them; show their configuration for approval using integrations_add. Inspect tool schemas and current screen before acting. Keep the desktop integration connected between actions and tasks; never call integrations_stop as cleanup. Prefer integrations_sequence for short, predictable Move/Click/Type interactions on an already observed screen; inspect again after navigation or an unexpected dialog. Use coordinate input tools for visible mouse movement rather than shell/GUI workarounds. ATLAS handles computer-control approval in its gateway. Do not ask for the same approval in prose or AskUserQuestion; call the gateway so it can check saved permission. ATLAS may remember screen/input control permission for this chat; use integrations_call normally and ATLAS enforces its scope. Ordinary Windows app launches, clipboard, file operations and routine PowerShell commands share this permission. Use the managed Windows PowerShell tool for routine shell work so ATLAS can assess it. The Atlas control border is only an indicator; do not target or interact with it. Prefer those structured gateway tools to shell workarounds. System-file changes, previously denied files and commands with unverifiable targets require separate approval. A remembered desktop grant is not authorization for purchases, messages, destructive changes or unrelated tasks. Never claim desktop access or success without a tool result. Read-only reviews cannot use these tools.\n\n':'');}
   finally{binding.release();}
 }
 async function finishTask(job){
+  desktopIndicator?.end(job.id);
   approvals.cancelJob(job.id);
   if(job.changeId)try{await changes().seal(job.changeId);}catch(error){job.changesError='Checkpoint could not be finalized: '+error.message;}
 }
@@ -74,6 +66,8 @@ async function checkTask(job){
   if(job.result)job.result.verification=job.verification;
 }
 let workspaceService;
+let projectContextService;
+function projectContext(){return projectContextService ||= require('./project-context').createProjectContext({directory:app.getPath('userData')});}
 function workspace(){return workspaceService ||= require('./workspace-service').createWorkspaceService(app.getPath('userData'));}
 let assistantService;
 let codexConnection, claudeConnections, providerHealth;
@@ -146,8 +140,9 @@ function cancelVoiceRequests() {
 }
 let quitting = false;
 app.on('before-quit', event => {
+  if(!ownsInstance)return;
   if (quitting) return;
-  event.preventDefault(); quitting = true;
+  event.preventDefault(); quitting = true;desktopIndicator?.close();
   const finishing = [];
   for (const job of activeJobs.values()) if (job.status === 'running') {
     job.stopped = 'paused'; job.statusText = 'Stopping for shutdown';
@@ -160,10 +155,10 @@ app.on('before-quit', event => {
     let timer;
     try { await Promise.race([Promise.allSettled(finishing), new Promise(resolve => { timer = setTimeout(resolve, 5000); })]); }
     finally { clearTimeout(timer); }
-    for (const job of activeJobs.values()) if (job.status === 'running') job.status = 'paused';
+    for (const job of activeJobs.values()) if (job.status === 'running') {job.status = 'paused';if(job.graph)job.graph=require('./colab-graph').terminal(job.graph,'paused',job.verification);}
     persistJobs();
     const results = await Promise.allSettled([whisperService.close(), voiceWorker?.terminate(), historyWriteQueue,
-      assistantService?.flush(), providerHealth?.flush(), workspaceService?.flush(), productivity?.close()]);
+      assistantService?.flush(), providerHealth?.flush(), workspaceService?.flush(), productivity?.close(), projectContextService?.flush()]);
     for (const result of results) if (result.status === 'rejected') console.error('Shutdown save failed:', result.reason);
     app.quit();
   })();
@@ -336,15 +331,16 @@ function historyLookupRequested(prompt) {
 }
 function findReferencedProviderHistory(prompt) { return providerHistory.request('search', { prompt }); }
 async function runProvider(provider, prompt, cwd, settings, previousSessionId = '', onText = () => {}) {
+  const {stageSignal,...providerSettings}=settings;settings=providerSettings;
   if (provider === 'claude') {
     const executable = findClaudeExecutable();
     if (!executable) throw new Error('Claude Code was not found. Install it from Settings.');
     claudeConnections ||= new (require('./claude-connection').ClaudeConnectionPool)();
     const job=jobContext.getStore(),controller=new AbortController(),oldInterrupt=job?.interrupt,abortParent=()=>controller.abort();
-    job?.signal?.addEventListener('abort',abortParent,{once:true});if(job?.signal?.aborted||job?.stopped)controller.abort();if(job)job.interrupt=()=>controller.abort();
+    job?.signal?.addEventListener('abort',abortParent,{once:true});stageSignal?.addEventListener('abort',abortParent,{once:true});if(job?.signal?.aborted||stageSignal?.aborted||job?.stopped)controller.abort();if(job&&!job.collaboration)job.interrupt=()=>controller.abort();
     reportProviderProgress('claude','Claude connected · working');
-    try{return await withIntegrations('claude',job,settings,controller.signal,(connectedSettings,prefix)=>claudeConnections.run({executable,cwd,settings:connectedSettings,prompt:prefix+prompt,sessionId:previousSessionId,owner:job?.collaboration?'colab:'+job.colabChatId:'assistant:'+(job?.conversationId||previousSessionId||randomUUID()),signal:controller.signal,onText,job:job||{},manager:approvals,onSession:id=>{if(job)job.sessionId=id;},activity:activity=>{if(job){job.events.push({...activity,provider:'claude',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}}));}
-    finally{job?.signal?.removeEventListener('abort',abortParent);if(job)job.interrupt=oldInterrupt||null;}
+    try{return await withIntegrations('claude',job,settings,controller.signal,(connectedSettings,prefix)=>claudeConnections.run({executable,cwd,settings:connectedSettings,prompt:prefix+prompt,sessionId:previousSessionId,owner:job?.collaboration?'colab:'+job.colabChatId:'assistant:'+(job?.conversationId||previousSessionId||randomUUID()),signal:controller.signal,onText,job:job||{},manager:approvals,onSession:id=>{if(job){if(job.collaboration){job.sessions ||= {};job.sessions[provider]=id;}else job.sessionId=id;}},activity:activity=>{if(job){job.events.push({...activity,provider:'claude',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}}));}
+    finally{job?.signal?.removeEventListener('abort',abortParent);stageSignal?.removeEventListener('abort',abortParent);if(job&&!job.collaboration)job.interrupt=oldInterrupt||null;}
   }
 
   const executable = findCodexExecutable();
@@ -354,12 +350,13 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   const previousInterrupt=job?.interrupt;
   const abortParent=()=>controller.abort();
   job?.signal?.addEventListener('abort',abortParent,{once:true});
-  if(job?.signal?.aborted)controller.abort();
-  if(job){job.interrupt=()=>controller.abort();if(job.stopped)controller.abort();}
+  stageSignal?.addEventListener('abort',abortParent,{once:true});
+  if(job?.signal?.aborted||stageSignal?.aborted)controller.abort();
+  if(job){if(!job.collaboration)job.interrupt=()=>controller.abort();if(job.stopped)controller.abort();}
   reportProviderProgress('codex','Codex connected · working');
-  try{return await withIntegrations('codex',job,settings,controller.signal,(connectedSettings,prefix)=>codexConnection.run({prompt:prefix+prompt,cwd,settings:connectedSettings,sessionId:previousSessionId,onText,signal:controller.signal,
-    onSession:id=>{if(job)job.sessionId=id;},onApproval:(method,params)=>require('./approval-manager').codexApproval(approvals,{id:job?.id,signal:controller.signal},method,params),activity:event=>{if(job){job.events.push({...event,provider:'codex',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}}));}
-  finally{job?.signal?.removeEventListener('abort',abortParent);if(job)job.interrupt=previousInterrupt||null;}
+  try{return await withIntegrations('codex',job,settings,controller.signal,(connectedSettings,prefix)=>codexConnection.run({prompt:prefix+prompt,cwd,settings:connectedSettings,internal:Boolean(job?.collaboration),sessionId:previousSessionId,onText,signal:controller.signal,
+    onSession:id=>{if(job){if(job.collaboration){job.sessions ||= {};job.sessions[provider]=id;}else job.sessionId=id;}},onApproval:(method,params)=>require('./approval-manager').codexApproval(approvals,{id:job?.id,signal:controller.signal},method,params),activity:event=>{if(job){job.events.push({...event,provider:'codex',at:Date.now()});job.events=job.events.slice(-100);emitJobs();}}}));}
+  finally{job?.signal?.removeEventListener('abort',abortParent);stageSignal?.removeEventListener('abort',abortParent);if(job&&!job.collaboration)job.interrupt=previousInterrupt||null;}
 
 }
 function findClaudeExecutable() { return require('./claude-runtime').findClaude(); }
@@ -393,11 +390,11 @@ function pruneJobs() {
   const finished = [...activeJobs.values()].filter(job => !['running', 'paused'].includes(job.status));
   for (const job of finished.slice(0, Math.max(0, finished.length - 40))) activeJobs.delete(job.id);
 }
-function jobSnapshots() {
+function jobSnapshots({persist=false,graphs=true}={}) {
   pruneJobs();
   return [...activeJobs.values()].map(job=>{
-    const {id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId,workspaceId,request,checkpoints,budget,projectSnapshot,changeId,changesError,verification,recoveryChangeId}=job;
-    return {id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId,workspaceId,request,checkpoints,projectSnapshot,changeId,changesError,verification,recoveryChangeId,budget:budget?{...budget,usedMs:budget.usedMs+(budget.runStartedAt?Date.now()-budget.runStartedAt:0),runStartedAt:null}:undefined};
+    const {id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId,workspaceId,request,checkpoints,budget,projectSnapshot,changeId,changesError,verification,recoveryChangeId,sessions,preparedProposals,graph,graphRunId}=job;
+    return {id,prompt,cwd,conversationId,status,statusText,startedAt,endedAt,result,error,provider,sessionId,events,collaboration,colabChatId,workspaceId,request,checkpoints,projectSnapshot,changeId,changesError,verification,recoveryChangeId,sessions,graphRunId,...(graphs?{graph}:{}),...(persist?{preparedProposals}:{}),budget:budget?{...budget,usedMs:budget.usedMs+(budget.runStartedAt?Date.now()-budget.runStartedAt:0),runStartedAt:null}:undefined};
   });
 }
 
@@ -409,7 +406,7 @@ function emitJobs() {
     jobsEmitTimer = null;
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const next = new Map(), upsert = [];
-    for (const job of jobSnapshots()) {
+    for (const job of jobSnapshots({graphs:false})) {
       const value = JSON.stringify(job); next.set(job.id, value);
       if (sentJobs.get(job.id) !== value) upsert.push(job);
     }
@@ -417,8 +414,12 @@ function emitJobs() {
     if (upsert.length || removed.length) mainWindow.webContents.send('atlas:jobs-changed', { upsert, removed });
   }, 50);
 }
-function persistJobs() { if (assistantService) { assistantService.state.jobs = jobSnapshots(); return assistantService.save(); } }
+function persistJobs() { if (assistantService) { assistantService.state.jobs = jobSnapshots({persist:true}); return assistantService.save(); } }
 
+function publishCollaborationGraph(job,graph,event){
+  if(!graph)return;job.graph={...graph,revision:(job.graph?.revision||0)+1};
+  if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id:job.id,chatId:job.colabChatId,graphRunId:job.graphRunId,graph:job.graph});
+}
 async function startCollaboration(event, input) {
   if(!isTrustedSender(event))throw Error('Untrusted app window.');
   const previous=input?.resumeJobId?activeJobs.get(input.resumeJobId):null;
@@ -436,7 +437,8 @@ async function startCollaboration(event, input) {
   const reusable=!previous&&request.isolated&&!['plan','compare'].includes(request.mode)?await require('./colab-workspace-reuse').reusableWorkspace({id:request.workspaceId,chatId:request.chatId,cwd:folder,jobs:[...activeJobs.values()],service:workspace()}):null;
   if([...activeJobs.values()].some(job=>job.collaboration&&job.colabChatId===request.chatId&&job.status==='running'))throw Error('This Colab chat is already working.');
   const usedMs=previous?.budget?.usedMs||0;
-  const id=randomUUID(),job={id,colabChatId:request.chatId,prompt:task,cwd:folder,conversationId:request.chatId,status:'running',statusText:'Preparing workspace',startedAt:Date.now(),events:[],collaboration:true,request,checkpoints:previous?.checkpoints?structuredClone(previous.checkpoints):[],workspaceId:previous?.workspaceId||reusable?.id||'',budget:{maxRuntimeSeconds:request.maxRuntimeSeconds,maxRounds:request.maxRounds,usedMs,runStartedAt:Date.now()}};
+  const id=randomUUID(),job={id,graphRunId:previous?.graphRunId||previous?.id||id,colabChatId:request.chatId,prompt:task,cwd:folder,conversationId:request.chatId,status:'running',statusText:'Preparing workspace',startedAt:Date.now(),events:[],collaboration:true,request,checkpoints:previous?.checkpoints?structuredClone(previous.checkpoints):[],preparedProposals:structuredClone(previous?.preparedProposals||{}),workspaceId:previous?.workspaceId||reusable?.id||'',budget:{maxRuntimeSeconds:request.maxRuntimeSeconds,maxRounds:request.maxRounds,usedMs,runStartedAt:Date.now()}};
+  job.graph={...require('./colab-graph').build({task,outcome:'preparing'}),revision:previous?.graph?.revision||0};
   activeJobs.set(id,job);taskNotifications.started(job);persistJobs();emitJobs();
   job.promise=jobContext.run(job,async()=>{
     const controller=new AbortController();job.signal=controller.signal;job.interrupt=()=>controller.abort();
@@ -452,13 +454,15 @@ async function startCollaboration(event, input) {
       await beginChanges(job,previous);
       const settings=await readAppSettings();if(project)Object.assign(settings,{codexModel:project.codexModel||settings.codexModel,claudeModel:project.claudeModel||settings.claudeModel});
       job.runVerification=require('./verification-cache').createVerificationRunner({project,cwd:job.cwd,reuse:request.reuseChecks,run:()=>require('./project-tools').completionChecks(project,job.cwd,{signal:job.signal,progress:text=>{job.statusText=text;job.events.push({kind:'command',text,at:Date.now()});emitJobs();}})});
-      const run=require('./collaboration').createCollaboration({runProvider,verify:async()=>{job.verification=await job.runVerification();if(job.verification.results?.length){const folder=path.join(app.getPath('userData'),'colab-reports',job.id);await mkdir(folder,{recursive:true});job.verification.reportPath=path.join(folder,'checks.json');await writeFile(job.verification.reportPath,JSON.stringify(job.verification),'utf8');}return job.verification;},saveReport:async(report,index,raw)=>{const folder=path.join(app.getPath('userData'),'colab-reports',job.id);await mkdir(folder,{recursive:true});const file=path.join(folder,String(index+1)+'.txt');await writeFile(file,efficiency.excerpt(raw||report.output,2000000),'utf8');return file;},reviewContext:async limit=>{if(!job.changeId)return 'Change tracking unavailable. Inspect the project directly.';const report=await changes().report(job.changeId,true);const rows=report.files.slice(0,60);let text=report.limited?'PARTIAL file scan. Inspect omitted files directly.\n':'';text+=rows.length+' of '+report.files.length+' changed files since task start.\n';for(const row of rows){text+='\n'+row.path+' ('+row.status+')\n';for(const hunk of row.patch?.hunks||[])text+=hunk.lines.join('\n')+'\n';if(text.length>limit)break;}return efficiency.excerpt(text,limit)+(text.length>limit||rows.length<report.files.length?'\nPARTIAL diff; omitted content must be inspected in files.':'');},progress:announce,fingerprint:async()=>job.changeId?changes().fingerprint(job.changeId):null,checkpoint:async reports=>{job.checkpoints=reports;await persistJobs();await assistantService.flush();}});
-      const result=await run({...request,cwd:job.cwd,settings,checkpoints:job.checkpoints,instructions:project?.instructions||'',attachmentContext,signal:controller.signal});
+      const formatReviewContext=require('./review-context').createReviewContext();
+      const navigation=require('./colab-answer').isSimpleMessage(task)?'':await projectContext().context(job.cwd,task,{signal:job.signal}).catch(()=> '');
+      const run=require('./collaboration').createCollaboration({runProvider,canResumeSession:(provider,id)=>provider!=='codex'||Boolean(codexConnection?.hasInternalSession?.(id)),graphChanged:async graph=>publishCollaborationGraph(job,require('./colab-graph').withVerification(graph,job.verification),event),reviewRecorded:()=>formatReviewContext.commit(),savePrepared:async prepared=>{job.preparedProposals=prepared;await persistJobs();await assistantService.flush();},verify:async()=>{job.verification=await job.runVerification();publishCollaborationGraph(job,require('./colab-graph').withVerification(job.graph,job.verification),event);if(job.verification.results?.length){const folder=path.join(app.getPath('userData'),'colab-reports',job.id);await mkdir(folder,{recursive:true});job.verification.reportPath=path.join(folder,'checks.json');await writeFile(job.verification.reportPath,JSON.stringify(job.verification),'utf8');}return job.verification;},saveReport:async(report,index,raw)=>{const folder=path.join(app.getPath('userData'),'colab-reports',job.id);await mkdir(folder,{recursive:true});const file=path.join(folder,String(index+1)+'.txt');await writeFile(file,efficiency.excerpt(raw||report.output,2000000),'utf8');return file;},reviewContext:async(limit,options)=>job.changeId?formatReviewContext(await changes().report(job.changeId,true),limit,options):'Change tracking unavailable. Inspect the project directly.',progress:announce,fingerprint:async()=>job.changeId?changes().fingerprint(job.changeId):null,checkpoint:async reports=>{job.checkpoints=reports;await persistJobs();await assistantService.flush();}});
+      const result=await run({...request,cwd:job.cwd,settings,checkpoints:job.checkpoints,preparedProposals:job.preparedProposals,instructions:project?.instructions||'',attachmentContext,projectContext:navigation,signal:controller.signal});
       if(job.stopped||controller.signal.aborted)throw Error('Collaboration stopped.');
       job.result={...result,workspaceId:job.workspaceId};await checkTask(job);if(job.stopped||controller.signal.aborted)throw Error('Task stopped.');job.status=result.outcome;job.statusText=result.outcome==='completed'?(job.verification?.status==='failed'?'Complete · checks failed':'Complete'):result.limitation||'Needs attention';
       if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:job.statusText,outcome:result.outcome,result:result.output,usage:result.usage,limitation:result.limitation,workspaceId:job.workspaceId});return job.result;
     }catch(error){job.status=job.stopped||'failed';job.error=error.message;job.statusText=job.stopped==='paused'?'Paused':job.stopped==='cancelled'?'Stopped':job.error;if(!event.sender.isDestroyed())event.sender.send('atlas:collab-status',{id,chatId:job.colabChatId,status:job.statusText,error:job.error,workspaceId:job.workspaceId});throw error;
-    }finally{await finishTask(job);clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();taskNotifications.finished(job,{silent:quitting});await persistJobs();emitJobs();}
+    }finally{publishCollaborationGraph(job,require('./colab-graph').terminal(job.graph,job.status,job.verification),event);await finishTask(job);clearInterval(heartbeat);job.budget.usedMs+=Date.now()-job.budget.runStartedAt;job.budget.runStartedAt=null;job.signal=null;job.endedAt=Date.now();taskNotifications.finished(job,{silent:quitting});await persistJobs();emitJobs();}
   });job.promise.catch(()=>{});return{id};
 }
 
@@ -746,7 +750,7 @@ async function handleChat(event, data) {
 async function createWindow() {
   await protocol.handle('atlas', async request => {
     const url = new URL(request.url);
-    if (url.host !== 'app' || !['/', '/index.html', '/assistant-chat.js', '/colab-efficiency.js', '/colab-history.js', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js', '/productivity-ui.js', '/code-syntax.js', '/syntax-worker.js', '/syntax-highlight.js'].includes(url.pathname)) {
+    if (url.host !== 'app' || !['/', '/index.html', '/assistant-chat.js', '/chat-render.js', '/colab-graph.js', '/colab-graph-ui.js', '/colab-efficiency.js', '/colab-history.js', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js', '/productivity-ui.js', '/code-syntax.js', '/syntax-worker.js', '/syntax-highlight.js'].includes(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
     const javascript = url.pathname.endsWith('.js');
@@ -782,27 +786,24 @@ async function createWindow() {
     if (!target.startsWith(`${appOrigin}/`)) event.preventDefault();
   });
   mainWindow.on('focus',()=>mainWindow?.flashFrame(false));
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => { mainWindow = null;desktopIndicator?.close();desktopIndicator=undefined; });
   await mainWindow.loadURL(`${appOrigin}/`);
 }
 
 
 app.whenReady().then(async () => {
+  if(!ownsInstance)return;
   app.setName('ATLAS');
   app.setAppUserModelId(APP_ID);
-  try { await migrateLegacyUserData(); }
-  catch (error) { console.error('Could not fully migrate existing ATLAS data:', error); }
-  await require('./claude-runtime').refreshWindowsPath();
+  await Promise.all([migrateLegacyUserData().catch(error=>console.error('Could not fully migrate existing ATLAS data:',error)),require('./claude-runtime').refreshWindowsPath()]);
   setupPermissions();
   assistantService = require('./assistant-service').createService({directory:app.getPath('userData'),launchApp:async name=>{ const targets={notepad:'notepad.exe',calculator:'calc.exe',explorer:'explorer.exe','file explorer':'explorer.exe'}; if(name==='settings')return shell.openExternal('ms-settings:'); await new Promise((resolve,reject)=>{const child=spawn(targets[name],[],{detached:true,stdio:'ignore',windowsHide:false});child.once('error',reject);child.once('spawn',()=>{child.unref();resolve()})}) },volume:async direction=>{const key=direction==='up'?175:direction==='down'?174:173;const script='Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class AtlasVolume { [DllImport("user32.dll")] public static extern void keybd_event(byte v, byte s, uint f, UIntPtr e); }\'; [AtlasVolume]::keybd_event('+key+',0,0,[UIntPtr]::Zero); [AtlasVolume]::keybd_event('+key+',0,2,[UIntPtr]::Zero)';await new Promise((resolve,reject)=>{const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true});child.once('error',reject);child.once('close',code=>code===0?resolve():reject(Error('Volume control failed')))})},notify:reminder=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:reminder',reminder);const {Notification}=require('electron');if(Notification.isSupported())new Notification({title:'ATLAS reminder',body:reminder.title}).show();}});
-  for(const saved of assistantService.state.jobs||[]){activeJobs.set(saved.id,{...saved,status:saved.status==='running'?'paused':saved.status,child:null});}
+  for(const saved of assistantService.state.jobs||[]){const status=saved.status==='running'?'paused':saved.status;activeJobs.set(saved.id,{...saved,status,graph:saved.graph?require('./colab-graph').terminal(saved.graph,status,saved.verification):undefined,child:null});}
   setInterval(()=>assistantService.tick(),1000).unref();
   providerHealth=new (require('./provider-health').ProviderHealth)(path.join(app.getPath('userData'),'provider-health.json'));
   setupIpc();
   await createWindow();
-  readAppSettings().then(settings => {
-    if (settings.voiceEngine === 'kokoro') kokoroSpeak('Ready.',settings.kokoroVoice||'bm_george').catch(() => {});
-  }).catch(() => {});
+  // Speech is initialized by the first spoken response, rather than on launch.
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 

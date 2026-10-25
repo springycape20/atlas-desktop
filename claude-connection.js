@@ -8,7 +8,7 @@ class ClaudeConnection{
     if(this.settings.claudeModel)args.push('--model',this.settings.claudeModel);
     // The ATLAS gateway performs the action approval, avoiding a second prompt
     // for the wrapper itself. Other provider tools keep their normal rules.
-    if(this.settings.atlasMcp)args.push('--mcp-config',JSON.stringify({mcpServers:{atlas_tools:{type:'http',url:this.settings.atlasMcp.url,headers:this.settings.atlasMcp.headers}}}),'--allowedTools',['integrations_list','integrations_add','integrations_start','integrations_call','integrations_stop'].map(name=>'mcp__atlas_tools__'+name).join(','));
+    if(this.settings.atlasMcp)args.push('--mcp-config',JSON.stringify({mcpServers:{atlas_tools:{type:'http',url:this.settings.atlasMcp.url,headers:this.settings.atlasMcp.headers}}}),'--allowedTools',['integrations_list','integrations_add','integrations_start','integrations_call','integrations_sequence','integrations_stop'].map(name=>'mcp__atlas_tools__'+name).join(','));
     if(this.settings.readOnly)args.push('--tools','Read,Glob,Grep,WebSearch,WebFetch','--permission-mode','plan');else if(this.settings.permissionBypass)args.push('--dangerously-skip-permissions');
     const env=this.settings.effort?{...process.env,CLAUDE_CODE_EFFORT_LEVEL:this.settings.effort}:process.env,spec=this.launch(this.executable,args,env);
     const child=this.child=this.spawnProcess(spec.executable,spec.args,{cwd:this.cwd,env:spec.env,windowsHide:true,shell:false,stdio:['pipe','pipe','pipe']});
@@ -54,7 +54,7 @@ class ClaudeConnection{
       const abort=()=>{turn.finish(Error('Job cancelled or paused.'));this.close();};
       const timer=settings.timeoutSeconds>0?setTimeout(()=>{turn.finish(Error('Claude response timed out.'));this.close();},settings.timeoutSeconds*1000):null;
       turn.decode=createDecoder('claude',onText,activity);
-      turn.control=createClaudeControl({manager:manager||{ask:async()=>null},job:{id:job.id,signal:controller.signal},write:text=>{if(this.turn===turn&&!controller.signal.aborted)this.write(text);}});
+      turn.control=createClaudeControl({trustedAtlasTools:Boolean(this.settings.atlasMcp)&&!this.settings.readOnly,manager:manager||{ask:async()=>null},job:{id:job.id,signal:controller.signal},write:text=>{if(this.turn===turn&&!controller.signal.aborted)this.write(text);}});
       turn.finish=(error,result)=>{if(this.turn!==turn)return;this.turn=null;clearTimeout(timer);signal?.removeEventListener('abort',abort);controller.abort();turn.decode.finish();error?reject(error):resolve(result);};
       signal?.addEventListener('abort',abort,{once:true});
       (async()=>{try{await this.connect();if(this.turn!==turn)return;if(!sessionId&&this.used)await this.reset();if(this.turn!==turn)return;onSession(this.sessionId);turn.sent=true;this.used=true;this.write({type:'user',uuid:turn.uuid,session_id:this.sessionId,parent_tool_use_id:null,message:{role:'user',content:prompt}});}catch(error){turn.finish(error);this.close();}})();

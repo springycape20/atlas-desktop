@@ -5,7 +5,7 @@ const { createInterface } = require('node:readline');
 class CodexConnection {
   constructor(executable, spawnProcess = spawn) {
     this.executable = executable; this.spawn = spawnProcess;
-    this.pending = new Map(); this.turns = new Map(); this.counter = 0;
+    this.pending = new Map(); this.turns = new Map(); this.counter = 0;this.internalSessions=new Set();
   }
   async connect() {
     if (this.ready) return this.ready;
@@ -34,13 +34,15 @@ class CodexConnection {
   }
   failed(child,error) {
     if (this.child!==child) return;
-    this.child=null;this.ready=null;
+    this.child=null;this.ready=null;this.internalSessions.clear();
     for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(error);}this.pending.clear();
     for(const t of [...this.turns.values()])t.finish(error);
     child.kill();
   }
+  hasInternalSession(id){return this.internalSessions.has(id);}
   close(){if(this.child)this.failed(this.child,Error('ATLAS closed.'));}
   receive(message) {
+    if(message.method==='thread/closed')this.internalSessions.delete(message.params?.threadId);
     if(message.method==='account/rateLimits/updated'){this.onRateLimits?.(message.params);return;}
     if(message.id!==undefined && !message.method){
       const p=this.pending.get(message.id);if(!p)return;
@@ -93,14 +95,18 @@ class CodexConnection {
       else t.finish(null,{output:t.final||[...t.messages.values()].join('\n\n'),sessionId:p.threadId,usage:t.usage||null});
     }
   }
-  async run({prompt,cwd,settings,sessionId,onText=()=>{},onSession=()=>{},activity=()=>{},onApproval,signal}) {
+  async run({prompt,cwd,settings,sessionId,internal=false,onText=()=>{},onSession=()=>{},activity=()=>{},onApproval,signal}) {
     await this.connect();if(signal?.aborted)throw Error('Job cancelled.');
     if(sessionId&&this.turns.has(sessionId))throw Error('This Codex conversation is already running.');
     const approvalPolicy=settings.permissionBypass?'never':'on-request';
     const params={cwd,approvalPolicy,sandbox:settings.permissionBypass?'danger-full-access':settings.codexSandbox};
     if(settings.atlasMcp)params.config={'mcp_servers.atlas_tools':{url:settings.atlasMcp.url,http_headers:settings.atlasMcp.headers,enabled:true,required:true,tool_timeout_sec:600}};
     if(settings.codexModel)params.model=settings.codexModel;
-    const result=await this.request(sessionId?'thread/resume':'thread/start',sessionId?{...params,threadId:sessionId}:params);
+    // Internal Colab passes stay in this app-server's memory. Never resume old
+    // persisted helper threads or fall back to saving a private pass to Recents.
+    if(internal&&sessionId&&!this.internalSessions.has(sessionId))sessionId='';
+    const result=internal&&sessionId?{thread:{id:sessionId,ephemeral:true}}:await this.request(sessionId?'thread/resume':'thread/start',sessionId?{...params,threadId:sessionId}:{...params,...(internal?{ephemeral:true}:{})});
+    if(internal){if(result.thread?.ephemeral!==true)throw Error('This Codex version did not confirm a temporary Colab session. Update Codex; the task was not submitted.');this.internalSessions.add(result.thread.id);}
     const threadId=result.thread.id;onSession(threadId);
     if(signal?.aborted)throw Error('Job cancelled.');
     if(this.turns.has(threadId))throw Error('This Codex conversation is already running.');
