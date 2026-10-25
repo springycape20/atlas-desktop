@@ -23,13 +23,16 @@ async function migrateOnce(source,destination){
   try{await fs.access(source);}catch(error){if(error.code==='ENOENT')return {skipped:true};throw error;}
   await fs.mkdir(destination,{recursive:true});
   const errors=[];
+  // Keep links already present at the destination: uv's minor-version Python
+  // junctions point back into the legacy folder, which cp rejects as a self-copy.
+  const filter=async(from,to)=>{try{await fs.lstat(to);}catch(error){if(error.code==='ENOENT')return true;throw error;}return !(await fs.lstat(from)).isSymbolicLink();};
   for(const entry of await fs.readdir(source,{withFileTypes:true})){
     const from=path.join(source,entry.name),to=path.join(destination,entry.name);
     // The marker belongs to this destination and is written only after success.
     if(entry.name==='.legacy-migration-v1.json')continue;
     try{
       let exists=true;try{await fs.access(to);}catch(error){if(error.code!=='ENOENT')throw error;exists=false;}
-      if(exists){if(entry.isDirectory())await fs.cp(from,to,{recursive:true,force:false,errorOnExist:false});}
+      if(exists){if(entry.isDirectory())await fs.cp(from,to,{recursive:true,force:false,errorOnExist:false,filter});}
       else try{await fs.rename(from,to);}catch(error){if(error.code!=='EXDEV')throw error;await fs.cp(from,to,{recursive:true,force:false,errorOnExist:false});}
     }catch(error){errors.push(error);}
   }
