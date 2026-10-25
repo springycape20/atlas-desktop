@@ -7,7 +7,15 @@ function createProjectRootGuard({ home = os.homedir(), env = process.env } = {})
   async function protectedRoots() {
     if (!protectedFolders)
       protectedFolders = (async () => {
-        const homes = [os.homedir(), home, env.OneDrive, env.OneDriveConsumer, env.OneDriveCommercial].filter(Boolean);
+        // The shared Public profile (C:\Users\Public) has the same broad folders as a user profile.
+        const homes = [
+          os.homedir(),
+          home,
+          env.OneDrive,
+          env.OneDriveConsumer,
+          env.OneDriveCommercial,
+          env.PUBLIC,
+        ].filter(Boolean);
         const candidates = [
           ...homes,
           ...homes.flatMap((folder) =>
@@ -30,9 +38,17 @@ function createProjectRootGuard({ home = os.homedir(), env = process.env } = {})
       })();
     return protectedFolders;
   }
+  // Every profile folder directly under the users folder (C:\Users\<anyone>), not only this one.
+  let usersFolder;
+  const profilesParent = () =>
+    (usersFolder ||= fs.realpath(path.dirname(home)).then(key, () => key(path.dirname(home))));
   async function isProtected(folder) {
     const actual = await fs.realpath(folder);
-    return key(actual) === key(path.parse(actual).root) || (await protectedRoots()).has(key(actual));
+    return (
+      key(actual) === key(path.parse(actual).root) ||
+      (await protectedRoots()).has(key(actual)) ||
+      key(path.dirname(actual)) === (await profilesParent())
+    );
   }
   async function assertProject(folder) {
     const actual = await fs.realpath(folder);
