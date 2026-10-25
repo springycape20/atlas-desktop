@@ -42,11 +42,18 @@ test('a stale Apps-list version is corrected for this installation', async () =>
 });
 test('a current entry is left alone', async () => {
   const reg = fakeReg({ DisplayVersion: '0.6.11', UninstallString: `"${installDir}\\Uninstall ATLAS.exe"` });
-  assert.deepEqual(await syncUninstallVersion(options(reg.run)), { changed: false });
+  assert.deepEqual(await syncUninstallVersion(options(reg.run)), { changed: false, reason: 'already shows 0.6.11' });
   assert.equal(reg.calls.length, 1);
 });
 test("another installation's entry is never changed", async () => {
   const reg = fakeReg({ DisplayVersion: '0.6.8', UninstallString: '"D:\\Other\\Uninstall ATLAS.exe"' });
   assert.equal((await syncUninstallVersion(options(reg.run))).changed, false);
   assert.equal(reg.calls.length, 1);
+});
+test('an entry with no uninstaller is reported rather than silently skipped', async () => {
+  const reg = fakeReg({ DisplayVersion: '0.6.8' });
+  assert.deepEqual(await syncUninstallVersion(options(reg.run)), {
+    changed: false,
+    reason: 'entry points at no uninstaller, not this installation',
+  });
 });
