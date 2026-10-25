@@ -7,6 +7,7 @@ const archive = path.join(__dirname, '..', 'dist', 'win-unpacked', 'resources', 
 const packaged = JSON.parse(asar.extractFile(archive, 'package.json').toString());
 for (const file of [
   'app-log.js',
+  'settings-nav.js',
   'uninstall-entry.js',
   'app-ui.js',
   'integration-service.js',

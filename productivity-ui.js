@@ -81,7 +81,9 @@
   workbenchPath.setAttribute('d', 'M4 8h16v12H4zM9 8V4h6v4M4 13h16M10 13v3h4v-3');
   workbenchIcon.append(workbenchPath);
   navButton.prepend(workbenchIcon);
-  const settingsSection = document.querySelector('#settingsDialog .setting-section');
+  const settingsSection = [...document.querySelectorAll('#settingsDialog .setting-section')].find(
+    (section) => section.querySelector('h3')?.textContent === 'Tools and data',
+  );
   if (settingsSection) button('Installed plugins and tools', () => open('Plugins'), settingsSection);
   const alertButton = button('Approvals', () => open('Approvals'), document.body);
   alertButton.className = 'approval-alert';

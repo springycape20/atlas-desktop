@@ -50,7 +50,9 @@ Also in Colab:
 
 1. Download **ATLAS-Setup-*version*.exe** from the [latest release](https://github.com/springycape20/atlas-desktop/releases/latest) (about 440 MB, Windows 10/11 x64) and run it.
 2. Install and sign in to **Codex** and/or **Claude Code** with their official installers. Colab needs both. In ATLAS, **Settings → Provider accounts → Test connections and dependencies** checks that they're found and signed in.
-3. Choose a working folder, then set up your microphone and voice in **Settings**.
+3. Choose a working folder, then set up your microphone and voice in **Settings**. Settings lists its sections on the left and has a search box, so you can type, for example, "wake word" to go straight to that option.
+
+![The Settings dialog with its section list and search](docs/images/settings.png)
 
 ATLAS installs for your Windows account in `%LOCALAPPDATA%\Programs\atlas-local-desktop`, with Desktop and Start Menu shortcuts. The installer includes the speech-recognition runtime and English models. The Kokoro voice model downloads the first time ATLAS speaks.
 
@@ -73,7 +75,7 @@ ATLAS checks for new releases when it starts. Open **Settings → App updates**,
 
 ## Troubleshooting
 
-- **Something went wrong or was slow:** open **Settings → Provider accounts → Show log file**. The log (`%LOCALAPPDATA%\ATLAS\logs\atlas.log`) records startup timing, errors and how the app closed. Include the relevant lines when you report a problem.
+- **Something went wrong or was slow:** open **Settings → Tools and data → Show log file**. The log (`%LOCALAPPDATA%\ATLAS\logs\atlas.log`) records startup timing, errors and how the app closed. Include the relevant lines when you report a problem.
 - **Codex or Claude isn't found:** run **Test connections and dependencies** in Settings. If your install is somewhere unusual, set `CODEX_EXECUTABLE` or `CLAUDE_CODE_EXECUTABLE` to its full path. A Claude Desktop sign-in alone doesn't sign in the Claude Code CLI.
 - **A Colab task paused:** read the message above the message box. It says whether the task needs a decision, hit a pass limit, or found a blocker it couldn't resolve. Most paused tasks can continue with **Resume saved stages** in Run details.
 
@@ -92,7 +94,7 @@ Setup installs dependencies, downloads the speech runtime and models (checksum-v
 | Command | What it does |
 |---|---|
 | `npm test` | Unit tests |
-| `npm run test:colab-ui`, `test:assistant-ui`, `test:graph-ui`, `test:approvals-ui`, `test:dispute-ui` | Electron UI checks |
+| `npm run test:colab-ui`, `test:assistant-ui`, `test:graph-ui`, `test:approvals-ui`, `test:dispute-ui`, `test:settings-ui` | Electron UI checks |
 | `npm run format` / `npm run format:check` | Prettier formatting |
 | `npm run dist:win` | Build the Windows installer into `dist/` |
 | `npx electron build/capture-screenshots.cjs` | Re-capture the README screenshots with demo data |

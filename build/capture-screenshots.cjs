@@ -211,6 +211,9 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('.colab-graph-dialog')?.close();atlasColab.selectChat('demo-dispute');
       pushJobs({removed:[],upsert:[${JSON.stringify(disputeJob)}]});`);
     await shot('colab-dispute.png');
+
+    await run(`atlasColab.selectAssistant?.();document.querySelector('#settingsOpen').click();`);
+    await shot(process.env.ATLAS_SETTINGS_SHOT || 'settings.png');
   } catch (error) {
     console.error(error);
     process.exitCode = 1;
