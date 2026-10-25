@@ -121,6 +121,28 @@ function parseVerdict(value) {
         : 'No valid completion verdict was supplied.',
   };
 }
+// A failed configured check, as a blocker the builder can fix before review.
+function checkIssue(checks) {
+  const failed = (checks.results || []).filter((row) => row.status === 'failed' || (row.exitCode ?? 0) !== 0);
+  const evidence = JSON.stringify(
+    failed.slice(0, 6).map((row) => ({
+      command: efficiency.excerpt(row.command, 240),
+      exitCode: row.exitCode,
+      error: efficiency.excerpt(row.error, 300),
+      output: String(row.output || '').slice(-400),
+    })),
+  );
+  return {
+    id: 'CHECKS',
+    criterion: 'TASK',
+    summary:
+      'Configured checks failed: ' +
+      (failed.map((row) => row.command).join(', ') || 'see check report') +
+      '. Fix the failures caused by this work; if a failure predates the task, say so instead of changing unrelated code.',
+    evidence: evidence.slice(0, 3000) + (checks.reportPath ? ' Full report: ' + checks.reportPath : ''),
+    regression: false,
+  };
+}
 const protocol =
   'Return a brief summary of results and actual checks before the status line. End with one final line: ATLAS_COLAB_STATUS {"decision":"ready","criteria":[],"blockingIssues":[],"disputedIssueIds":[]}. Use ready when the original task is satisfied, even if optional improvements remain. Use changes_requested only for actual blockers, each with {"id":"F1","criterion":"TASK","summary":"required fix","evidence":"specific file/check/reference","regression":false}. Reuse open IDs. Use blocked for missing access, dependencies, decisions, or work you cannot finish; explain the reason above the verdict. Never invent a blocker just to continue collaboration. Optional polish, style preferences, speculative risks, and unrelated work belong only in non-blocking notes. For the shared task graph, include a concise handover object in the status JSON with summary, decisions, changedFiles, checks, nextActions (short text arrays). Include only public conclusions and actual actions, not hidden reasoning. Keep it concise and factual. Also include userResponse in the status JSON: a final answer ready to show the user. Adapt its length to the task: one or two natural sentences for a greeting or response test; a short outcome and relevant verification for ordinary changes; detailed explanations, code, evidence and limitations when the request requires depth. Keep the preceding stage report short and avoid repeating the full userResponse in it. Keep proposal selection, reviewer approval, criteria IDs, protocol repairs and routine no-op bookkeeping out of userResponse. Include actual blockers and material caveats. criteria must be plain text strings, not objects. Do not expose hidden reasoning or claim checks you did not run.';
 function createCollaboration({
@@ -203,6 +225,8 @@ function createCollaboration({
       };
     };
     let pendingFromCurrentRun = false;
+    // Checks run just before a review are handed to it; nothing runs in between to change them.
+    let checksForReview = null;
     if (!reports.length && Object.keys(prepared).length && limit < 2)
       throw Error('Keep at least two pass slots when resuming saved parallel proposals.');
     for (const report of reports)
@@ -463,7 +487,8 @@ function createCollaboration({
         previous;
       let evidence = '';
       if (reviewing && !clarifying && !readonly) {
-        const checks = await verify();
+        const checks = checksForReview || (await verify());
+        checksForReview = null;
         if (checks) {
           const summary = {
             status: checks.status,
@@ -655,6 +680,23 @@ function createCollaboration({
               after: original.fingerprintAfter,
               disputed: verdict.disputed,
             };
+            // Run the configured checks before spending a review pass. Failures go straight back
+            // to the builder once per build or fix; if they persist, the reviewer judges them.
+            if (!readonly) {
+              const checks = await verify();
+              checksForReview = checks;
+              if (checks?.status === 'failed' && !state.checkRetried) {
+                checksForReview = null;
+                state.checkRetried = true;
+                state.openIssues = [...state.openIssues.filter((row) => row.id !== 'CHECKS'), checkIssue(checks)];
+                state.phase = 'fix';
+                progress(
+                  'Checks failed after ' +
+                    (builder === 'codex' ? 'Codex' : 'Claude') +
+                    "'s changes; sending the failures back before review.",
+                );
+              } else state.checkRetried = false;
+            }
           }
         } else if (verdict.decision === 'ready') {
           state.outcome = 'completed';
