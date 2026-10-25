@@ -14,6 +14,15 @@ const legacyUserDataPath = path.join(app.getPath('appData'), 'atlas-local-deskto
 const localUserDataPath = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'ATLAS');
 const migrateToLocalAppData = process.platform === 'win32' && path.resolve(legacyUserDataPath).toLowerCase() !== path.resolve(localUserDataPath).toLowerCase();
 if (migrateToLocalAppData) app.setPath('userData', localUserDataPath);
+const startedAt = Date.now();
+const appLog = require('./app-log').createAppLog(path.join(app.getPath('userData'), 'logs', 'atlas.log'));
+appLog.info(`ATLAS ${require('./package.json').version} starting (Electron ${process.versions?.electron}, Windows ${os.release()})`);
+// Only the real Electron process mirrors its console and unhandled errors; tests load this file with a stub process.
+if (process.versions?.electron) {
+  appLog.captureConsole();
+  process.on('uncaughtExceptionMonitor', error => appLog.error('Uncaught exception:', error));
+  process.on('unhandledRejection', error => appLog.error('Unhandled rejection:', error));
+}
 
 async function migrateLegacyUserData() {
   if (!migrateToLocalAppData || !existsSync(legacyUserDataPath)) return;
@@ -483,7 +492,8 @@ function setupIpc() {
   ipcMain.handle('atlas:provider-usage',async(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');return providerUsage().read({refresh:request?.refresh===true});});
   ipcMain.handle('atlas:provider-usage-open',async(event,provider)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(!['codex','claude'].includes(provider))throw Error('Choose Codex or Claude.');const url=require('./provider-usage').USAGE_URLS[provider];await shell.openExternal(url);});
   ipcMain.handle('atlas:provider-health',(event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window.');if(request?.action==='retry'&&['codex','claude'].includes(request.provider))providerHealth.clear(request.provider);return providerHealth.snapshot();});
-  ipcMain.handle('atlas:open-link',async(event,value)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const url=new URL(value);if(!['https:','http:'].includes(url.protocol))throw Error('Unsupported link');await shell.openExternal(url.href)});
+  ipcMain.handle('atlas:open-log',async event=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const error=await shell.openPath(appLog.file);if(error)throw Error(error);});
+ipcMain.handle('atlas:open-link',async(event,value)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const url=new URL(value);if(!['https:','http:'].includes(url.protocol))throw Error('Unsupported link');await shell.openExternal(url.href)});
   ipcMain.handle('atlas:memory',async (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const result=assistantService.memory(request?.action||'list',request?.item);await assistantService.flush();return result;});
   ipcMain.handle('atlas:reminders',async (event,request)=>{if(!isTrustedSender(event))throw Error('Untrusted app window');const result=assistantService.reminder(request?.action||'list',request?.item);await assistantService.flush();return result;});
   ipcMain.handle('atlas:latest-conversation', async event => {
@@ -750,7 +760,7 @@ async function handleChat(event, data) {
 async function createWindow() {
   await protocol.handle('atlas', async request => {
     const url = new URL(request.url);
-    if (url.host !== 'app' || !['/', '/index.html', '/assistant-chat.js', '/chat-render.js', '/colab-graph.js', '/colab-graph-ui.js', '/colab-efficiency.js', '/colab-history.js', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js', '/productivity-ui.js', '/code-syntax.js', '/syntax-worker.js', '/syntax-highlight.js'].includes(url.pathname)) {
+    if (url.host !== 'app' || !['/', '/index.html', '/app-ui.js', '/assistant-chat.js', '/chat-render.js', '/colab-graph.js', '/colab-graph-ui.js', '/colab-efficiency.js', '/colab-history.js', '/colab-workspace.js', '/workspace-extras.js', '/settings-discovery.js', '/provider-usage-ui.js', '/change-editor.js', '/productivity-ui.js', '/code-syntax.js', '/syntax-worker.js', '/syntax-highlight.js'].includes(url.pathname)) {
       return new Response('Not found', { status: 404 });
     }
     const javascript = url.pathname.endsWith('.js');
@@ -796,6 +806,7 @@ app.whenReady().then(async () => {
   app.setName('ATLAS');
   app.setAppUserModelId(APP_ID);
   await Promise.all([migrateLegacyUserData().catch(error=>console.error('Could not fully migrate existing ATLAS data:',error)),require('./claude-runtime').refreshWindowsPath()]);
+  appLog.info(`Data migration and PATH refresh finished after ${Date.now() - startedAt}ms`);
   setupPermissions();
   assistantService = require('./assistant-service').createService({directory:app.getPath('userData'),launchApp:async name=>{ const targets={notepad:'notepad.exe',calculator:'calc.exe',explorer:'explorer.exe','file explorer':'explorer.exe'}; if(name==='settings')return shell.openExternal('ms-settings:'); await new Promise((resolve,reject)=>{const child=spawn(targets[name],[],{detached:true,stdio:'ignore',windowsHide:false});child.once('error',reject);child.once('spawn',()=>{child.unref();resolve()})}) },volume:async direction=>{const key=direction==='up'?175:direction==='down'?174:173;const script='Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class AtlasVolume { [DllImport("user32.dll")] public static extern void keybd_event(byte v, byte s, uint f, UIntPtr e); }\'; [AtlasVolume]::keybd_event('+key+',0,0,[UIntPtr]::Zero); [AtlasVolume]::keybd_event('+key+',0,2,[UIntPtr]::Zero)';await new Promise((resolve,reject)=>{const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{windowsHide:true});child.once('error',reject);child.once('close',code=>code===0?resolve():reject(Error('Volume control failed')))})},notify:reminder=>{if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('atlas:reminder',reminder);const {Notification}=require('electron');if(Notification.isSupported())new Notification({title:'ATLAS reminder',body:reminder.title}).show();}});
   for(const saved of assistantService.state.jobs||[]){const status=saved.status==='running'?'paused':saved.status;activeJobs.set(saved.id,{...saved,status,graph:saved.graph?require('./colab-graph').terminal(saved.graph,status,saved.verification):undefined,child:null});}
@@ -803,6 +814,7 @@ app.whenReady().then(async () => {
   providerHealth=new (require('./provider-health').ProviderHealth)(path.join(app.getPath('userData'),'provider-health.json'));
   setupIpc();
   await createWindow();
+  appLog.info(`Window loaded after ${Date.now() - startedAt}ms`);
   // Speech is initialized by the first spoken response, rather than on launch.
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
