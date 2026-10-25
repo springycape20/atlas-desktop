@@ -72,6 +72,19 @@ test('Colab rejects broad folders and initializes only the chosen project under 
   assert.equal((await fs.readFile(path.join(tree.path, 'game.py'), 'utf8')).replace(/\r\n/g, '\n'), 'print("game")\n');
 });
 
+test('Colab rejects the shared Public profile and other profiles beside the user folder', async (t) => {
+  const dir = await temporary(t),
+    users = path.join(dir, 'Users'),
+    home = path.join(users, 'user'),
+    publicProfile = path.join(users, 'Public'),
+    project = path.join(publicProfile, 'Documents', 'Game');
+  for (const folder of [home, path.join(users, 'other'), project]) await fs.mkdir(folder, { recursive: true });
+  const service = createWorkspaceService(path.join(dir, 'data'), { home, env: { PUBLIC: publicProfile } });
+  for (const folder of [users, publicProfile, path.join(publicProfile, 'Documents'), path.join(users, 'other')])
+    await assert.rejects(service.repository(folder), /dedicated project folder/);
+  assert.equal((await service.repository(project)).exists, false);
+});
+
 test('safe monorepository subfolders keep using their actual project root', async (t) => {
   const dir = await temporary(t),
     home = path.join(dir, 'home'),
