@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld('atlas', {
     ipcRenderer.invoke('atlas:attachments', { paths: Array.from(files).map((file) => webUtils.getPathForFile(file)) }),
   attachmentPreview: (id) => ipcRenderer.invoke('atlas:attachment-preview', { id }),
   diagnostics: () => ipcRenderer.invoke('atlas:diagnostics'),
-  openLog: () => ipcRenderer.invoke('atlas:open-log'),
+  showLog: () => ipcRenderer.invoke('atlas:show-log'),
   changes: (request) => ipcRenderer.invoke('atlas:changes', request),
   reviewChanges: (request) => ipcRenderer.invoke('atlas:review-changes', request),
   chatMetadata: (request) => ipcRenderer.invoke('atlas:chat-metadata', request),

@@ -94,8 +94,8 @@
   if (settingsSection) {
     button('Test connections and dependencies', showDiagnostics, settingsSection);
     button(
-      'Open log file',
-      () => void api.openLog().catch((error) => window.toast?.('Could not open the log: ' + error.message)),
+      'Show log file',
+      () => void api.showLog().catch((error) => window.toast?.('Could not show the log: ' + error.message)),
       settingsSection,
     );
     button('Import chats from Codex or Claude', showImport, settingsSection);
