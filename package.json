@@ -18,7 +18,8 @@
     "test:assistant-ui": "electron tests/assistant-chat.browser.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:dispute-ui": "electron tests/colab-dispute.browser.cjs"
+    "test:dispute-ui": "electron tests/colab-dispute.browser.cjs",
+    "test:settings-ui": "electron tests/settings.browser.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0",

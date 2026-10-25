@@ -997,9 +997,10 @@
         box-shadow: 0 10px 35px #0008;
       }
       .settings-dialog {
-        width: min(650px, calc(100vw - 28px));
+        width: min(920px, calc(100vw - 28px));
         max-width: none;
         max-height: min(88vh, 850px);
+        overflow: hidden;
         padding: 0;
         border: 1px solid #293c46;
         border-radius: 18px;
@@ -1014,7 +1015,97 @@
       .settings-shell {
         display: flex;
         flex-direction: column;
-        max-height: min(88vh, 850px);
+        height: min(88vh, 760px);
+      }
+      /* Section navigation and search, built by settings-nav.js. */
+      .settings-layout {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        flex: 1;
+        min-height: 0;
+      }
+      .settings-nav {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-height: 0;
+        overflow: auto;
+        scrollbar-width: thin;
+        padding: 14px 10px;
+        border-right: 1px solid #1d2c35;
+        background: #0a1117;
+      }
+      .settings-layout .setting-section {
+        border-bottom: 0;
+      }
+      .settings-layout.settings-searching .setting-section:not([hidden]) ~ .setting-section:not([hidden]) {
+        border-top: 1px solid #1b2a33;
+      }
+      .settings-search {
+        box-sizing: border-box;
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 8px 10px;
+        border: 1px solid #253a45;
+        border-radius: 9px;
+        background: #0e1a21;
+        color: var(--white);
+        font: inherit;
+        font-size: 12px;
+      }
+      .settings-search:focus {
+        outline: 2px solid #3f8e99;
+        outline-offset: 1px;
+      }
+      .settings-nav-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .settings-nav-item {
+        display: block;
+        width: 100%;
+        padding: 7px 10px;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: #a9bcc3;
+        font: inherit;
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .settings-nav-item small {
+        display: block;
+        margin-top: 2px;
+        color: #6f8189;
+        font-size: 10px;
+      }
+      .settings-nav-item:hover {
+        background: #10202a;
+        color: #dcebee;
+      }
+      .settings-nav-item:focus-visible {
+        outline: 2px solid #3f8e99;
+        outline-offset: -2px;
+      }
+      .settings-nav-item[aria-current='true'] {
+        background: #14303a;
+        color: #eef7f8;
+      }
+      .settings-nav-item.settings-no-match {
+        opacity: 0.4;
+      }
+      .settings-empty {
+        padding: 24px 0;
+        color: #7e8c94;
+        font-size: 12px;
+      }
+      .settings-filtered-out {
+        display: none !important;
+      }
+      .settings-footer.settings-dirty #settingsSaved {
+        color: #f0c27a;
       }
       .settings-header {
         display: flex;
@@ -1274,6 +1365,35 @@
         .settings-body {
           padding-left: 18px;
           padding-right: 18px;
+        }
+        .settings-layout {
+          grid-template-columns: minmax(0, 1fr);
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+        .settings-nav {
+          flex-direction: row;
+          flex-wrap: nowrap;
+          gap: 6px;
+          overflow-x: auto;
+          padding: 10px 18px;
+          border-right: 0;
+          border-bottom: 1px solid #1d2c35;
+        }
+        .settings-search {
+          flex: 0 0 150px;
+          margin: 0;
+        }
+        .settings-nav-list {
+          flex-direction: row;
+          gap: 6px;
+        }
+        .settings-nav-item {
+          flex: 0 0 auto;
+          width: auto;
+          white-space: nowrap;
+        }
+        .settings-nav-item small {
+          display: none;
         }
         .settings-footer {
           padding: 13px 18px;
@@ -2880,6 +3000,10 @@
               <label class="switch"><input id="permissionBypass" type="checkbox" /><span></span></label>
             </div>
           </section>
+          <section class="setting-section">
+            <h3>Tools and data</h3>
+            <p class="setting-note">Plugins and tools, importing chats from Codex or Claude, and the diagnostic log.</p>
+          </section>
         </div>
         <footer class="settings-footer">
           <span id="settingsSaved">Changes are stored on this computer.</span
@@ -2928,5 +3052,6 @@
     <script src="/change-editor.js"></script>
     <script src="/productivity-ui.js"></script>
     <script src="/assistant-chat.js"></script>
+    <script src="/settings-nav.js"></script>
   </body>
 </html>

@@ -88,17 +88,28 @@
     svg.append(shape);
     item.prepend(svg);
   }
-  const settingsSection = [...document.querySelectorAll('#settingsDialog .setting-section')].find(
-    (section) => section.querySelector('h3')?.textContent === 'Provider accounts',
-  );
-  if (settingsSection) {
-    button('Test connections and dependencies', showDiagnostics, settingsSection);
+  const settingsSection = (name) =>
+    [...document.querySelectorAll('#settingsDialog .setting-section')].find(
+      (section) => section.querySelector('h3')?.textContent === name,
+    );
+  const settingsActions = (name) => {
+    const section = settingsSection(name);
+    if (!section) return null;
+    const row = document.createElement('div');
+    row.className = 'workspace-actions';
+    section.append(row);
+    return row;
+  };
+  const providerActions = settingsActions('Provider accounts');
+  if (providerActions) button('Test connections and dependencies', showDiagnostics, providerActions);
+  const dataActions = settingsActions('Tools and data');
+  if (dataActions) {
+    button('Import chats from Codex or Claude', showImport, dataActions);
     button(
       'Show log file',
       () => void api.showLog().catch((error) => window.toast?.('Could not show the log: ' + error.message)),
-      settingsSection,
+      dataActions,
     );
-    button('Import chats from Codex or Claude', showImport, settingsSection);
   }
   $id('historyOpen').addEventListener(
     'click',

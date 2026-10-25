@@ -2170,6 +2170,7 @@ async function createWindow() {
         '/provider-usage-ui.js',
         '/change-editor.js',
         '/productivity-ui.js',
+        '/settings-nav.js',
         '/code-syntax.js',
         '/syntax-worker.js',
         '/syntax-highlight.js',
