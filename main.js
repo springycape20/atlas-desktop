@@ -38,6 +38,14 @@ if (process.versions?.electron) {
   appLog.captureConsole();
   process.on('uncaughtExceptionMonitor', (error) => appLog.error('Uncaught exception:', error));
   process.on('unhandledRejection', (error) => appLog.error('Unhandled rejection:', error));
+  // Record how the app and its processes end, so an unexpected close can be explained.
+  app.on('render-process-gone', (_event, _contents, details) =>
+    appLog.error('Window process stopped:', details.reason, 'exit code', details.exitCode),
+  );
+  app.on('child-process-gone', (_event, details) =>
+    appLog.warn('Helper process stopped:', details.type, details.reason, 'exit code', details.exitCode),
+  );
+  app.on('will-quit', () => appLog.info('Quitting'));
 }
 
 async function migrateLegacyUserData() {
@@ -1523,10 +1531,10 @@ function setupIpc() {
       providerHealth.clear(request.provider);
     return providerHealth.snapshot();
   });
-  ipcMain.handle('atlas:open-log', async (event) => {
+  // Reveal the log in File Explorer: opening it directly fails where no app handles .log files.
+  ipcMain.handle('atlas:show-log', (event) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window');
-    const error = await shell.openPath(appLog.file);
-    if (error) throw Error(error);
+    shell.showItemInFolder(appLog.file);
   });
   ipcMain.handle('atlas:open-link', async (event, value) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window');
@@ -2273,6 +2281,20 @@ app.whenReady().then(async () => {
   setupIpc();
   await createWindow();
   appLog.info(`Window loaded after ${Date.now() - startedAt}ms`);
+  if (app.isPackaged && process.platform === 'win32')
+    require('./uninstall-entry')
+      .syncUninstallVersion({
+        appId: APP_ID,
+        productName: 'ATLAS',
+        version: app.getVersion(),
+        installDir: path.dirname(process.execPath),
+      })
+      .then(
+        (result) =>
+          result.changed &&
+          appLog.info(`Corrected the Windows Apps list version from ${result.from} to ${app.getVersion()}`),
+      )
+      .catch((error) => appLog.warn('Could not check the Windows Apps list entry:', error.message));
   // Speech is initialized by the first spoken response, rather than on launch.
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
