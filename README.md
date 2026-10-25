@@ -1,195 +1,106 @@
-# ATLAS desktop assistant
+# ATLAS
 
-A local Windows desktop interface for Codex and Claude Code, with local speech, conversation memory, reminders, task controls, and provider routing.
+**A local Windows desktop assistant for Codex and Claude Code.** Chat with either model in one app, talk to it with local speech, or hand a task to **Colab**, where Codex and Claude build, check and review each other's work before you see a single, verified answer.
 
-## Install on Windows
+[![Latest release](https://img.shields.io/github/v/release/springycape20/atlas-desktop?label=download)](https://github.com/springycape20/atlas-desktop/releases/latest)
+![Windows x64](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue)
+[![CI](https://github.com/springycape20/atlas-desktop/actions/workflows/ci.yml/badge.svg)](https://github.com/springycape20/atlas-desktop/actions/workflows/ci.yml)
 
-Currently supported: **Windows x64**. Download **ATLAS-Setup** from the [GitHub Releases](https://github.com/springycape20/atlas-desktop/releases) page and run it. The installer installs ATLAS for your Windows account under `%LOCALAPPDATA%\Programs\ATLAS`, then creates Desktop and Start Menu shortcuts. In Settings, enable **Launch ATLAS when I sign in** to start it automatically after you sign in. Uninstalling keeps your settings and conversations in `%LOCALAPPDATA%\ATLAS`.
+![The ATLAS Assistant with a saved conversation](docs/images/assistant.png)
 
-If Windows shows SmartScreen, choose **More info**, then **Run anyway**. If Windows marks the downloaded installer as blocked, right-click it, select **Properties**, select **Unblock** on the General tab, and choose **Apply**. Only run installers downloaded from the project's GitHub Releases page.
+## What you can do
 
-The installer includes the pinned whisper.cpp Windows CPU runtime and approximately 268 MB of English speech recognition models. Kokoro downloads its voice model on first use, so allow extra time for the first launch. An internet connection is needed for provider requests. Windows speech is available as a fallback.
+- **Chat with Codex and Claude in one place.** ATLAS routes each message to the right provider, streams the reply, and keeps a searchable history of your conversations. You can also import existing Codex and Claude Code chats.
+- **Talk to it.** Local Whisper speech recognition, local Kokoro voices, a wake word, and short spoken replies with the full answer on screen. Your speech is processed on your PC.
+- **Let two models work together in Colab.** One builds and the other reviews. Your project's checks run automatically, and the task only finishes when the reviewer accepts the work.
+- **Keep your work organised.** Project profiles, file and screenshot attachments, memories, reminders, and a task list.
+- **Control your PC, with permission.** Optional Windows computer control through the open-source [Windows-MCP](https://github.com/CursorTouch/Windows-MCP) server. ATLAS asks before each kind of action and shows a border while it is in control.
 
-## Run from source
+## Colab: Codex and Claude, working together
 
-The source setup below is for contributors or users who want to run ATLAS from a checkout.
+![A finished Colab debug task](docs/images/colab-debug.png)
 
-Currently supported: **Windows x64**. This repository is source code, not a hosted website or a mobile app.
+Pick a **mode** for each task:
 
-1. Install Node.js LTS and Git.
-2. Sign into GitHub with an account that can access this private repository, then clone it:
+| Mode | What happens |
+|---|---|
+| **Build and review** | One model implements the task, ATLAS runs your project's checks, and the other model reviews against the task's acceptance criteria. Blockers go back to the builder until the reviewer accepts. |
+| **Debug · reproduce, fix, verify** | The reviewer first reproduces the bug, ideally as a failing test, without fixing it. The builder then fixes the root cause, and the reviewer confirms the reproduction now passes. If the bug can't be reproduced, Colab stops and says what was tried. |
+| **Plan** | A read-only plan, reviewed before you change anything. |
+| **Compare approaches** | Both models propose independently, then the proposals are combined into one comparison. Read-only. |
 
-   ```powershell
-   git clone https://github.com/springycape20/atlas-desktop.git
-   cd atlas-desktop
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup-ATLAS.ps1
-   ```
+**Checks run before review.** As soon as the builder finishes, ATLAS runs your configured checks (for example `npm test`). Failures go straight back to the builder instead of using up a review pass.
 
-   Alternatively, download and extract the repository ZIP, then run the setup script from that folder.
+**When they disagree, you decide.** If the builder thinks a requested change isn't needed, it has to explain why, and the reviewer has to answer with evidence. If they still disagree, Colab pauses and shows both sides:
 
-3. Install Codex and/or Claude Code using their official installers and sign into your own account. ATLAS normally finds the Codex desktop app's bundled CLI and native, WinGet, or npm Claude Code installations (including npm's `claude.cmd` entry point). Claude Code must be signed in separately if its terminal account is not connected; a Claude Desktop login alone may not sign in the CLI. If your installation differs, set `CODEX_EXECUTABLE` or `CLAUDE_CODE_EXECUTABLE` to the full path before launching. Claude overrides can point to `claude.exe`, npm's `claude.cmd`, or its `cli.js`. ATLAS refreshes saved Windows PATH entries for Claude without requiring a full PC restart. If Connect fails, open Settings → Test connections and dependencies and copy the Claude Code error. In CMD, `where claude` and `claude --version` help identify the installation. Do not share API keys or credential files.
-4. Setup creates **ATLAS.lnk** for the folder where you installed ATLAS. Double-click it or **Start-ATLAS.cmd**, choose a working folder, then configure your microphone and voice in Settings. Run setup again after moving the folder so the shortcut is refreshed.
+![Colab asking you to settle a disagreement between Codex and Claude](docs/images/colab-dispute.png)
 
-   If Windows blocks a downloaded **ATLAS.lnk**, right-click it, choose **Properties**, select **Unblock** on the **General** tab, then click **Apply**. If SmartScreen appears when you launch it, choose **More info** and **Run anyway**. Only unblock and run files from a source you trust. You can always launch **Start-ATLAS.cmd** from the project folder instead.
+Your choice is final for the rest of the task.
 
-Setup downloads Electron, the pinned whisper.cpp v1.8.7 Windows CPU runtime, and approximately 268 MB of English speech recognition models. Kokoro downloads its voice model on first use; allow extra time for that first launch. An internet connection is needed for installation and provider requests. Windows speech is available as a fallback.
+**See how the work happened.** **Workflow graph** shows each step, what it changed, the checks that ran, and how one step led to the next:
 
-## Features
+![The Colab workflow graph for a debug task](docs/images/colab-graph.png)
 
-- Persistent Codex app-server connection, streamed replies, and ongoing conversations.
-- Claude Code routing, with fallback when a recognized usage limit is reported.
-- Assistant and Colab have separate chat workspaces in the same app. Colab saves its own conversations and drafts, with a working folder, provider models, and shared effort for each chat. Follow-ups include recent messages from that Colab conversation.
-- Colab runs a task through Codex, Claude review, and a Codex final check, then displays one final summary. Switch chats while a task runs; its result returns to the chat that started it.
-- Provider cooldowns persist locally. Settings shows availability, estimated retry times, and **Retry now**. Availability means ATLAS has no active cooldown; it is not a live quota or sign-in check.
-- Brief spoken replies by default; full written answers remain on screen. Say **tell me more** or click **Read full answer** for more speech.
-- Local Kokoro British voices, Whisper recognition, wake-word and follow-up listening controls.
-- Task pause/cancel/resume, saved conversations, local transcript lookup, memories, and reminders.
+Also in Colab:
+- **Isolated workspaces.** Editing tasks run in a separate Git worktree by default. **Review changes** shows the diff before anything is committed to your project.
+- **Effort and cost controls.** Economy, Balanced and Thorough presets, an optional pass limit, and an optional token warning.
+- **Resumable runs.** Stopped or paused tasks continue from their saved stages.
 
-## Device data and permissions
+## Install
 
-GitHub shares the application source. It **does not sync conversations, settings, reminders, local files, or provider logins** between devices. ATLAS data stays in `%LOCALAPPDATA%\ATLAS` on each Windows computer. Existing data from `%APPDATA%\atlas-local-desktop` is moved there on first launch. Provider histories are read from the local provider folders only; signing in does not provide access to all private web chats.
+1. Download **ATLAS-Setup-*version*.exe** from the [latest release](https://github.com/springycape20/atlas-desktop/releases/latest) (about 440 MB, Windows 10/11 x64) and run it.
+2. Install and sign in to **Codex** and/or **Claude Code** with their official installers. Colab needs both. In ATLAS, **Settings → Provider accounts → Test connections and dependencies** checks that they're found and signed in.
+3. Choose a working folder, then set up your microphone and voice in **Settings**.
 
-Credentials, downloaded models, dependencies, personal shortcuts, and runtime data are excluded from Git. Setup creates an **ATLAS.lnk** shortcut for each checkout. ElevenLabs is optional and needs your own key; no shared key is included.
+ATLAS installs for your Windows account in `%LOCALAPPDATA%\Programs\atlas-local-desktop`, with Desktop and Start Menu shortcuts. The installer includes the speech-recognition runtime and English models. The Kokoro voice model downloads the first time ATLAS speaks.
 
-Check Settings before use: wake-word listening and automatic follow-up listening are enabled by the current defaults. They can be turned off. Permission bypass is disabled by default; enabling it gives the provider broader computer access. With bypass off, Codex uses the selected sandbox and does not automatically grant approval requests. Interactive requests that ATLAS cannot handle must be completed through the provider app.
+**If Windows warns about the installer:** the installer isn't code-signed yet, so Windows may warn about it.
+- **SmartScreen:** choose **More info**, then **Run anyway**.
+- **Smart App Control** may block a new release outright until Windows has seen enough downloads of it.
+- **Only run installers from this repository's [Releases](https://github.com/springycape20/atlas-desktop/releases) page.**
 
-Reminders require ATLAS to be running. Cancelling a task does not undo changes it already made. Task routing is based on local rules rather than a guarantee that one provider is best.
+### Updating
 
-## Updating
+ATLAS checks for new releases when it starts. Open **Settings → App updates**, download the update, then choose **Restart and install**. Updates never install while a task is running, and your settings and conversations are kept.
 
-Install a newer **ATLAS-Setup** from [GitHub Releases](https://github.com/springycape20/atlas-desktop/releases) over the existing installation. Your settings and conversations are preserved. For source checkouts, close ATLAS, run `git pull`, rerun `Setup-ATLAS.ps1` if dependencies have changed, then launch `Start-ATLAS.cmd`.
+## Your data and privacy
 
-## Third-party components
+- **Stays on your PC:** conversations, memories, reminders, settings and Colab history are stored in `%LOCALAPPDATA%\ATLAS`. They are not synced between devices.
+- **Sent to your providers:** your prompts and the files you attach go to Codex and/or Claude through your own accounts, under their terms. ATLAS has no server of its own.
+- **Voice is local:** speech recognition and the Kokoro voices run on your PC. ElevenLabs voices are optional and need your own API key.
+- **Check Settings:** wake-word and automatic follow-up listening are on by default, and you can turn them off. Computer control is off until you allow it for a chat.
+- **Uninstalling** keeps your data in `%LOCALAPPDATA%\ATLAS`, so a reinstall picks up where you left off.
 
-Electron, Kokoro, whisper.cpp, their models, and provider CLIs retain their own licenses and terms. The speech runtime is downloaded from the official whisper.cpp GitHub release and its archive checksum is checked. Models are downloaded from their publishers; they are not redistributed in this repository.
+## Troubleshooting
 
-This app is independent of OpenAI and Anthropic. Other operating systems and mobile devices have not been adapted or tested.
+- **Something went wrong or was slow:** open **Settings → Provider accounts → Show log file**. The log (`%LOCALAPPDATA%\ATLAS\logs\atlas.log`) records startup timing, errors and how the app closed. Include the relevant lines when you report a problem.
+- **Codex or Claude isn't found:** run **Test connections and dependencies** in Settings. If your install is somewhere unusual, set `CODEX_EXECUTABLE` or `CLAUDE_CODE_EXECUTABLE` to its full path. A Claude Desktop sign-in alone doesn't sign in the Claude Code CLI.
+- **A Colab task paused:** read the message above the message box. It says whether the task needs a decision, hit a pass limit, or found a blocker it couldn't resolve. Most paused tasks can continue with **Resume saved stages** in Run details.
 
-## Performance and validation
+## Development
 
-- Whisper starts on the first transcription and retains one model for subsequent requests. Switching Fast/Enhanced replaces that process. The server binds only to loopback on a temporary port with a random request path, and closes when ATLAS exits. Re-run setup if `whisper-server.exe` is missing from an older installation.
-- Provider transcript scanning, decompression, parsing, and search run in a worker. Parsed transcripts use a bounded cache refreshed when file size or timestamps change.
-- Interrupting speech discards queued Kokoro work and ignores the cancelled result. A synthesis already executing may finish internally; the loaded model and short-reply cache stay available.
-- Streamed text is painted once per animation frame. Final answers cancel pending stream paints, and workspace indicators update when state changes instead of polling.
-- Task notifications batch changed jobs. The app retains the latest 40 finished jobs plus all running/paused jobs. State saves use queued atomic writes, and shutdown waits for pending saves.
-- ATLAS conversation history is cached for the current process. Restart ATLAS after externally editing its conversation file.
+ATLAS is an Electron app written in plain JavaScript.
 
-Run `npm test` for regression checks covering queued saves, state persistence, history cache invalidation, speech cancellation, job retention/updates, and concurrent history saves. Use the Response timing panel to compare representative voice requests; the first request includes model loading, and results vary by hardware and recognition mode.
+```powershell
+git clone https://github.com/springycape20/atlas-desktop.git
+cd atlas-desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup-ATLAS.ps1
+```
 
-## Project workflows
+Setup installs dependencies, downloads the speech runtime and models (checksum-verified), and creates an **ATLAS.lnk** shortcut. Then start the app with `npm start` or **Start-ATLAS.cmd**. You need Node.js 22 LTS and Git.
 
-- **Projects** saves a working folder, instructions, preferred models, shared effort and useful commands. Activate a profile in Assistant or Colab. Command buttons copy commands; they do not execute them.
-- **Attach files** imports up to eight text/code files or images per message (8 MB each; text limited to 150,000 characters). Drag files onto a composer or use **Paste screenshot**. Click a chip to preview the saved snapshot; remove it to stop including it in later messages. Selected text is sent as context. Images are supplied as local paths for the provider's image/file tools, so image support depends on the selected provider. Attachments remain local until a provider task uses them.
-- Colab offers **Build and review**, **Plan**, **Debug**, and **Compare approaches**. Plan and Compare use read-only provider settings. Passes have no default cap, but an approving final review now ends the task immediately: a successful build and review take two passes. Only specific blocking issues in the original task can trigger fixes; optional polish stays in notes. Enter a positive number in the optional pass limit to cap provider calls, including verdict clarifications; clear it for unlimited. Stop remains available.
-- Editing tasks default to an **isolated Git worktree**. This requires Git, a clean committed checkout, and any project dependencies needed in the new checkout. **Review changes** shows changed files and a diff. Accept creates a commit in the original project only if its checkout is still clean and at the original commit. Changed review content requires refreshing the diff. Discard leaves a local recovery snapshot and checkout. The draft PR button pushes a branch; without an authenticated GitHub CLI it opens a comparison page to finish creating the PR.
-- Worktrees isolate file changes; they are not an operating-system security boundary. Provider permissions still apply. Disable isolation explicitly when editing a folder without Git; those changes are made directly.
-- Completed Colab stages save their roles, fixed task criteria, open blockers, next stage, and available workspace fingerprints. **Resume saved stages** continues the interrupted workflow in the same checkout. Changed task scope or roles cannot reuse an old verdict. Changed files after a saved implementation force a new review before acceptance; paused proposal and analysis stages keep their own next stage. Older checkpoints receive a read-only assessment of the existing work. Tasks have no runtime cap. The optional provider request timeout in Settings applies to individual requests.
-- **Diagnostics** checks CLI discovery, versions, sign-in status, Git, and optional GitHub CLI availability. It does not send a paid model request or prove remaining account quota.
-- **History** searches locally available Assistant, Colab, Codex, and Claude transcripts, with rename, pin, Markdown export, and continuation for Assistant/Colab. Provider transcript names and pins are stored as local ATLAS metadata. Colab's sidebar can filter chats by project folder, and each conversation has a scrollable timeline, timestamps, message search, copy controls, and a Latest button. Select Compare on two results and use Compare results to view them side by side. Your reading position stays in place during live updates and when switching chats. Choosing a different project keeps the previous conversation and reopens or creates a chat for that project.
-- **Colab storage** keeps complete saved message text in the app's local IndexedDB storage rather than automatically pruning to ten chats or 24 messages. The existing localStorage history migrates automatically and remains as a backup; messages already deleted by older retention limits cannot be recreated. If storage fails or fills up, ATLAS displays an error instead of deleting older chats. Export important chats for backups. Only recent messages are sent as model context; longer display history does not automatically increase every request's context. Activity details still retain recent reported steps.
-- **Import chats** is available in the Assistant sidebar, History and Settings → Provider accounts. The larger browser uses Codex's saved thread names and project metadata (read-only SQLite and session indexes), Claude Code's saved session indexes/custom titles, and folder names when a client has no saved workspace name. It discovers available local and archived transcripts and lists indexed chats whose transcripts are missing; these can be opened in their client but cannot be imported until a transcript is available. Search names and workspaces, filter by client/project, page through results, preview, then import selected chats or use **Import and continue**. Internal ATLAS/agent sessions are hidden by default and can be included with the toggle. Discovery is bounded to 20,000 transcript files and indexed chats; reached limits are reported.
-- Claude Desktop/web conversations require a `conversations.json` data export; signing in does not fetch private cloud history. You can also choose Codex / Claude Code `.jsonl` / `.jsonl.zst` files. Exports must be under 32 MB (up to 20,000 Claude chats). Exported Claude project names are read from `project_name` or a matching `projects.json` alongside the selected export. When importing, choose **Assistant** or **Colab** (or Cancel). The full available user/assistant text history is copied without the previous 80-message / 12,000-character trimming and opens in the chosen workspace; batch imports add separate named chats to its sidebar. Images, tool output, private reasoning and subagent transcripts are excluded. Follow-ups start a fresh provider session using recent imported context, leaving the original client conversation intact. Reimporting a chat into the same workspace reuses its existing copy; importing into the other workspace creates an independent copy. It does not overwrite later ATLAS replies. ATLAS stores up to 100 Assistant chats and refuses imports that would exceed that limit. Missing project folders fall back to your home folder; choose the intended folder before sending a coding follow-up.
-- **Assistant chat** has a conversation sidebar, workspace filters, search, and a scrolling timeline of all saved messages rather than replacing the last question/answer. Streaming responses append to that timeline; saved code formatting, links, image previews, copy controls and reading positions are preserved. Voice input/output, wake word, follow-up questions, effort controls, attachments, task progress, approvals, checkpoints and change review keep using the existing controls. Assistant retains up to 100 saved conversations. Imported conversations retain their full text history through follow-ups; other Assistant chats retain the existing 80-message limit. Colab imports are stored in its separate IndexedDB history. Run `npm run test:assistant-ui` for the isolated Electron regression check using synthetic conversations and mock providers; no real provider request or microphone recording is needed.
-- Assistant and Colab have no task runtime limit; Colab has an optional provider-pass limit. Colab displays token counts and costs only when a provider reports them. Partial usage and provider-reported cost are not an account bill or a spending cap.
+| Command | What it does |
+|---|---|
+| `npm test` | Unit tests |
+| `npm run test:colab-ui`, `test:assistant-ui`, `test:graph-ui`, `test:approvals-ui`, `test:dispute-ui` | Electron UI checks |
+| `npm run format` / `npm run format:check` | Prettier formatting |
+| `npm run dist:win` | Build the Windows installer into `dist/` |
+| `npx electron build/capture-screenshots.cjs` | Re-capture the README screenshots with demo data |
 
-Profiles, attachment snapshots, review worktrees, and history metadata are stored in the app's local data directory. Discarded worktrees are retained for recovery and can consume disk space. Existing downloaded installers do not gain these features until a new release is built from this branch.
+**CI** runs formatting, unit tests and the UI checks on every push and pull request, and `main` requires them to pass. **Releases** are built by pushing a `vX.Y.Z` tag that matches `package.json`. The release workflow builds the installer, verifies the packaged app (including the security fuses in `ATLAS.exe`), and publishes the installer, its blockmap and `latest.yml` for the in-app updater.
 
-## Setup, model discovery, and app updates (0.6.0)
+For detailed behaviour, limits and design notes, see the [technical reference](docs/TECHNICAL.md).
 
-Diagnostics includes official download links for missing Codex, Claude Code, Git, and GitHub CLI installations. After installing a missing tool, restart ATLAS and run diagnostics again.
+## Credits
 
-Before an isolated Colab task starts, a folder without Git history prompts to create a local repository and initial commit. New repositories include existing project files and append common dependency and credential exclusions to `.gitignore`. This does not upload files. Review private files before accepting. Existing repositories keep their current ignore rules and staged files; commit or stash changes before using an isolated worktree.
-
-Choose a dedicated project folder such as `Documents\MyProject`, rather than your whole user folder, Documents, Desktop, AppData, or a drive root. ATLAS blocks Git initialization and isolated work at those broad locations. If a project inherits an accidental Git repository from one of those parent folders, Colab offers to create a separate repository inside the selected project and leaves the parent repository intact. Errors mentioning `AppData`, Windows permission-denied junctions, or very long CloudStore paths can indicate that Git was scanning a parent user-folder repository. Open Colab's **Models, effort and working folder → Choose folder**, select the actual project, and retry.
-
-Settings now offers discovered models in its dropdowns. ATLAS refreshes both provider catalogues at launch; **Refresh available models** repeats the scan. Codex uses its app-server catalogue and Claude uses CLI initialization without submitting a chat prompt. Cached catalogues remain available offline, with a status explaining a failed refresh. Provider defaults and optional custom IDs are preserved. Updating a provider CLI can expose models that an older CLI does not report.
-
-The Windows installer includes an updater. On launch it checks published GitHub Releases; **Settings → App updates** shows availability, download progress, and **Restart and install**. Updates never restart automatically, and installation is blocked while tasks run. Versions before 0.6.0 require installing the new installer once to gain this feature. Source checkouts check release availability but do not replace their source files automatically.
-
-For maintainers: every updater-enabled release must publish the installer, its `.blockmap`, and `latest.yml` together. The release workflow and package verifier check these files. A local build or pull request does not become an update until that version is published as a GitHub Release. See the [electron-builder v26 update documentation](https://raw.githubusercontent.com/electron-userland/electron-builder/v26.0.12/pages/auto-update.md).
-
-Colab uses a compact composer that grows as you type and shrinks when text is removed. The + menu offers file attachment, clipboard screenshots, and project profiles; Ctrl+V also attaches copied pictures directly in either chat composer, while ordinary text pastes normally. File drop and attachment previews remain available. Photos show compact thumbnails in the draft and beside the sent question. Attachments are cleared from the draft after sending and saved with that message, so later questions do not automatically resend them. While a task runs, an expandable activity panel shows recent provider-reported commands, exit statuses, file changes, plans, and brief progress summaries. It collapses when the task completes or stops and can be reopened later. Private reasoning and raw tool output are not displayed in this panel.
-
-
-Assistant and Colab display live provider progress summaries, plans, and expandable command steps in the conversation. Work logs collapse when a task finishes and can be reopened. Windows shows taskbar activity while tasks run, alerts on completion or failure, and flashes the ATLAS taskbar icon when the app is in the background. Click a notification to open the relevant chat. Private reasoning and raw tool output are excluded from the work log.
-
-The main Assistant composer has an Effort button that opens a five-step slider with a live label and a reset-to-default button. It remembers Low, Medium, High, Extra high, or Max for future messages. Project / provider default uses the active project’s effort or the provider’s default. A specific selection overrides the project for that message and is retained when resuming a paused task. Colab keeps its separate shared effort setting.
-
-Bottom-left usage circles show Claude in orange and Codex in green. Hover for remaining allowance; click for session/weekly limits, reset times, and plan details. Each circle reflects the lowest remaining main session/weekly allowance and empties at 0%. Readings refresh at launch, while the app is active, after tasks, and on demand; Codex also supplies live limit updates. Missing limits appear unavailable, and failed refreshes mark previous readings as stale. API-only accounts may not expose subscription limits.
-
-**Open app** opens the provider’s official usage page in your default browser. Codex uses its [App Server account rate limits](https://learn.chatgpt.com/docs/app-server#6-rate-limits-chatgpt). Claude reads the usage endpoint with your existing Claude Code sign-in, only in the main process; credentials are never sent to the renderer or saved in usage data. No inference request is sent to check these limits.
-
-New code tasks capture a local before-task snapshot. A bottom-of-screen bubble shows added/removed lines and changed-file counts for the current Assistant or Colab task. Click it to open a movable, resizable change editor with a file list, line-numbered diff, and Edit tab. Both views use syntax colors for keywords, strings, comments, numbers, and functions, with the language detected from the filename. Highlighting works offline for Python, JavaScript/TypeScript, HTML/CSS, JSON, shell scripts, and other common languages. Files over 120,000 characters or 4,000 lines, unsupported languages, and slow or complex highlighting fall back to plain text. Ctrl+S saves explicit edits after agents stop working in that folder; stale files must be reloaded before saving. Isolated Colab edits stay in the worktree until you review and apply them.
-
-Snapshots preserve pre-existing edits and Git staging, and remain local for resumed tasks. Git ignores, common generated folders, credential directories, and common secret files are excluded. Snapshots are bounded to 1,500 files and 12 MB, with inline editing up to 512 KB per text file. Binary, large, linked, or complex changes may not have inline line counts; partial previews are labeled. The editor is available for tasks started after this feature is installed.
-
-## Workbench
-
-ATLAS reuses an existing app instance when opened again. Startup no longer loads the optional computer-tools SDK or speech model eagerly, and legacy data migration records successful completion instead of walking the old data on every launch. The first spoken reply may take longer while its voice model loads. Assistant and Colab preserve unchanged message elements during progress updates, including long imported histories.
-
-Colab's **Workflow graph** button opens an interactive view inside ATLAS. Requirements, independent proposals, implementation, review, decisions, reported files, checks and blockers are connected to their source stages. Select a node to read its public summary and explore incoming/outgoing relationships; search, filters, zoom and Fit help navigate. Green stage outlines identify Codex and orange identifies Claude. The graph follows the latest task while open, and its task selector can show earlier saved runs.
-
-Approval requests appear above the composer in their Assistant or Colab chat, as well as in the bottom approval bubble and Workbench. You can approve/deny actions and answer provider questions in either place; resolving or cancelling a request removes it from both. The built-in Windows integration offers **Take control once** to run the displayed action while the PC is active, or **Allow once** to retain normal idle protection. Takeover uses a temporary Windows-MCP connection with its documented [`--no-control` launch option](https://github.com/CursorTouch/Windows-MCP#desktop-control), only after approval. Its native ownership indicator, takeover hotkey and physical-input protection are disabled for that one action, so avoid typing/moving the mouse until it finishes. ATLAS still serializes actions, enforces task cancellation and read-only restrictions, and closes the temporary connection afterwards. It does not change your saved Windows-MCP settings; later actions need their own approval. Use ATLAS Stop to cancel a running task.
-
-Windows-MCP's PyPI 0.8.8 release does not include that control option. ATLAS therefore launches its default Windows preset using an immutable upstream source build, pinned by commit and SHA-256 in `windows-tool-runtime.js`. Both normal discovery and approved takeover use the same build and tool schemas. Start / check may download/build this managed runtime once; takeover then uses the warmed cache offline and verifies `ControlStatus` reports `enabled: false` before submitting the approved action. Tools shows the managed source revision and server version for diagnosis. Your standalone Windows-MCP install and saved integration settings are unchanged. Custom package/interpreter/argument overrides are left alone and are not offered managed takeover.
-
-Choose **Allow screen control for this chat** once, or use **Run details → Allow for this chat** in Colab. Both providers share permission across follow-ups and app restarts. Screenshots, input, ordinary app launches (including a bare Python command), clipboard, structured file operations and routine PowerShell commands reuse it. System/application-file changes and paths denied through ATLAS still require approval; new file denials are persisted across chats and restarts. File paths are resolved through junctions, including new files. Bulk directory changes, registry tools and opaque shell/interpreter commands keep explicit approval because their targets cannot be checked reliably. This is permission for requested tasks, not a sandbox for arbitrary app or script code. Read-only reviews cannot use desktop tools. Revoke permission in **Run details**, or clear all grants in **Workbench → Tools**. Disabling, removing or reconfiguring the Windows integration clears grants. Stopping a task interrupts its action but retains the chat preference. The local ledger is `desktop-permissions.json`.
-
-Both providers receive a compact shared board derived from public structured handovers, keeping decisions, files and unresolved blockers available between stages. Independent proposals remain isolated until implementation/synthesis. Graph updates require no extra model calls, and graph context is capped at 1,800–2,600 JSON characters per eligible stage. Provider-reported checks and file changes are labelled separately from checks executed by ATLAS; the graph does not expose private reasoning or replace Review changes. Graphs save locally with Colab history (latest 20 task graphs per chat; up to 40 recent stages and 320 nodes per graph, with omissions labelled). This native workflow feature is inspired by [Graphify](https://github.com/Graphify-Labs/graphify); it does not install Graphify or provide its project-wide AST knowledge graph.
-
-Independent Colab proposals run together when two pass slots are available and no token warning is configured. A configured warning keeps proposal execution sequential so it can stop between calls. Completed independent proposals are journalled for cancellation/recovery and reused only for matching task inputs and unchanged, fully fingerprinted workspaces. Provider failures remain errors, while safely saved sibling proposals can be recovered. Passed-check reuse uses a lightweight hash-cache precheck followed by strict content verification; incomplete scans never authorize reuse. Local project maps store file paths and detected command names in `project-index.json`, omit sensitive locations and script bodies, and provide bounded navigation hints. Later reviews in the same reviewer session receive full task diffs for files changed since the preceding completed review, plus paths requiring direct inspection. New reviewer sessions, uncertain scans and Thorough mode retain full context. These hints never replace actual inspection or verification.
-
-Open **Workbench** in the sidebar for the following workflows:
-
-You can also ask Colab: **“Add and start Windows computer control.”** It requests approval for adding the preset and installing its runtime. Colab can propose other MCP integrations through `integrations_add`; ATLAS shows the exact executable/arguments or URL before you approve. No new chat is needed to start using an approved integration.
-
-- **Tools** (also available directly in the Colab header) adds MCP integrations for both providers. Choose **Add Windows control**, **Install runtime** if needed, then **Start / check**. The preset uses the open-source [Windows-MCP server](https://github.com/CursorTouch/Windows-MCP); the first start downloads its Python 3.14 environment and packages. It can inspect windows, take screenshots, click, type and open apps on Windows 10/11. Colab can also request to add this preset, install its runtime and start it during a task. Approve additions/installations and individual actions through **Approvals**. Stopping or disabling an integration revokes access; enabled servers start on demand and stay running until stopped or ATLAS exits. The runtime installer places uv in ATLAS's data folder without changing your system PATH. Add other trusted local stdio or streamable HTTP MCP servers with the custom form. Provider-specific authenticated connections remain managed in the original provider. This is an ATLAS tool connection, separate from this Codex desktop chat's private runtime. No shared Codex/Claude configuration is overwritten. Read-only review stages cannot use these tools, desktop actions run one at a time, and ATLAS tool approvals remain required even with provider approval bypass enabled.
-
-- **Queue** saves Assistant and Colab tasks against project profiles, runs them one at a time, and supports reordering, removal, retries, and an optional pause between tasks. Start the queue explicitly. Pausing stops the next task; stop the current task using Tasks. Failures and failed completion checks pause the queue. Restarting ATLAS always leaves the queue paused, with interrupted entries marked for review. Colab queue entries use isolated worktrees: review and accept each task's changes before a later task should build on them.
-- **Plugins** detects provider-installed plugins without duplicating their installation. It also lists Codex skills, connector availability, and MCP authentication status when the provider exposes them. Claude plugins can be enabled or disabled through its CLI; changes affect the shared provider configuration. Supported Codex MCP connections offer a sign-in link. Start a new chat after changing plugins. Installed does not guarantee callable: desktop-only plugins, account restrictions, unsupported connection forms, and provider policies can still require the original app. Codex plugin installation and enablement remain managed in Codex.
-- **Dirty project folders:** before isolated Colab starts, ATLAS checks for uncommitted tracked or untracked files. Choose **Edit selected folder** to run directly against your current files, or **Cancel** to keep the draft and commit/stash changes yourself. Nothing is automatically committed, stashed, or discarded. Direct mode is shown in the Colab settings and remains selected for that chat; turn isolation back on after cleaning the repository. Tasks that failed before workspace creation can resume with this explicit choice.
-- **Project setup** inspects a folder for Node.js, Python, Rust, Go, and CMake project files. It suggests dependency commands and checks, saves project instructions, and optionally creates an initial local Git snapshot after confirmation. Dependency commands are copied for review rather than installed automatically. Suggested Python checks assume pytest is available; edit the commands to suit the project. No files are uploaded.
-- **Search** searches saved ATLAS messages and attachment names, locally available provider transcripts, Colab chats, and retained task commands/file activity. Results open task details or transcript previews. Search is limited by local history retention; it cannot retrieve private web conversations absent from this PC.
-- **Checkpoints** previews the files a task changed and can restore their pre-task working contents. It preserves earlier edits, unrelated later files, Git commits, and the Git index. Later changes to a task file block restoration, and unsupported binary/large originals require Git recovery. A recovery snapshot is saved before restore; **Undo this restore** reverses it. Isolated tasks restore within their own checkout, and accepted/discarded worktrees cannot be edited here. These restore points apply to new tasks with completed snapshots, including stopped/failed runs. Snapshots are bounded and are not a replacement for full project backups.
-- **Approvals** shows live Codex command/file/access requests, provider questions, Claude tool permission requests, and supported plugin connection confirmations. A bottom-right badge appears when a request needs attention. Answers apply only to that request; stopping the task dismisses pending requests. ATLAS uses Codex's on-request policy and Claude's streaming permission channel. Existing provider allow rules and ATLAS's explicit permission-bypass setting still determine which actions prompt. Unsupported structured MCP forms are declined; complete those connections in the provider app.
-
-Colab's **Roles** menu offers **Codex builds · Claude reviews**, **Claude builds · Codex reviews**, or **Compare proposals, then build**. Reviewers use read-only settings and send only evidenced blockers back to the builder. Proposal mode starts with two independent read-only proposals, then a builder selects/implements an approach and a reviewer verifies it (four successful passes). Compare mode similarly uses two independent analyses, synthesis, and final review. The final summary includes the builder's deliverable and reviewer feedback, rather than replacing it with a critique.
-
-Colab no longer waits for consecutive READY markers from both models or runs another builder pass after approval. Structured verdicts distinguish ready, required changes, and blocked work. A missing or malformed verdict gets one read-only clarification from the same provider; a second failure stops for attention. Fix/review cycles must reduce the best-so-far open blocker count: exchanging regressions or repeating unresolved work for two cycles pauses the task instead of looping. A known unchanged workspace followed by another failing review also pauses; analysis-only revisions use blocker progress rather than unchanged files. Complete tracked-workspace fingerprints guard against changes during read-only review; these checks are unavailable for partial snapshots. Optional improvements cannot silently expand the fix list, and later new issues need explicit regression evidence. Needs-attention and pass-limit outcomes remain incomplete, preserve the work and saved stages, pause a running queue, and send an attention notification. They never claim successful completion or run automatic completion checks. Resume explicitly after reviewing the reason, or send a follow-up to change the task.
-
-Project profiles now include **Completion checks** and an opt-in **Run completion checks after tasks** setting. These commands execute in the actual task folder (including isolated worktrees), with output and real exit codes saved in task details. Checks have a two-minute timeout per command, can be stopped with the task, and report passed, failed, cancelled, timed out, or not checked. Configure dependencies inside isolated worktrees before relying on their checks. Read-only Colab Plan/Compare modes skip automatic commands. Check results appear in task activity and Workbench; a provider's claim that tests passed is kept separate from ATLAS's own recorded checks.
-
-
-## Provider connection lifetime
-
-Codex keeps its app-server connection open. Claude now uses long-lived streaming JSON workers, started when first needed and retained until ATLAS closes. Assistant follow-ups reuse their own live session. Different chats, working folders, models, shared effort and permission/tool profiles have separate workers; changing an Assistant profile safely resumes its saved session in a replacement worker. Stop, timeout, disconnect and shutdown retire the affected worker. Submitted tasks are never automatically replayed after a failure.
-
-Independent Colab stages clear Claude's conversation and wait for both the reset event and its completion before sending the next prompt. The new session ID is adopted. Clients that cannot confirm a reset fall back to a fresh worker before the next task is submitted. Follow-ups in the same Colab chat reuse its active isolated checkout and preserve earlier unapplied changes; accepted/discarded checkouts or a new chat start a new checkout. External edits in the original project are not silently imported into an isolated checkout.
-
-Claude token totals use per-turn model-usage deltas when available; main-agent-only fallback counts are labelled partial. Cumulative CLI cost estimates are differenced between results, and a reset starts a new accounting baseline. When resuming a saved session without a known baseline, earlier spend is not attributed to the new turn. CLI cost estimates are approximate. See [Claude streaming input](https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode) and [usage accounting](https://code.claude.com/docs/en/agent-sdk/cost-tracking).
-
-## Colab responses
-
-Colab shows one user-facing answer, with length matched to the request: short acknowledgements for response tests/greetings, concise outcomes for ordinary work, and full explanations/code/evidence when depth is needed. Internal status JSON, proposal selection, reviewer approval and protocol-repair chatter stay in saved stage reports instead of being appended to successful answers. Blocking issues and material limitations remain visible. Reviewers can supply a final `userResponse`; older stages fall back to the builder answer without adding the review transcript. A plain `test` is a response check; ask explicitly to run project tests when that is what you need.
-
-## Colab efficiency
-
-Colab includes **Economy**, **Balanced** (default), and **Thorough** efficiency presets under **Models, effort and working folder**. Economy uses shorter handovers/history excerpts; Balanced uses normal implementation and independent review; Thorough adds independent proposals when Roles is Auto. Choosing a role explicitly overrides that automatic proposal selection. Presets never change your model selections or manual shared effort. **Adapt shared effort for blockers** is optional: it raises both providers to High for unresolved blockers, preserving higher selected effort. Pass and runtime limits remain unlimited by default.
-
-Optional **Acceptance criteria** (one per line) and **Out of scope** fields establish the task brief without an extra model call. Colab selects recent and relevant older history excerpts within a preset character budget; full saved chats remain intact. Each pass receives compact latest/artifact handovers, fixed criteria, and unresolved blockers instead of replaying six long reports. Independent proposals do not receive each other's handovers. Review/fix passes get a bounded, explicitly partial file/diff guide and reviewers must inspect actual files as needed. Public stage reports are saved locally (up to 2 MB each), with links for provider inspection and a **View** action in the stage usage panel.
-
-**Stage usage and context** distinguishes reported, partially reported, and rough text-estimated usage. Fresh Codex threads use cumulative reported thread counts when available; resumed threads with only last-call counts are marked partial. Claude input counts include reported cache reads/writes. Estimates use characters/4 for ATLAS text only; tools, internal context, failed calls and model reasoning may add usage. Prompt-character comparisons show the same request with the former six-report replay, not guaranteed total-token or cost savings. Expand the panel to view stage reports. An optional **Token warning** pauses only between saved stages; it is not a hard spending cap. **Resume saved stages** acknowledges another warning interval, or clear the warning before resuming to continue without it. Pending clarification and loop-stall guards survive a token pause.
-
-When project completion checks are enabled, ATLAS runs them before review and supplies the actual results as evidence. **Reuse unchanged ATLAS checks** is opt-in for checks based only on local files (not time, network or external state). Within the current run, only passed checks with identical complete file/dependency hashes (including per-worktree and shared Git metadata), command configuration and environment can be reused; changes during a check, symlinks, unreadable files, or scans over 5,000 entries / 32 MB disable reuse. Saved checks are revalidated by running again after restart/resume. Read-only Plan/Compare modes never run automatic commands. Provider claims about tests are kept separate from ATLAS's results.
-
-Chromium cache files use a writable local cache folder separate from saved chats. Duplicate launches exit before Chromium starts. ATLAS keeps GPU acceleration enabled but disables the shader disk cache to avoid Windows cache-lock failures; chat storage is not moved or cleared.
-
-Use **Run details → Allow for this chat** above the Colab composer to enable remembered control before a task. It also answers any pending routine desktop request for that chat. Both providers use the ATLAS gateway for approval; Claude does not need a second approval for the gateway wrapper itself. Other provider tools keep their normal approval rules.
-
-Colab uses temporary Codex sessions for its internal passes, so setup prompts and reviewer stages do not become chats in Codex Recents. ATLAS keeps its own chat history and stage reports. After a restart or provider reconnect, review starts with fresh context from those saved reports. Existing Codex chats are not automatically removed.
-
-Desktop control reuses a live chat controller. Codex and Claude can issue short screen/mouse/keyboard sequences with `integrations_sequence` (up to eight steps), avoiding a model round trip between each action. Coordinate pointer actions glide before clicking or typing; existing drag behavior stays native. A final screenshot is returned by default. Sequences stop on errors or cancellation and never replay completed actions automatically. Models must inspect again after navigation or unexpected dialogs. Ordinary tool errors keep healthy controllers connected, and provider-requested disconnects require confirmation. Stop and Revoke remain available. The Windows driver flashes a capture border when taking screenshots; that flash does not itself indicate a disconnected controller.
-
-ATLAS displays a thin, click-through border with **Atlas is controlling this PC** on each monitor during an authorized desktop task, including pauses between actions. It does not take keyboard focus or block mouse clicks. The border hides on completion, Stop, Revoke, closing ATLAS, or disconnecting control.
-
-With remembered chat control, routine managed PowerShell diagnostics and simple project-file edits are approved automatically. Literal paths are checked against protected and denied files, and commands run in the selected project. Deletion, elevation, security/registry changes, downloads/installers, external scripts/programs, dynamic expressions and other commands whose effects cannot be checked still need approval. This policy checks a supported command subset; it does not predict every possible effect or sandbox launched code. Other native provider tools keep their own approval rules.
+ATLAS uses Electron, [whisper.cpp](https://github.com/ggml-org/whisper.cpp), [Kokoro](https://github.com/hexgrad/kokoro) via kokoro-js, and Windows-MCP, each under its own license. The Colab workflow graph is inspired by [Graphify](https://github.com/Graphify-Labs/graphify). ATLAS is an independent project, not affiliated with OpenAI or Anthropic.

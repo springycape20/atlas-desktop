@@ -50,6 +50,7 @@
       "!Start-ATLAS.cmd",
       "!install-desktop-runtime.cmd",
       "!build/**",
+      "!docs/**",
       "!dist/**",
       "!speech/**",
       "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**",
