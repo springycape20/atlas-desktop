@@ -101,6 +101,30 @@ Setup installs dependencies, downloads the speech runtime and models (checksum-v
 
 For detailed behaviour, limits and design notes, see the [technical reference](docs/TECHNICAL.md).
 
+## Code signing policy
+
+Windows releases are being set up for signing. Free code signing is provided by [SignPath.io](https://about.signpath.io), with the certificate issued by the [SignPath Foundation](https://signpath.org). Until signing is approved, installers are unsigned (see [Install](#install)).
+
+- **Committers and reviewers:** [springycape20](https://github.com/springycape20)
+- **Approvers:** [springycape20](https://github.com/springycape20)
+
+Only installers built by this repository's GitHub Actions release workflow from tagged source are signed, and each signing request must be approved manually. Every team member uses multi-factor authentication for GitHub and SignPath.
+
+### Privacy policy
+
+ATLAS has no server of its own and collects no telemetry, analytics or crash reports. It connects to other systems only in the following cases:
+
+- **Update checks:** at launch, ATLAS asks GitHub (`api.github.com`) for the latest release. Updates download only when you choose to.
+- **Your AI providers:** when you send a message or a Colab task, your prompt and attached files go to Codex (OpenAI) and/or Claude (Anthropic) through their command-line tools and your own accounts. At launch ATLAS also refreshes each provider's model list and your usage allowance (including `api.anthropic.com` with your Claude Code sign-in). Each provider's own privacy policy applies.
+- **Voice model:** the first time ATLAS speaks with a Kokoro voice, it downloads the voice model from Hugging Face.
+- **Optional services you turn on:** ElevenLabs voices (with your own API key), and Windows computer control, whose runtime is downloaded from astral.sh, Python's package index and GitHub when you install it.
+
+Your conversations, memories, reminders and settings stay in `%LOCALAPPDATA%\ATLAS` on your PC.
+
+## License
+
+ATLAS is released under the [MIT License](LICENSE).
+
 ## Credits
 
 ATLAS uses Electron, [whisper.cpp](https://github.com/ggml-org/whisper.cpp), [Kokoro](https://github.com/hexgrad/kokoro) via kokoro-js, and Windows-MCP, each under its own license. The Colab workflow graph is inspired by [Graphify](https://github.com/Graphify-Labs/graphify). ATLAS is an independent project, not affiliated with OpenAI or Anthropic.
