@@ -24,7 +24,7 @@ Pick a **mode** for each task:
 
 | Mode | What happens |
 |---|---|
-| **Build and review** | One model implements the task, ATLAS runs your project's checks, and the other model reviews against the task's acceptance criteria. Blockers go back to the builder until the reviewer accepts. |
+| **Build and review** | One model implements the task, ATLAS runs your project's checks, and the other model reviews against the task's acceptance criteria. Blockers go back to the builder until the reviewer accepts. Large tasks can be split into 3–8 milestones: the reviewer approves the plan, each milestone is built, checked and reviewed in turn, and a final review checks the whole task. |
 | **Debug · reproduce, fix, verify** | The reviewer first reproduces the bug, ideally as a failing test, without fixing it. ATLAS runs the reproduction command itself and only continues if it fails. After each fix ATLAS runs it again; it must pass before the reviewer sees the work. If the bug can't be reproduced, Colab stops and says what was tried. |
 | **Plan** | A read-only plan, reviewed before you change anything. |
 | **Compare approaches** | Both models propose independently, then the proposals are combined into one comparison. Read-only. |

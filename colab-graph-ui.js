@@ -44,6 +44,7 @@
   for (const [value, label] of [
     ['all', 'All nodes'],
     ['workflow', 'Workflow'],
+    ['milestone', 'Milestones'],
     ['issue', 'Blockers'],
     ['file', 'Files'],
     ['check', 'Checks'],
@@ -110,6 +111,7 @@
   const colors = {
     task: '#80d2dd',
     criterion: '#9fbee8',
+    milestone: '#d9c26f',
     decision: '#c8a5e4',
     file: '#c2c89e',
     check: '#87c4b4',
@@ -191,29 +193,34 @@
         filter.value === 'all' ||
         node.kind === 'task' ||
         node.kind === 'stage' ||
-        (filter.value === 'workflow' ? node.kind === 'criterion' : node.kind === filter.value),
+        (filter.value === 'workflow' ? ['criterion', 'milestone'].includes(node.kind) : node.kind === filter.value),
       nodes = graph.nodes.filter(keep),
       positions = new Map(),
       below = new Map();
     const stages = nodes.filter((node) => node.kind === 'stage'),
-      maxRank = Math.max(0, ...stages.map((node) => node.rank || 0));
+      maxRank = Math.max(0, ...stages.map((node) => node.rank || 0)),
+      // Milestones get their own row above the stages; everything else moves down to make room.
+      top = nodes.some((node) => node.kind === 'milestone') ? 110 : 0;
     for (const row of nodes) {
       let x, y;
-      if (row.kind === 'task') {
+      if (row.kind === 'milestone') {
+        x = 270 + (Math.max(1, row.rank || 1) - 1) * 240;
+        y = 10;
+      } else if (row.kind === 'task') {
         x = 20;
-        y = 170;
-      } else if (row.kind === 'criterion') {
+        y = 170 + top;
+      } else if (row.kind === 'criterion' && !row.milestone) {
         x = 20;
-        y = 320 + (below.get(0) || 0) * 100;
+        y = 320 + top + (below.get(0) || 0) * 100;
         below.set(0, (below.get(0) || 0) + 1);
       } else {
         const rank = Math.max(1, row.rank || 1);
         x = 270 + (rank - 1) * 240;
-        if (row.kind === 'stage') y = row.provider === 'claude' ? 230 : 80;
+        if (row.kind === 'stage') y = (row.provider === 'claude' ? 230 : 80) + top;
         else {
           const slot = below.get(rank) || 0;
           below.set(rank, slot + 1);
-          y = 400 + slot * 100;
+          y = 400 + top + slot * 100;
         }
       }
       positions.set(row.id, { x, y });

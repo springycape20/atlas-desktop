@@ -1148,6 +1148,7 @@ async function startCollaboration(event, input) {
         ? source.workspaceId
         : '',
     preset: efficiency.preset(source.preset),
+    milestones: ['auto', 'on', 'off'].includes(source.milestones) ? source.milestones : 'auto',
     rolesExplicit: source.rolesExplicit === true,
     adaptiveEffort: source.adaptiveEffort === true,
     reuseChecks: source.reuseChecks === true,
@@ -1304,6 +1305,34 @@ async function startCollaboration(event, input) {
         : await projectContext()
             .context(job.cwd, task, { signal: job.signal })
             .catch(() => '');
+      // Provider-written commands ATLAS runs itself (reproductions, milestone checks), logged in the task activity.
+      const runJobCommand = async (label, command, start) => {
+        job.statusText = label + ': ' + command;
+        job.events.push({ kind: 'command', text: label + ': ' + command, at: Date.now() });
+        emitJobs();
+        const run = await start({
+          cwd: job.cwd,
+          signal: job.signal,
+          project,
+          assess: async (value) =>
+            require('./desktop-action-policy').assessDesktopAction('PowerShell', { command: value }, job.cwd, {
+              denied: await integrations().deniedFiles(),
+            }),
+          ask: ({ title, details }) =>
+            approvals.ask({ jobId: job.id, provider: 'ATLAS', title, details, signal: job.signal }),
+        });
+        job.events.push({
+          kind: 'command',
+          text:
+            label +
+            ': ' +
+            run.status +
+            (run.exitCode === null || run.exitCode === undefined ? '' : ' (exit ' + run.exitCode + ')'),
+          at: Date.now(),
+        });
+        emitJobs();
+        return run;
+      };
       const run = require('./collaboration').createCollaboration({
         runProvider,
         canResumeSession: (provider, id) => provider !== 'codex' || Boolean(codexConnection?.hasInternalSession?.(id)),
@@ -1326,35 +1355,24 @@ async function startCollaboration(event, input) {
           }
           return job.verification;
         },
-        reproduce: async (command, phase) => {
-          const label = phase === 'before' ? 'Reproduction before the fix' : 'Reproduction after the fix';
-          job.statusText = label + ': ' + command;
-          job.events.push({ kind: 'command', text: label + ': ' + command, at: Date.now() });
-          emitJobs();
-          const run = await require('./reproduction-runner').runReproduction(command, {
-            cwd: job.cwd,
-            signal: job.signal,
-            project,
-            phase,
-            assess: async (value) =>
-              require('./desktop-action-policy').assessDesktopAction('PowerShell', { command: value }, job.cwd, {
-                denied: await integrations().deniedFiles(),
-              }),
-            ask: ({ title, details }) =>
-              approvals.ask({ jobId: job.id, provider: 'ATLAS', title, details, signal: job.signal }),
-          });
-          job.events.push({
-            kind: 'command',
-            text:
-              label +
-              ': ' +
-              run.status +
-              (run.exitCode === null || run.exitCode === undefined ? '' : ' (exit ' + run.exitCode + ')'),
-            at: Date.now(),
-          });
-          emitJobs();
-          return run;
-        },
+        reproduce: (command, phase) =>
+          runJobCommand(
+            phase === 'before' ? 'Reproduction before the fix' : 'Reproduction after the fix',
+            command,
+            (shared) => require('./reproduction-runner').runReproduction(command, { ...shared, phase }),
+          ),
+        milestoneCheck: (command, milestone) =>
+          runJobCommand('Check for milestone ' + milestone, command, (shared) =>
+            require('./provider-command').runProviderCommand(command, {
+              ...shared,
+              phase: milestone,
+              title: 'Run the milestone check?',
+              purpose:
+                'ATLAS runs this provider-written check after each change to milestone ' +
+                milestone +
+                '; it must pass before the milestone is reviewed.',
+            }),
+          ),
         saveReport: async (report, index, raw) => {
           const folder = path.join(app.getPath('userData'), 'colab-reports', job.id);
           await mkdir(folder, { recursive: true });

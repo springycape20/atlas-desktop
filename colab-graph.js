@@ -18,7 +18,14 @@
     synthesis: 'Combine proposals',
     clarify: 'Clarify verdict',
     reproduce: 'Reproduce bug',
+    decompose: 'Split into milestones',
+    plan_review: 'Review milestone plan',
+    plan_revise: 'Revise milestones',
   };
+  function stageLabel(row, phase, index) {
+    const name = row.milestone === 'final' && phase === 'review' ? 'Final review' : phaseName[phase] || phase;
+    return (/^M\d+$/.test(row.milestone || '') ? row.milestone + ' · ' : '') + name + ' · ' + (index + 1);
+  }
   function build({ task = '', reports = [], state = {}, active = null, outcome = '', verification = null } = {}) {
     const nodes = [],
       edges = [],
@@ -55,7 +62,14 @@
       origin: 'user',
       rank: 0,
     });
-    const criteria = (state.criteria?.length ? state.criteria : [{ id: 'TASK', text: task }]).slice(0, 31);
+    // With milestones, the left column keeps the whole-task criteria; milestone criteria sit under their milestone.
+    const criteria = (
+      state.taskCriteria?.length
+        ? [...state.taskCriteria, ...(state.criteria || []).filter((row) => row.id === 'PLAN')]
+        : state.criteria?.length
+          ? state.criteria
+          : [{ id: 'TASK', text: task }]
+    ).slice(0, 31);
     for (const row of criteria) {
       const id = node({
         id: 'criterion:' + text(row.id, 80),
@@ -80,12 +94,71 @@
         kind: 'stage',
         phase,
         provider: row.provider === 'claude' ? 'claude' : 'codex',
-        label: (phaseName[phase] || phase) + ' · ' + (index + 1),
+        label: stageLabel(row, phase, index),
         detail: text(row.handover?.summary || row.output, 2400),
         status: row.decision || 'reported',
         origin: 'provider reported',
         rank: index - first + 1,
       });
+    }
+    // Milestones: the plan as its own row, each with its criteria and its ATLAS check (or none).
+    const milestones = (state.milestones || []).slice(0, 8);
+    // Pending milestones start after any running stage so it never looks like part of a later milestone.
+    let pendingRank = reports.length - first + 1 + (active ? 1 : 0);
+    for (const [i, row] of milestones.entries()) {
+      const started = reports.findIndex((report, n) => n >= first && report.milestone === row.id),
+        rank = started >= 0 ? started - first + 1 : pendingRank++,
+        run = row.checkRun;
+      const id = node({
+        id: 'milestone:' + text(row.id, 8),
+        kind: 'milestone',
+        label: text(row.id, 8) + ' · ' + text(row.title, 90),
+        detail: [
+          text(row.goal),
+          ...(row.criteria || []).map((item) => text(item.id, 12) + ': ' + text(item.text, 300)),
+          'Check: ' + (text(row.check, 500) || 'none; reviewed without an ATLAS check (unverified)'),
+          row.summary ? 'Delivered: ' + text(row.summary, 600) : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        status: text(row.status, 20) + (row.unverified ? ' · unverified' : ''),
+        origin: 'provider planned',
+        rank,
+      });
+      edge(i ? 'milestone:' + text(milestones[i - 1].id, 8) : 'task', id, i ? 'then' : 'plans', 'provider planned');
+      for (const item of (row.criteria || []).slice(0, 6)) {
+        const child = node({
+          id: 'criterion:' + text(item.id, 80),
+          kind: 'criterion',
+          milestone: text(row.id, 8),
+          label: text(item.id, 80) + ': ' + text(item.text, 110),
+          detail: text(item.text),
+          status: row.status === 'done' ? 'accepted' : 'required',
+          origin: 'provider planned',
+          rank,
+        });
+        edge(id, child, 'requires');
+      }
+      if (run || !row.check) {
+        const child = node({
+          id: 'milestone-check:' + text(row.id, 8),
+          kind: 'check',
+          label:
+            text(row.id, 8) +
+            (run
+              ? ' check · ' + (Number.isInteger(run.exitCode) ? 'exit ' + run.exitCode : text(run.status, 40))
+              : ' · unverified, no check'),
+          detail: run
+            ? [text(run.command, 500), 'Status: ' + text(run.status, 40), text(run.error, 500), text(run.output, 1200)]
+                .filter(Boolean)
+                .join('\n')
+            : 'This milestone had no check command, so only the reviewer verified it.',
+          status: run ? text(run.status, 40) || 'unknown' : 'unverified',
+          origin: run ? 'ATLAS executed' : 'ATLAS recorded',
+          rank,
+        });
+        edge(id, child, run ? 'verified by' : 'check status');
+      }
     }
     for (const issue of (state.openIssues || []).slice(0, 30)) {
       const id = node({
@@ -139,13 +212,15 @@
         kind: 'stage',
         phase,
         provider: row.provider === 'claude' ? 'claude' : 'codex',
-        label: (phaseName[phase] || phase) + ' · ' + (index + 1),
+        label: stageLabel(row, phase, index),
         detail: text(row.handover?.summary || row.output, 2400),
         status: row.decision || 'reported',
         origin: 'provider reported',
         rank: index - first + 1,
       });
-      edge('task', id, phase.startsWith('proposal_') ? 'proposes' : phase === 'reproduce' ? 'reproduces' : 'contains');
+      const milestone = milestones.find((item) => item.id === row.milestone),
+        parent = milestone && ids.has('milestone:' + milestone.id) ? 'milestone:' + milestone.id : 'task';
+      edge(parent, id, phase.startsWith('proposal_') ? 'proposes' : phase === 'reproduce' ? 'reproduces' : 'contains');
       // A reproduction informs the fix the same way proposals inform a build.
       if (phase.startsWith('proposal_') || phase === 'reproduce') proposals.push(id);
       else if (['build', 'draft', 'synthesis'].includes(phase)) {
@@ -153,7 +228,11 @@
         artifact = id;
       } else if (phase === 'review') {
         if (artifact) edge(artifact, id, 'reviewed by');
-        for (const criterion of criteria) edge('criterion:' + text(criterion.id, 80), id, 'checked against');
+        for (const criterion of milestone?.criteria || criteria)
+          edge('criterion:' + text(criterion.id, 80), id, 'checked against');
+      } else if (['decompose', 'plan_review', 'plan_revise'].includes(phase)) {
+        if (index > first)
+          edge('pass:' + (index - 1), id, phase === 'plan_review' ? 'plan reviewed by' : 'revises plan');
       } else if (['fix', 'revise'].includes(phase)) {
         if (index > first) edge('pass:' + (index - 1), id, 'requests fix');
         artifact = id;

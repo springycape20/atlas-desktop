@@ -33,7 +33,33 @@ const task = '<img src=x onerror=alert(1)> Fix parser',
     outcome: 'completed',
     verification: { results: [{ command: 'node --test', status: 'passed' }] },
   }),
-  live = graph.build({ task, reports: reports.slice(0, 1), active: { phase: 'review', provider: 'claude' } });
+  live = graph.build({ task, reports: reports.slice(0, 1), active: { phase: 'review', provider: 'claude' } }),
+  milestoned = graph.build({
+    task: 'Totals in cents',
+    reports: [
+      { provider: 'codex', phase: 'build', decision: 'ready', output: 'Planned' },
+      { provider: 'claude', phase: 'plan_review', decision: 'ready', milestone: 'plan' },
+      { provider: 'codex', phase: 'build', decision: 'ready', milestone: 'M1' },
+      { provider: 'claude', phase: 'review', decision: 'ready', milestone: 'M1' },
+      { provider: 'codex', phase: 'build', decision: 'ready', milestone: 'M2' },
+    ],
+    state: {
+      taskCriteria: [{ id: 'TASK', text: 'Totals in cents' }],
+      milestones: [
+        {
+          id: 'M1',
+          title: 'Model',
+          status: 'done',
+          criteria: [{ id: 'M1.1', text: 'Model stores cents' }],
+          check: 'npm test -- model',
+          checkRun: { command: 'npm test -- model', status: 'passed', exitCode: 0 },
+        },
+        { id: 'M2', title: 'API', status: 'active', criteria: [{ id: 'M2.1', text: 'API returns cents' }], check: '' },
+        { id: 'M3', title: 'Docs', status: 'pending', criteria: [{ id: 'M3.1', text: 'README' }], check: '' },
+      ],
+    },
+    active: { phase: 'review', provider: 'claude', milestone: 'M2' },
+  });
 const chats = [
   {
     id: 'graph-chat',
@@ -93,10 +119,16 @@ app.whenReady().then(async () => {
     await win.webContents.executeJavaScript(
       `(async()=>{await atlasColab.ready;atlasColab.selectChat('graph-chat');if(atlasColab.current().graphRuns.length!==3)throw Error('Graphs did not survive reload');if(atlasColab.current().graphRuns.at(-1).graph.outcome!=='paused'||atlasColab.current().graphRuns.at(-1).graph.nodes.some(node=>node.status==='running'))throw Error('Interrupted graph was not normalized after restart');document.querySelector('#colabGraph').click();if(document.querySelector('[aria-label="Task graph"]').options.length!==3)throw Error('Saved task selector missing');})()`,
     );
+    await win.webContents.executeJavaScript(
+      `(async()=>{colabStatus({id:'milestone-job',chatId:'graph-chat',graph:${JSON.stringify(milestoned)}});const dialog=document.querySelector('.colab-graph-dialog');const y=id=>{const node=dialog.querySelector('[data-id="'+id+'"]');if(!node)throw Error('Missing '+id);return Number(node.getAttribute('transform').match(/translate\\(\\S+ (\\S+)\\)/)[1]);};if(!(y('milestone:M1')<y('pass:2')&&y('milestone:M3')<y('pass:2')))throw Error('Milestones are not above the stages');if(y('criterion:M2.1')<=y('pass:2'))throw Error('Milestone criteria are not under their milestone');const filter=dialog.querySelector('[aria-label="Graph node filter"]');filter.value='milestone';filter.dispatchEvent(new Event('change'));if(!dialog.querySelector('[data-id="milestone:M2"]')||dialog.querySelector('[data-id="criterion:M1.1"]'))throw Error('Milestone filter failed');filter.value='all';filter.dispatchEvent(new Event('change'));dialog.querySelector('[data-id="milestone:M2"]').dispatchEvent(new MouseEvent('click',{bubbles:true}));if(!dialog.querySelector('.colab-graph-detail').textContent.includes('unverified'))throw Error('Unverified milestone not explained');})()`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    fs.writeFileSync(path.join(temp, 'milestone-graph.png'), (await win.webContents.capturePage()).toPNG());
     console.log(
-      'PASS: Live graph, completion, node details, safe text, search, filters, zoom, task selection, responsive layout and saved graphs after reload.',
+      'PASS: Live graph, completion, node details, safe text, search, filters, zoom, task selection, responsive layout, saved graphs after reload and milestones.',
     );
     console.log('Preview: ' + path.join(temp, 'workflow-graph.png'));
+    console.log('Milestones: ' + path.join(temp, 'milestone-graph.png'));
   } catch (error) {
     console.error(error);
     process.exitCode = 1;
