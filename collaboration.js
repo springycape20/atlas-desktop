@@ -752,9 +752,29 @@ function createCollaboration({
       // pass's report and graph node and are never put into any prompt.
       const reasoning = [],
         // The tool steps this pass took, kept for its report and graph node and never put into a prompt.
-        steps = createStepCapture();
+        steps = createStepCapture(),
+        live = {
+          phase: target,
+          provider,
+          parallel: phase === 'proposal_first' && !reports.length && limit >= 2 && !tokenWarning,
+          cached: phase === 'proposal_second' && Boolean(state.parallelPending),
+          milestone: scope,
+        };
+      // The running stage shows its steps as they happen, republished at most every 1.5 seconds.
+      let liveAt = 0,
+        liveTimer = null;
+      const showLive = () => {
+        liveTimer = null;
+        if (live.closed) return;
+        liveAt = Date.now();
+        live.steps = steps.list();
+        void publishGraph(live).catch(() => {});
+      };
       passSettings.onActivity = (event) => {
-        if (event?.kind !== 'reasoning' && event?.provider === provider) steps.add(event);
+        if (event?.kind !== 'reasoning' && event?.provider === provider && steps.add(event) && !liveTimer) {
+          liveTimer = setTimeout(showLive, Math.max(0, 1500 - (Date.now() - liveAt)));
+          liveTimer.unref?.();
+        }
         if (
           event?.kind === 'reasoning' &&
           event.provider === provider &&
@@ -794,13 +814,7 @@ function createCollaboration({
           (passLimit === null ? ' · unlimited passes' : '/' + limit) +
           ').',
       );
-      await publishGraph({
-        phase: target,
-        provider,
-        parallel: phase === 'proposal_first' && !reports.length && limit >= 2 && !tokenWarning,
-        cached: phase === 'proposal_second' && Boolean(state.parallelPending),
-        milestone: scope,
-      });
+      await publishGraph(live);
       const independent = phase === 'proposal_second';
       const previous = proposing ? '' : efficiency.priorReports(reports, state, phase, preset);
       const legacyPrevious = independent
@@ -975,77 +989,84 @@ function createCollaboration({
         models: [chosen.codexModel, chosen.claudeModel],
       });
       let before, result, after;
-      if (phase === 'proposal_first' && !reports.length && limit >= 2 && !tokenWarning) {
-        progress('Codex and Claude are preparing independent proposals in parallel.');
-        const pair = await require('./parallel-proposals').parallelProposals({
-          providers: [builder, reviewer],
-          prompt: effectivePrompt,
-          cwd,
-          settings: passSettings,
-          runProvider,
-          readFingerprint,
-          signal,
-          prepared,
-          key: proposalKey,
-          valid: validProposal,
-          onPrepared: async (provider, entry) => {
-            prepared[provider] = { ...entry, result: compactProposal(entry.result) };
-            await savePrepared(structuredClone(prepared));
-          },
-        });
-        ({ before, result, after } = pair[0]);
-        pendingFromCurrentRun = true;
-        state.parallelPending = {
-          ...pair[1],
-          taskHash: identity,
-          key: proposalKey,
-          result: compactProposal(pair[1].result),
-          promptCharacters: effectivePrompt.length,
-          effort: effectiveEffort,
-        };
-      } else if (phase === 'proposal_second' && state.parallelPending) {
-        const pending = state.parallelPending,
-          current = await readFingerprint();
-        delete state.parallelPending;
-        if (
-          pending.taskHash === identity &&
-          pending.key === proposalKey &&
-          (current || pendingFromCurrentRun) &&
-          pending.before === current &&
-          pending.after === current
-        ) {
-          before = pending.before;
-          result = pending.result;
-          after = pending.after;
-        } else {
-          state.supersededProposals ||= [];
-          state.supersededProposals.push({
-            provider: reviewer,
-            phase: 'proposal_superseded',
-            output: efficiency.excerpt(pending.result.output, 60000),
-            usage: pending.result.usage,
-            metrics: { promptCharacters: pending.promptCharacters, effort: pending.effort },
+      // Stop live step updates when the pass ends, including when it fails, so a late update
+      // can never replace the finished graph.
+      try {
+        if (phase === 'proposal_first' && !reports.length && limit >= 2 && !tokenWarning) {
+          progress('Codex and Claude are preparing independent proposals in parallel.');
+          const pair = await require('./parallel-proposals').parallelProposals({
+            providers: [builder, reviewer],
+            prompt: effectivePrompt,
+            cwd,
+            settings: passSettings,
+            runProvider,
+            readFingerprint,
+            signal,
+            prepared,
+            key: proposalKey,
+            valid: validProposal,
+            onPrepared: async (provider, entry) => {
+              prepared[provider] = { ...entry, result: compactProposal(entry.result) };
+              await savePrepared(structuredClone(prepared));
+            },
           });
-          if (reports.length + extraCount() >= limit) {
-            reports.at(-1).state = structuredClone(state);
-            await checkpoint(structuredClone(reports));
-            break;
+          ({ before, result, after } = pair[0]);
+          pendingFromCurrentRun = true;
+          state.parallelPending = {
+            ...pair[1],
+            taskHash: identity,
+            key: proposalKey,
+            result: compactProposal(pair[1].result),
+            promptCharacters: effectivePrompt.length,
+            effort: effectiveEffort,
+          };
+        } else if (phase === 'proposal_second' && state.parallelPending) {
+          const pending = state.parallelPending,
+            current = await readFingerprint();
+          delete state.parallelPending;
+          if (
+            pending.taskHash === identity &&
+            pending.key === proposalKey &&
+            (current || pendingFromCurrentRun) &&
+            pending.before === current &&
+            pending.after === current
+          ) {
+            before = pending.before;
+            result = pending.result;
+            after = pending.after;
+          } else {
+            state.supersededProposals ||= [];
+            state.supersededProposals.push({
+              provider: reviewer,
+              phase: 'proposal_superseded',
+              output: efficiency.excerpt(pending.result.output, 60000),
+              usage: pending.result.usage,
+              metrics: { promptCharacters: pending.promptCharacters, effort: pending.effort },
+            });
+            if (reports.length + extraCount() >= limit) {
+              reports.at(-1).state = structuredClone(state);
+              await checkpoint(structuredClone(reports));
+              break;
+            }
+            before = await readFingerprint();
+            result = await runProvider(provider, effectivePrompt, cwd, passSettings, '', () => {});
+            after = await readFingerprint();
           }
+        } else {
           before = await readFingerprint();
-          result = await runProvider(provider, effectivePrompt, cwd, passSettings, '', () => {});
+          result = await runProvider(
+            provider,
+            effectivePrompt,
+            cwd,
+            passSettings,
+            resumesSession ? state[sessionKey] || '' : '',
+            () => {},
+          );
           after = await readFingerprint();
         }
-      } else {
-        before = await readFingerprint();
-        result = await runProvider(
-          provider,
-          effectivePrompt,
-          cwd,
-          passSettings,
-          resumesSession ? state[sessionKey] || '' : '',
-          () => {},
-        );
-        after = await readFingerprint();
+      } finally {
+        live.closed = true;
+        clearTimeout(liveTimer);
       }
       if (resumesSession && result.sessionId) state[sessionKey] = result.sessionId;
       if (signal?.aborted) throw Error('Collaboration stopped.');

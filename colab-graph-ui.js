@@ -46,6 +46,7 @@
     ['workflow', 'Workflow'],
     ['milestone', 'Milestones'],
     ['issue', 'Blockers'],
+    ['step', 'Steps'],
     ['file', 'Files'],
     ['check', 'Checks'],
     ['decision', 'Decisions'],
@@ -112,6 +113,7 @@
     task: '#80d2dd',
     criterion: '#9fbee8',
     milestone: '#d9c26f',
+    step: '#7f9fb0',
     decision: '#c8a5e4',
     file: '#c2c89e',
     check: '#87c4b4',
@@ -218,12 +220,13 @@
         x = 270 + (rank - 1) * 240;
         if (row.kind === 'stage') y = (row.provider === 'claude' ? 230 : 80) + top;
         else {
-          const slot = below.get(rank) || 0;
-          below.set(rank, slot + 1);
-          y = 400 + top + slot * 100;
+          // Children stack under their stage column; compact step nodes take less room.
+          const offset = below.get(rank) || 0;
+          below.set(rank, offset + (row.kind === 'step' ? 50 : 100));
+          y = 400 + top + offset;
         }
       }
-      positions.set(row.id, { x, y });
+      positions.set(row.id, { x, y, h: row.kind === 'step' ? 40 : 70, kind: row.kind });
     }
     size = {
       width: Math.max(900, 540 + maxRank * 240, ...[...positions.values()].map((p) => p.x + 250)),
@@ -252,12 +255,16 @@
         b = positions.get(edge.target);
       if (!a || !b) continue;
       const sourceX = a.x + 200,
-        sourceY = a.y + 34,
+        sourceY = a.y + a.h / 2,
         targetX = b.x,
-        targetY = b.y + 34,
-        bend = Math.max(30, Math.abs(targetX - sourceX) / 2);
+        targetY = b.y + b.h / 2,
+        bend = Math.max(30, Math.abs(targetX - sourceX) / 2),
+        // A stage's step chain sits directly beneath it, so link it straight down; other edges curve.
+        stacked = b.kind === 'step' && ['step', 'stage'].includes(a.kind) && a.x === b.x && b.y > a.y;
       const line = svg('path', {
-        d: `M${sourceX},${sourceY} C${sourceX + bend},${sourceY} ${targetX - bend},${targetY} ${targetX},${targetY}`,
+        d: stacked
+          ? `M${a.x + 100},${a.y + a.h} L${b.x + 100},${b.y}`
+          : `M${sourceX},${sourceY} C${sourceX + bend},${sourceY} ${targetX - bend},${targetY} ${targetX},${targetY}`,
         class: 'graph-edge',
         'marker-end': 'url(#colabGraphArrow)',
       });
@@ -278,21 +285,28 @@
           'aria-label': row.label + ' · ' + row.status,
         });
       group.dataset.id = row.id;
-      const color =
-        row.kind === 'stage' ? (row.provider === 'claude' ? '#e3a178' : '#7ac6a2') : colors[row.kind] || '#8ba9bc';
+      const step = row.kind === 'step',
+        color =
+          row.kind === 'stage'
+            ? row.provider === 'claude'
+              ? '#e3a178'
+              : '#7ac6a2'
+            : step && row.status === 'failed'
+              ? '#f39a8b'
+              : colors[row.kind] || '#8ba9bc';
       group.append(
         svg('rect', {
           width: 200,
-          height: 70,
-          rx: 11,
+          height: p.h,
+          rx: step ? 8 : 11,
           fill: '#11262e',
           stroke: color,
-          'stroke-width': row.status === 'running' ? 3 : 1,
+          'stroke-width': row.status === 'running' || (step && row.status === 'failed') ? 2.5 : 1,
         }),
       );
-      const label = svg('text', { x: 12, y: 23 });
+      const label = svg('text', { x: 12, y: step ? 16 : 23 });
       label.textContent = row.label.length > 27 ? row.label.slice(0, 26) + '…' : row.label;
-      const meta = svg('text', { x: 12, y: 45, class: 'graph-node-meta' });
+      const meta = svg('text', { x: 12, y: step ? 32 : 45, class: 'graph-node-meta' });
       meta.textContent = (row.provider ? row.provider + ' · ' : row.kind + ' · ') + row.status;
       const hint = svg('title');
       hint.textContent = row.label + '\n' + row.origin;

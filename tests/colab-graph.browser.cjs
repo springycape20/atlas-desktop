@@ -59,6 +59,26 @@ const task = '<img src=x onerror=alert(1)> Fix parser',
       ],
     },
     active: { phase: 'review', provider: 'claude', milestone: 'M2' },
+  }),
+  stepped = graph.build({
+    task: 'Fix totals',
+    reports: [
+      {
+        provider: 'codex',
+        phase: 'build',
+        decision: 'ready',
+        output: 'Built',
+        handover: { summary: 'Stored cents', decisions: [{ decision: 'Use cents', reason: 'Floats drift' }] },
+        steps: [
+          { type: 'command', provider: 'codex', text: 'npm ci', status: 'completed', startedAt: 1, endedAt: 900 },
+          { type: 'file', provider: 'codex', text: 'update: src/cart.js', status: 'completed' },
+          { type: 'command', provider: 'codex', text: 'npm test', status: 'failed', exitCode: 1 },
+          { type: 'gateway', provider: 'codex', text: 'Tool: windows / Screenshot', status: 'completed' },
+        ],
+      },
+      { provider: 'claude', phase: 'review', decision: 'ready', output: 'Approved' },
+    ],
+    state: {},
   });
 const chats = [
   {
@@ -124,11 +144,17 @@ app.whenReady().then(async () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
     fs.writeFileSync(path.join(temp, 'milestone-graph.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `(async()=>{colabStatus({id:'steps-job',chatId:'graph-chat',graph:${JSON.stringify(stepped)}});const dialog=document.querySelector('.colab-graph-dialog');const node=id=>dialog.querySelector('[data-id="'+id+'"]');const at=id=>{const n=node(id);if(!n)throw Error('Missing '+id);return Number(n.getAttribute('transform').match(/translate\\(\\S+ (\\S+)\\)/)[1]);};if(node('pass:0:step:0').querySelector('rect').getAttribute('height')!=='40')throw Error('Step nodes are not compact');if(node('pass:0:step:2').querySelector('rect').getAttribute('stroke')!=='#f39a8b')throw Error('Failed step not outlined');if(!(at('pass:0:step:0')<at('pass:0:step:1')&&at('pass:0:step:1')<at('pass:0:step:2')))throw Error('Steps are not in order under their stage');node('pass:0').dispatchEvent(new MouseEvent('click',{bubbles:true}));const detail=dialog.querySelector('.colab-graph-detail').textContent;if(!detail.includes('3. $ npm test · exit 1 · failed')||!detail.includes('because Floats drift'))throw Error('Stage details miss steps or rationale');const filter=dialog.querySelector('[aria-label="Graph node filter"]');filter.value='step';filter.dispatchEvent(new Event('change'));if(!node('pass:0:step:3')||node('pass:0:decision:0'))throw Error('Steps filter failed');filter.value='all';filter.dispatchEvent(new Event('change'));})()`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    fs.writeFileSync(path.join(temp, 'steps-graph.png'), (await win.webContents.capturePage()).toPNG());
     console.log(
-      'PASS: Live graph, completion, node details, safe text, search, filters, zoom, task selection, responsive layout, saved graphs after reload and milestones.',
+      'PASS: Live graph, completion, node details, safe text, search, filters, zoom, task selection, responsive layout, saved graphs after reload, milestones and step timelines.',
     );
     console.log('Preview: ' + path.join(temp, 'workflow-graph.png'));
     console.log('Milestones: ' + path.join(temp, 'milestone-graph.png'));
+    console.log('Steps: ' + path.join(temp, 'steps-graph.png'));
   } catch (error) {
     console.error(error);
     process.exitCode = 1;

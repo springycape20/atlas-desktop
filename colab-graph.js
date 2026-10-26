@@ -76,8 +76,53 @@
           (row.provider === 'claude' ? 'Claude thinking' : 'Codex reasoning') +
           ' summary (model-reported; only what the provider exposes):\n' +
           reasoning.join('\n\n')
-        : '')
+        : '') +
+      stepList(row.steps, row.stepsOmitted)
     );
+  }
+  // Tool steps a pass took, in order. Provider steps are provider-reported; gateway steps ran through ATLAS.
+  const validSteps = (steps) =>
+    (Array.isArray(steps) ? steps : []).filter((step) => step && typeof step.text === 'string').slice(0, 40);
+  function stepLabel(step) {
+    const exit = Number.isInteger(step.exitCode) ? ' · exit ' + step.exitCode : '';
+    const body = text(step.text.split('\n')[0], 100);
+    return step.type === 'command'
+      ? '$ ' + body + exit
+      : step.type === 'file'
+        ? 'Files: ' + body.replace(/^(?:Edit|Write|MultiEdit|NotebookEdit) · /, '')
+        : step.type === 'mcp' || step.type === 'gateway'
+          ? body.replace(/^Tool: /, step.type === 'gateway' ? 'ATLAS gateway: ' : 'MCP ')
+          : body;
+  }
+  function stepDuration(step) {
+    const ms = Number(step.endedAt) - Number(step.startedAt);
+    return Number.isFinite(ms) && ms >= 0 && step.endedAt
+      ? ms < 1000
+        ? ms + ' ms'
+        : (ms / 1000).toFixed(1) + ' s'
+      : '';
+  }
+  function stepList(steps, omitted = 0) {
+    const rows = validSteps(steps);
+    if (!rows.length) return '';
+    return (
+      '\n\nSteps (' +
+      rows.length +
+      (omitted > 0 ? ' shown, ' + omitted + ' more not recorded' : '') +
+      '; provider-reported unless marked ATLAS gateway):\n' +
+      rows
+        .map((step, i) =>
+          [i + 1 + '. ' + stepLabel(step), text(step.status, 20), stepDuration(step)].filter(Boolean).join(' · '),
+        )
+        .join('\n')
+    );
+  }
+  // Which steps get graph nodes: every failure, then the earliest others, in their original order.
+  function pickSteps(steps, cap) {
+    const rows = validSteps(steps).map((step, index) => ({ step, index })),
+      failed = rows.filter((row) => row.step.status === 'failed'),
+      rest = rows.filter((row) => row.step.status !== 'failed').slice(0, Math.max(0, cap - failed.length));
+    return [...failed, ...rest].sort((a, b) => a.index - b.index);
   }
   function build({ task = '', reports = [], state = {}, active = null, outcome = '', verification = null } = {}) {
     const nodes = [],
@@ -88,7 +133,7 @@
     function node(row) {
       if (ids.has(row.id)) return row.id;
       const optional =
-        ['decision', 'file'].includes(row.kind) ||
+        ['decision', 'file', 'step'].includes(row.kind) ||
         (row.kind === 'check' && row.origin === 'provider reported') ||
         (row.kind === 'issue' && row.status !== 'open');
       if (nodes.length >= (optional ? MAX_NODES - 16 : MAX_NODES)) {
@@ -105,6 +150,48 @@
       if (edgeIds.has(id)) return;
       edgeIds.add(id);
       edges.push({ id, source, target, kind, origin });
+    }
+    // Fewer step nodes per stage on long tasks; failures always get a node, the rest stay in details.
+    const stageCount = Math.max(1, Math.min(reports.length, MAX_REPORTS) + (active ? 1 : 0)),
+      stepCap = Math.max(3, Math.min(8, Math.floor(120 / stageCount)));
+    function addSteps(parent, steps, omitted, rank) {
+      const picked = pickSteps(steps, stepCap),
+        hidden = validSteps(steps).length - picked.length + (Number(omitted) || 0);
+      let previous = parent;
+      for (const { step, index } of picked) {
+        const id = node({
+          id: parent + ':step:' + index,
+          kind: 'step',
+          label: stepLabel(step),
+          detail: [
+            text(step.text, 300),
+            'Status: ' + text(step.status, 20) + (Number.isInteger(step.exitCode) ? ' · exit ' + step.exitCode : ''),
+            stepDuration(step) ? 'Duration: ' + stepDuration(step) : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          status: text(step.status, 20) || 'reported',
+          origin: step.type === 'gateway' ? 'ATLAS gateway' : 'provider reported',
+          provider: step.provider === 'claude' ? 'claude' : 'codex',
+          stepType: text(step.type, 20),
+          rank,
+        });
+        if (!id) break;
+        edge(previous, id, previous === parent ? 'runs' : 'then', 'provider reported');
+        previous = id;
+      }
+      if (hidden > 0) {
+        const id = node({
+          id: parent + ':steps-more',
+          kind: 'step',
+          label: '+' + hidden + ' more step' + (hidden === 1 ? '' : 's'),
+          detail: 'Select the stage to see every recorded step in order.',
+          status: 'summary',
+          origin: 'ATLAS recorded',
+          rank,
+        });
+        edge(previous, id, 'then', 'provider reported');
+      }
     }
     node({
       id: 'task',
@@ -290,6 +377,8 @@
         if (index > first) edge('pass:' + (index - 1), id, 'requests fix');
         artifact = id;
       } else if (index > first) edge('pass:' + (index - 1), id, 'clarifies');
+      // Steps first, so the timeline sits directly under its stage above decisions, files and checks.
+      addSteps(id, row.steps, row.stepsOmitted, index - first + 1);
       for (const [i, decision] of (row.handover?.decisions || []).slice(0, 4).entries()) {
         const child = node({
           id: id + ':decision:' + i,
@@ -384,7 +473,7 @@
           id: 'active',
           kind: 'stage',
           label: active.cached ? 'Check saved proposal' : (phaseName[phase] || phase) + ' · running',
-          detail: 'Public workflow stage. Provider actions are shown in the chat activity.',
+          detail: 'Public workflow stage. Provider actions are shown in the chat activity.' + stepList(active.steps),
           phase,
           provider: active.provider,
           status: active.cached ? 'checking saved result' : 'running',
@@ -392,6 +481,8 @@
           rank: reports.length - first + 1,
         });
       edge(artifact || 'task', id, 'next');
+      // Steps of the running pass, published as they happen.
+      addSteps(id, active.steps, 0, reports.length - first + 1);
       if (active.parallel) {
         const sibling = node({
           id: 'active-peer',
@@ -524,7 +615,8 @@
       ...current,
       outcome,
       nodes: current.nodes.map((node) =>
-        node.id === 'task' || node.status === 'running' || node.status === 'checking saved result'
+        node.id === 'task' ||
+        (node.kind !== 'step' && (node.status === 'running' || node.status === 'checking saved result'))
           ? { ...node, status: outcome }
           : node,
       ),
