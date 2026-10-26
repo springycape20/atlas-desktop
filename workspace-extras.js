@@ -26,6 +26,8 @@
   style.textContent +=
     '.attachment-toolbar{margin:4px 0;gap:9px}.attachment-add{width:34px;height:34px;border:1px solid #36505a;border-radius:9px;background:#122731;color:#d8edf1;font:24px/1 Segoe UI,sans-serif;cursor:pointer}.attachment-add:hover{background:#22414c}.attachment-add:focus-visible{outline:2px solid #81caca;outline-offset:2px}.attachment-menu{position:fixed;inset:auto;margin:0;width:230px;max-width:calc(100vw - 24px);padding:6px;border:1px solid #36505a;border-radius:12px;background:#10212b;color:#cfe5eb;box-shadow:0 12px 35px #0009}.attachment-menu:popover-open{display:flex;flex-direction:column;gap:3px}.attachment-menu .quiet-button{text-align:left;border:0;justify-content:flex-start;padding:10px;font-size:12px;background:transparent}.attachment-menu .quiet-button:hover{background:#203d49}.attachment-chips:empty,.attachment-error:empty{display:none}.attachment-sharing{font-size:10px;margin:4px 0}.attachment-bar{margin:4px 0}';
   style.textContent +=
+    '.workspace-warning{color:#f0c48f;border-left:3px solid #b58649;padding:4px 10px;font-size:12px;line-height:1.6}';
+  style.textContent +=
     '.workspace-dialog.import-dialog[open]{display:flex;flex-direction:column;width:min(1220px,96vw);height:92vh;max-height:92vh}.import-dialog .workspace-dialog-body{flex:1;min-height:0;max-height:none}.chat-import>p{font-size:12px;line-height:1.6;color:#a9c3cd}.chat-import label{display:flex;align-items:center;gap:8px;overflow-wrap:anywhere}.chat-import input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;padding:0;accent-color:#81caca}.chat-import .workspace-result>p{overflow-wrap:anywhere}.import-actions{flex-shrink:0;margin:0;padding:10px 20px;border-top:1px solid #29414a}.import-filters{display:grid;grid-template-columns:130px minmax(160px,1fr) minmax(150px,1.3fr);gap:8px;margin:12px 0}@media(max-width:650px){.import-filters{grid-template-columns:1fr}}';
   document.head.append(style);
   const modal = element('dialog', undefined, 'workspace-dialog');
@@ -539,7 +541,7 @@
       }
     }
   }
-  async function review(id) {
+  async function review(id, note = '') {
     open('Review isolated changes');
     status.textContent = 'Loading the diff…';
     try {
@@ -548,6 +550,29 @@
         element('p', 'Original project: ' + result.root),
         element('p', 'Isolated checkout: ' + result.cwd),
         element('p', result.files.length + ' changed files · ' + result.state),
+      );
+      // Warn before accepting when other unaccepted tasks touched the same files.
+      if (result.overlaps?.length)
+        body.append(
+          element(
+            'p',
+            'Other unaccepted tasks from this project also changed: ' +
+              [...new Set(result.overlaps.flatMap((row) => row.files))].join(', ') +
+              '. Accepting both may conflict; ATLAS stops and leaves your project unchanged if it does.',
+            'workspace-warning',
+          ),
+        );
+      if (result.conflicts?.length)
+        body.append(
+          element(
+            'p',
+            'The last update left conflict markers in: ' +
+              result.conflicts.join(', ') +
+              '. Resolve them before accepting.',
+            'workspace-warning',
+          ),
+        );
+      body.append(
         element('pre', result.files.join('\n') || 'No changed files.'),
         element('pre', result.diff || 'No diff to display.'),
       );
@@ -564,6 +589,7 @@
       if (result.state === 'active') {
         for (const [label, action] of [
           ['Accept as a Git commit', 'accept'],
+          ['Update task checkout', 'update'],
           ['Discard task changes', 'discard'],
           ['Push branch and create draft PR', 'pull-request'],
         ])
@@ -573,13 +599,14 @@
               const answer = await api.reviewChanges({ id, token: result.token, action });
               status.textContent = answer.message || answer.state || '';
               if (answer.url) await api.openLink(answer.url);
-              else await review(id);
+              else await review(id, answer.message || '');
             },
             actions,
           );
       }
       status.textContent =
-        'Review all changes before applying. Accept creates a commit in the original checkout. Discard retains a local recovery snapshot.';
+        note ||
+        'Review all changes before applying. Accept creates a commit in the original checkout, on top of any commits made since the task started. Update task checkout moves this task onto the latest project commit. Discard retains a local recovery snapshot.';
     } catch (error) {
       report(error);
     }

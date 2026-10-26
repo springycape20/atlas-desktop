@@ -434,16 +434,18 @@ function createWorkspaceService(directory, options = {}) {
       throw Error('Workspace location changed.');
     return row;
   }
+  const changedNames = async (row) =>
+    [
+      ...new Set(
+        (await git(row.path, ['diff', '--name-only', '-z', row.baseSha, '--']))
+          .split('\0')
+          .concat((await git(row.path, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0'))
+          .filter(Boolean),
+      ),
+    ].sort();
   async function review(id) {
     const row = await tree(id),
-      names = [
-        ...new Set(
-          (await git(row.path, ['diff', '--name-only', '-z', row.baseSha, '--']))
-            .split('\0')
-            .concat((await git(row.path, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0'))
-            .filter(Boolean),
-        ),
-      ].sort();
+      names = await changedNames(row);
     if (names.length > 1000) throw Error('This change has over 1,000 files. Review it using Git before applying.');
     const manifest = [];
     let extras = '';
@@ -466,6 +468,14 @@ function createWorkspaceService(directory, options = {}) {
       manifest.push({ name, fingerprint });
     }
     const patch = await git(row.path, ['diff', '--no-ext-diff', '--no-textconv', row.baseSha, '--']);
+    // Other unaccepted tasks from the same project that changed the same files may conflict on accept.
+    const overlaps = [];
+    if (row.state === 'active')
+      for (const other of (await state()).worktrees) {
+        if (other.id === row.id || other.state !== 'active' || other.root !== row.root) continue;
+        const shared = (await changedNames(other).catch(() => [])).filter((name) => names.includes(name));
+        if (shared.length) overlaps.push({ id: other.id, files: shared.slice(0, 20) });
+      }
     return {
       id: row.id,
       cwd: row.cwd,
@@ -477,6 +487,8 @@ function createWorkspaceService(directory, options = {}) {
       diff: (patch + extras).slice(0, 200000),
       truncated: patch.length + extras.length > 200000,
       prUrl: row.prUrl || '',
+      overlaps,
+      conflicts: row.conflicts || [],
     };
   }
   async function snapshot(row, title) {
@@ -499,6 +511,25 @@ function createWorkspaceService(directory, options = {}) {
     await git(row.path, ['update-ref', 'refs/atlas/snapshots/' + row.id, commit]);
     return commit;
   }
+  const unmerged = async (folder) =>
+    (await git(folder, ['diff', '--name-only', '--diff-filter=U']).catch(() => ''))
+      .split(/\r?\n/)
+      .map((name) => name.trim())
+      .filter(Boolean);
+  // The project's current commit, as long as it still builds on the task's starting commit.
+  async function movedOn(row) {
+    const head = await git(row.root, ['rev-parse', 'HEAD']);
+    if (head === row.baseSha) return head;
+    const ancestor = await git(row.root, ['merge-base', '--is-ancestor', row.baseSha, head]).then(
+      () => true,
+      () => false,
+    );
+    if (!ancestor)
+      throw Error(
+        'The original branch no longer contains the commit this task started from (it was rebased, reset or switched). Review and merge the isolated checkout manually.',
+      );
+    return head;
+  }
   async function reviewAction(request) {
     return serial(async () => {
       const row = await tree(request.id);
@@ -518,29 +549,86 @@ function createWorkspaceService(directory, options = {}) {
       }
       if (!latest.files.length) throw Error('There are no changes to apply.');
       if (request.action === 'accept') {
-        if (
-          (await git(row.root, ['rev-parse', 'HEAD'])) !== row.baseSha ||
-          (await git(row.root, ['status', '--porcelain'])).trim()
-        )
-          throw Error(
-            'The original checkout changed. Review and merge the isolated checkout manually to preserve your work.',
-          );
+        if ((await git(row.root, ['status', '--porcelain'])).trim())
+          throw Error('The original checkout has uncommitted changes. Commit or stash them, then accept again.');
+        // Files an update left conflicted must be resolved before they can reach the project.
+        for (const name of row.conflicts || []) {
+          const text = await fs.readFile(path.join(row.path, name), 'utf8').catch(() => '');
+          if (/^<{7} |^>{7} /m.test(text)) throw Error('Conflict markers remain in ' + name + '. Resolve them first.');
+        }
+        const head = await movedOn(row);
         row.snapshot = await snapshot(row, 'Apply reviewed ATLAS changes');
         if ((await review(row.id)).token !== request.token)
           throw Error('Files changed while preparing the commit. Review again.');
-        await command('git', [
-          '-C',
-          row.root,
-          '-c',
-          'user.name=ATLAS',
-          '-c',
-          'user.email=atlas@localhost',
-          'cherry-pick',
-          row.snapshot,
-        ]);
+        // The project may have moved on (another accepted task, your own commits): a normal
+        // 3-way cherry-pick applies the task on top. On conflict the project is left unchanged.
+        try {
+          await command('git', [
+            '-C',
+            row.root,
+            '-c',
+            'user.name=ATLAS',
+            '-c',
+            'user.email=atlas@localhost',
+            'cherry-pick',
+            row.snapshot,
+          ]);
+        } catch (error) {
+          const conflicts = await unmerged(row.root);
+          await git(row.root, ['cherry-pick', '--abort']).catch(() => {});
+          if (!conflicts.length) throw error;
+          throw Error(
+            'These changes conflict with commits made since the task started, in: ' +
+              conflicts.join(', ') +
+              '. Your project was left unchanged. Use Update task checkout to bring the task up to date, resolve the conflicts there, then review and accept again.',
+          );
+        }
         row.state = 'accepted';
+        row.conflicts = [];
         await save();
-        return { state: row.state, message: 'Reviewed changes applied as a Git commit in the original project.' };
+        return {
+          state: row.state,
+          message:
+            'Reviewed changes applied as a Git commit in the original project' +
+            (head !== row.baseSha ? ', on top of commits made since the task started.' : '.'),
+        };
+      }
+      if (request.action === 'update') {
+        const head = await movedOn(row);
+        if (head === row.baseSha)
+          return { state: row.state, message: 'This task already starts from the latest project commit.' };
+        // Keep a recovery snapshot, then rebuild the checkout on the latest commit and re-apply the
+        // task's changes. Conflicts stay in the task's own files as conflict markers.
+        row.snapshot = await snapshot(row, 'ATLAS task before updating to the latest project');
+        await git(row.path, ['reset', '--hard']);
+        await git(row.path, ['clean', '-fd']);
+        await git(row.path, ['checkout', '--detach', head]);
+        let conflicts = [];
+        try {
+          await git(row.path, ['cherry-pick', '--no-commit', row.snapshot]);
+        } catch (error) {
+          conflicts = await unmerged(row.path);
+          if (!conflicts.length) {
+            await git(row.path, ['cherry-pick', '--abort']).catch(() => {});
+            await git(row.path, ['reset', '--hard', row.baseSha]).catch(() => {});
+            await git(row.path, ['checkout', row.snapshot, '--', '.']).catch(() => {});
+            throw error;
+          }
+        }
+        await git(row.path, ['cherry-pick', '--quit']).catch(() => {});
+        await git(row.path, ['reset']);
+        row.baseSha = head;
+        row.conflicts = conflicts;
+        await save();
+        return {
+          state: row.state,
+          conflicts,
+          message: conflicts.length
+            ? 'Task checkout moved to the latest project commit with conflicts in: ' +
+              conflicts.join(', ') +
+              '. Resolve the conflict markers in the task checkout (or send a Colab follow-up asking to resolve them), then review and accept. The previous state is saved as a recovery snapshot.'
+            : 'Task checkout moved to the latest project commit with its changes re-applied. Review again before accepting.',
+        };
       }
       if (request.action === 'pull-request') {
         const remote = await git(row.root, ['remote', 'get-url', 'origin']);
