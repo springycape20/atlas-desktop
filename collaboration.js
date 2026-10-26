@@ -40,6 +40,31 @@ function cleanReproduction(value) {
   };
   return result.steps || result.command || result.observed ? result : null;
 }
+// A builder's plan for a large task: 3–8 ordered milestones, each with its own criteria and an
+// optional check command. ATLAS numbers them; an empty or missing list means no split.
+function cleanMilestones(value) {
+  if (value === undefined || value === null || (Array.isArray(value) && !value.length)) return null;
+  if (!Array.isArray(value) || value.length < 3 || value.length > 8) throw Error('Use 3 to 8 milestones.');
+  return value.map((row, i) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) throw Error('Each milestone needs a title.');
+    const title = typeof row.title === 'string' ? row.title.trim() : '';
+    const criteria = (Array.isArray(row.criteria) ? row.criteria : [])
+      .map((item) => (typeof item === 'string' ? item : typeof item?.text === 'string' ? item.text : ''))
+      .map((text) => text.trim())
+      .filter(Boolean);
+    if (!title || title.length > 200) throw Error('Each milestone needs a short title.');
+    if (!criteria.length || criteria.length > 6 || criteria.some((text) => text.length > 1500))
+      throw Error('Each milestone needs 1 to 6 acceptance criteria.');
+    const id = 'M' + (i + 1);
+    return {
+      id,
+      title,
+      goal: typeof row.goal === 'string' ? row.goal.trim().slice(0, 1500) : '',
+      criteria: criteria.map((text, n) => ({ id: id + '.' + (n + 1), text })),
+      check: typeof row.check === 'string' ? row.check.trim().slice(0, 500) : '',
+    };
+  });
+}
 function parseVerdict(value) {
   const raw = String(value || '').trim(),
     match = [...raw.matchAll(/^[ \t*_\x60]*ATLAS_COLAB_STATUS\b/gm)].at(-1),
@@ -104,6 +129,7 @@ function parseVerdict(value) {
         disputed: [...disputes.keys()],
         disputes: [...disputes].map(([id, reason]) => ({ id, reason })),
         reproduction: cleanReproduction(data.reproduction),
+        milestones: cleanMilestones(data.milestones),
         userResponse: typeof data.userResponse === 'string' ? data.userResponse.slice(0, 60000) : '',
         handover: efficiency.cleanHandover(data.handover),
         output: raw
