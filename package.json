@@ -19,7 +19,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:dispute-ui": "electron tests/colab-dispute.browser.cjs",
-    "test:settings-ui": "electron tests/settings.browser.cjs"
+    "test:settings-ui": "electron tests/settings.browser.cjs",
+    "test:release-ui": "electron tests/release-screens.browser.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0",

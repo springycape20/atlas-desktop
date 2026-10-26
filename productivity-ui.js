@@ -844,17 +844,19 @@
           card.dataset.approvalId = request.id;
           if (request.permissionScope) card.append(el('small', request.permissionScope));
           card.append(el('h3', request.provider + ' · ' + request.title));
+          let target = '';
           try {
-            const data = JSON.parse(request.details.split('\n\n')[0]),
-              target = [data.mode, data.path || data.executable || data.name || data.command]
-                .filter(Boolean)
-                .join(' · ');
-            if (target) {
-              const brief = el('p', target, 'approval-target');
-              brief.title = target;
-              card.append(brief);
-            }
-          } catch {}
+            const data = JSON.parse(request.details.split('\n\n')[0]);
+            target = [data.mode, data.path || data.executable || data.name || data.command].filter(Boolean).join(' · ');
+          } catch {
+            // ATLAS's own command requests (reproductions, milestone checks) are plain text; show the command.
+            target = (String(request.details || '').match(/^Command: (.+)$/m) || [])[1] || '';
+          }
+          if (target) {
+            const brief = el('p', target, 'approval-target');
+            brief.title = target;
+            card.append(brief);
+          }
           const disclosure = el('details', undefined, 'approval-request-details');
           disclosure.append(el('summary', 'Request details'), el('pre', request.details));
           card.append(disclosure);
