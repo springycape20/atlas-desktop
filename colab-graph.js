@@ -23,7 +23,8 @@
     plan_revise: 'Revise milestones',
   };
   function stageLabel(row, phase, index) {
-    const name = row.milestone === 'final' && phase === 'review' ? 'Final review' : phaseName[phase] || phase;
+    const name =
+      (row.milestone === 'final' || row.acceptance) && phase === 'review' ? 'Final review' : phaseName[phase] || phase;
     return (/^M\d+$/.test(row.milestone || '') ? row.milestone + ' · ' : '') + name + ' · ' + (index + 1);
   }
   // Older handovers list decisions as plain strings; newer ones carry the stated reason.

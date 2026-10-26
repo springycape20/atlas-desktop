@@ -737,9 +737,12 @@ function createCollaboration({
         // Auto: the first build may return a milestone plan instead of implementing.
         offerSplit = canSplit && splitting === 'auto' && target === 'build' && !state.milestones,
         scope = planning ? 'plan' : scopeKey(),
-        // The final acceptance review starts a fresh reviewer session instead of resuming milestone reviews.
-        sessionKey = state.finalStage ? 'finalReviewSession' : 'reviewSession',
+        // Final acceptance reviews (after milestones, or after fix cycles) start a fresh reviewer session
+        // instead of resuming the one that reviewed earlier versions.
+        sessionKey = state.finalStage || state.freshReview ? 'finalReviewSession' : 'reviewSession',
         resumesSession = reviewing || target === 'plan_review';
+      // Whether this review continues a reviewer session that already saw earlier versions of the work.
+      if (reviewing && !clarifying) state.lastReviewResumed = Boolean(state[sessionKey]);
       const provider = clarifying
         ? state.clarify.provider
         : reviewing || phase === 'proposal_second' || target === 'reproduce' || target === 'plan_review'
@@ -842,7 +845,9 @@ function createCollaboration({
         : proposing
           ? 'Give an independent proposal for the original request; do not edit files. Proposals do not approve implementation.'
           : reviewing
-            ? 'You are the final reviewer, not a second implementer. Verify the current work against the fixed acceptance criteria. Approve with ready when required work is satisfied. Do not edit files. Only concrete in-scope blockers can request a fix. After the first review, inspect only the open issues and actual regressions introduced by the fix; new regressions require regression:true and specific evidence. Do not reopen resolved issues or optional improvements.'
+            ? state.freshReview
+              ? 'You are the final acceptance reviewer, not a second implementer, and you have not seen earlier reviews of this work. Earlier fix cycles were approved by another review session; check the whole original request against every fixed criterion using the full diff, not only the latest fixes. Approve with ready when required work is satisfied. Do not edit files. Raise only concrete in-scope blockers with specific evidence; optional improvements stay in notes.'
+              : 'You are the final reviewer, not a second implementer. Verify the current work against the fixed acceptance criteria. Approve with ready when required work is satisfied. Do not edit files. Only concrete in-scope blockers can request a fix. After the first review, inspect only the open issues and actual regressions introduced by the fix; new regressions require regression:true and specific evidence. Do not reopen resolved issues or optional improvements.'
             : target === 'decompose'
               ? 'Split the original request into 3 to 8 ordered milestones before anyone implements it. Do not edit files. Derive a short list of acceptance criteria for the whole request in the criteria array. ' +
                 milestoneShape +
@@ -1095,6 +1100,7 @@ function createCollaboration({
           ...(reasoning.length ? { reasoning: reasoning.map(({ provider, text }) => ({ provider, text })) } : {}),
           ...(steps.list().length ? { steps: steps.list(), stepsOmitted: steps.omitted } : {}),
           ...(scope ? { milestone: scope } : {}),
+          ...(reviewing && state.freshReview ? { acceptance: true } : {}),
           metrics: {
             promptCharacters: effectivePrompt.length,
             // Sent as provider instructions instead of in the prompt (cacheable, counted separately).
@@ -1303,16 +1309,33 @@ function createCollaboration({
               progress('All milestones accepted; starting the final acceptance review.');
               startFinalReview();
             }
+          } else if (state.lastReviewResumed && !state.milestones && !state.freshReviewDone) {
+            // The approving reviewer had reviewed earlier versions in this session and was told to check
+            // only its own blockers. One fresh reviewer checks the whole task before it completes.
+            state.freshReview = true;
+            state.freshReviewDone = true;
+            state.finalReviewSession = '';
+            state.phase = 'review';
+            progress('The fixes were approved; a fresh reviewer is checking the whole task before it completes.');
           } else {
+            state.freshReview = false;
             state.outcome = 'completed';
             state.reason = 'The final reviewer accepted the current work against the original request.';
           }
         } else {
+          // A fresh acceptance review may raise blockers the earlier reviewer missed, once; after
+          // those fixes, its own session decides like any later review.
+          const freshNow = state.freshReview === true;
+          if (freshNow) {
+            state.freshReview = false;
+            state.reviewSession = state.finalReviewSession || state.reviewSession;
+          }
           const criteria = new Set(state.criteria.map((row) => row.id)),
             old = new Set(state.openIssues.map((row) => row.id)),
             issues = verdict.issues.filter((issue) => !overruled(issue.id));
           const invalid = issues.find((issue) => !criteria.has(issue.criterion)),
-            newScope = state.reviewed && issues.find((issue) => !old.has(issue.id) && issue.regression !== true);
+            newScope =
+              state.reviewed && !freshNow && issues.find((issue) => !old.has(issue.id) && issue.regression !== true);
           // A blocker the builder disputed and the reviewer kept after reading the reason goes to the user.
           const upheld = (state.disputes || [])
             .map((dispute) => ({ dispute, issue: issues.find((row) => row.id === dispute.id) }))
@@ -1353,11 +1376,12 @@ function createCollaboration({
           else {
             // Only a new low in blocker count is progress; swapping regressions cannot reset the stall guard.
             state.stalls =
-              state.reviewed && issues.length >= (state.bestOpenCount ?? state.openIssues.length)
+              !freshNow && state.reviewed && issues.length >= (state.bestOpenCount ?? state.openIssues.length)
                 ? state.stalls + 1
                 : 0;
-            state.bestOpenCount = Math.min(state.bestOpenCount ?? Infinity, issues.length);
+            state.bestOpenCount = freshNow ? issues.length : Math.min(state.bestOpenCount ?? Infinity, issues.length);
             const unchanged =
+              !freshNow &&
               !readonly &&
               state.reviewed &&
               state.lastRevision?.before &&
@@ -1412,6 +1436,9 @@ function createCollaboration({
                   ' of ' +
                   state.milestones.length +
                   '.'
+                : '') +
+              (state.freshReview
+                ? ' The fixes were approved, but the fresh acceptance review of the whole task did not run.'
                 : '');
     const accounted = [
       ...reports,

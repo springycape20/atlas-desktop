@@ -412,8 +412,12 @@ test('later reviewer calls resume only their own read-only session', async () =>
     },
   });
   assert.equal((await run({ task: 'Build' })).outcome, 'completed');
-  assert.equal(reviews[0].continued, false);
-  assert.equal(reviews.at(-1).continued, true);
+  const reviewPasses = reviews.filter((options) => options.phase === 'review');
+  assert.equal(reviewPasses[0].continued, false);
+  assert.equal(reviewPasses[1].continued, true, 'the review after the fix resumes its own session');
+  // Approval after a fix cycle is confirmed by one fresh acceptance review with the full diff.
+  assert.equal(reviewPasses.length, 3);
+  assert.equal(reviewPasses[2].continued, false);
 });
 test('project map ranks before truncation and excludes credential filenames', async (t) => {
   const root = await folder(t),
