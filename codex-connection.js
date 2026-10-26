@@ -335,7 +335,8 @@ class CodexConnection {
         ...(settings.codexModel ? { model: settings.codexModel } : {}),
         ...(settings.effort ? { effort: settings.effort } : {}),
         // Codex only produces reasoning summaries when asked; with the setting off nothing changes.
-        ...(settings.showReasoning === true ? { summary: 'auto' } : {}),
+        // Live checks found "auto" returns empty summaries and "concise" only a heading, so ask for "detailed".
+        ...(settings.showReasoning === true ? { summary: 'detailed' } : {}),
         input: [{ type: 'text', text: prompt }],
       }).then(
         (result) => {

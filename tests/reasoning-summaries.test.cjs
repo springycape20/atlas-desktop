@@ -10,7 +10,7 @@ const reasoningItem = {
   summary: ['Checking how totals are rounded', { type: 'summary_text', text: 'Floats drift; use cents' }],
   content: ['RAW CHAIN OF THOUGHT'],
 };
-function codex(showReasoning) {
+function codex(showReasoning, items = [reasoningItem]) {
   const connection = new CodexConnection('unused'),
     calls = [],
     activity = [];
@@ -20,7 +20,8 @@ function codex(showReasoning) {
     if (method === 'thread/start') return { thread: { id: 'thread-1', ephemeral: true } };
     if (method === 'turn/start') {
       queueMicrotask(() => {
-        connection.receive({ method: 'item/completed', params: { threadId: params.threadId, item: reasoningItem } });
+        for (const item of items)
+          connection.receive({ method: 'item/completed', params: { threadId: params.threadId, item } });
         connection.receive({
           method: 'turn/completed',
           params: { threadId: params.threadId, turn: { id: 'turn', status: 'completed' } },
@@ -47,7 +48,7 @@ function codex(showReasoning) {
 test('Codex is asked for reasoning summaries only when the setting is on, and only summaries are shown', async () => {
   const on = codex(true);
   await on.run();
-  assert.equal(on.calls.find((row) => row.method === 'turn/start').params.summary, 'auto');
+  assert.equal(on.calls.find((row) => row.method === 'turn/start').params.summary, 'detailed');
   const shown = on.activity.filter((event) => event.kind === 'reasoning');
   assert.equal(shown.length, 1);
   assert.equal(shown[0].text, 'Checking how totals are rounded\n\nFloats drift; use cents');
@@ -56,6 +57,25 @@ test('Codex is asked for reasoning summaries only when the setting is on, and on
   await off.run();
   assert.equal('summary' in off.calls.find((row) => row.method === 'turn/start').params, false);
   assert.equal(off.activity.filter((event) => event.kind === 'reasoning').length, 0);
+});
+// Shapes recorded from codex-cli 0.164 on a live turn: "auto" sent reasoning items with an empty
+// summary, while "detailed" sent one string holding a bold heading and a paragraph.
+test('live-shaped Codex summaries are shown, and empty ones are skipped', async () => {
+  const detailed = {
+      type: 'reasoning',
+      id: 'rs_detailed',
+      summary: [
+        '**Calculating powers of three**\n\nI need to check the value of 3^20, which equals 3486784401. That is larger than 2147483648.',
+      ],
+      content: [],
+    },
+    empty = { type: 'reasoning', id: 'rs_empty', summary: [], content: [] };
+  const h = codex(true, [empty, detailed]);
+  await h.run();
+  const shown = h.activity.filter((event) => event.kind === 'reasoning');
+  assert.equal(shown.length, 1, 'an empty summary produces no row');
+  assert.match(shown[0].text, /^\*\*Calculating powers of three\*\*\n\nI need to check/);
+  assert.equal(shown[0].id, 'thread-1:rs_detailed');
 });
 test('Claude thinking blocks are shown only when the setting is on; redacted thinking is skipped', () => {
   const message = {
