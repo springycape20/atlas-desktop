@@ -26,6 +26,48 @@
     const name = row.milestone === 'final' && phase === 'review' ? 'Final review' : phaseName[phase] || phase;
     return (/^M\d+$/.test(row.milestone || '') ? row.milestone + ' · ' : '') + name + ' · ' + (index + 1);
   }
+  // Older handovers list decisions as plain strings; newer ones carry the stated reason.
+  const decisionText = (value) => (typeof value === 'string' ? value : text(value?.decision, 500));
+  const strings = (rows, limit) =>
+    (Array.isArray(rows) ? rows.filter((row) => typeof row === 'string') : []).slice(0, limit);
+  // A stage's public summary plus the rationale the provider stated, clearly marked as unverified.
+  function stageDetail(row) {
+    const h = row.handover,
+      section = (title, rows) => (rows.length ? title + ':\n' + rows.map((value) => '- ' + value).join('\n') : '');
+    const parts = h
+      ? [
+          section(
+            'Decisions',
+            (Array.isArray(h.decisions) ? h.decisions : [])
+              .slice(0, 8)
+              .map(
+                (value) =>
+                  text(decisionText(value), 500) + (value?.reason ? ' (because ' + text(value.reason, 500) + ')' : ''),
+              )
+              .filter((value) => value.trim()),
+          ),
+          section(
+            'Assumptions',
+            strings(h.assumptions, 8).map((value) => text(value, 500)),
+          ),
+          section(
+            'Alternatives considered',
+            strings(h.alternatives, 8).map((value) => text(value, 500)),
+          ),
+          section(
+            'Risks',
+            strings(h.risks, 8).map((value) => text(value, 500)),
+          ),
+          ['high', 'medium', 'low'].includes(h.confidence)
+            ? 'Confidence: ' + h.confidence + (h.confidenceReason ? ' - ' + text(h.confidenceReason, 500) : '')
+            : '',
+        ].filter(Boolean)
+      : [];
+    return (
+      text(h?.summary || row.output, 2400) +
+      (parts.length ? '\n\nModel-reported rationale (not verified by ATLAS):\n' + parts.join('\n\n') : '')
+    );
+  }
   function build({ task = '', reports = [], state = {}, active = null, outcome = '', verification = null } = {}) {
     const nodes = [],
       edges = [],
@@ -95,7 +137,7 @@
         phase,
         provider: row.provider === 'claude' ? 'claude' : 'codex',
         label: stageLabel(row, phase, index),
-        detail: text(row.handover?.summary || row.output, 2400),
+        detail: stageDetail(row),
         status: row.decision || 'reported',
         origin: 'provider reported',
         rank: index - first + 1,
@@ -213,7 +255,7 @@
         phase,
         provider: row.provider === 'claude' ? 'claude' : 'codex',
         label: stageLabel(row, phase, index),
-        detail: text(row.handover?.summary || row.output, 2400),
+        detail: stageDetail(row),
         status: row.decision || 'reported',
         origin: 'provider reported',
         rank: index - first + 1,
@@ -241,8 +283,10 @@
         const child = node({
           id: id + ':decision:' + i,
           kind: 'decision',
-          label: text(decision, 100),
-          detail: text(decision),
+          label: text(decisionText(decision), 100),
+          detail:
+            text(decisionText(decision)) +
+            (decision?.reason ? '\nReason (model-reported): ' + text(decision.reason, 500) : ''),
           status: 'reported',
           origin: 'provider reported',
           provider: row.provider,
@@ -406,9 +450,12 @@
         ? {
             provider: last.provider,
             phase: last.phase,
-            decisions: (last.handover?.decisions || []).slice(0, 4).map((value) => text(value, 160)),
+            decisions: (last.handover?.decisions || []).slice(0, 4).map((value) => text(decisionText(value), 160)),
             files: (last.handover?.changedFiles || []).slice(0, 8).map((value) => text(value, 140)),
             nextActions: (last.handover?.nextActions || []).slice(0, 4).map((value) => text(value, 160)),
+            // Stated risks and assumptions let the next stage check or answer them.
+            risks: strings(last.handover?.risks, 2).map((value) => text(value, 160)),
+            assumptions: strings(last.handover?.assumptions, 2).map((value) => text(value, 160)),
           }
         : null,
     };
@@ -421,6 +468,8 @@
         snapshot.lastHandover.files = snapshot.lastHandover.files.slice(0, 3);
         snapshot.lastHandover.decisions = snapshot.lastHandover.decisions.slice(0, 2);
         snapshot.lastHandover.nextActions = [];
+        snapshot.lastHandover.risks = snapshot.lastHandover.risks.slice(0, 1);
+        snapshot.lastHandover.assumptions = [];
       }
       value = JSON.stringify(snapshot);
     }

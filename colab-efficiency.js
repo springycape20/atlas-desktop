@@ -111,12 +111,32 @@
   }
   function cleanHandover(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const result = { summary: excerpt(typeof value.summary === 'string' ? value.summary : '', 2000) };
-    for (const key of ['decisions', 'changedFiles', 'checks', 'nextActions'])
-      result[key] = (Array.isArray(value[key]) ? value[key] : [])
-        .filter((item) => typeof item === 'string')
-        .slice(0, 20)
-        .map((item) => excerpt(item, 500));
+    const result = { summary: excerpt(typeof value.summary === 'string' ? value.summary : '', 2000) },
+      list = (key, size) =>
+        (Array.isArray(value[key]) ? value[key] : [])
+          .filter((item) => typeof item === 'string' && item.trim())
+          .slice(0, size)
+          .map((item) => excerpt(item.trim(), 500));
+    for (const key of ['changedFiles', 'checks', 'nextActions']) result[key] = list(key, 20);
+    // Decisions carry the stated reason; plain strings from older handovers get an empty reason.
+    result.decisions = (Array.isArray(value.decisions) ? value.decisions : [])
+      .map((item) =>
+        typeof item === 'string'
+          ? { decision: item, reason: '' }
+          : item && typeof item.decision === 'string'
+            ? { decision: item.decision, reason: typeof item.reason === 'string' ? item.reason : '' }
+            : null,
+      )
+      .filter((row) => row?.decision.trim())
+      .slice(0, 20)
+      .map((row) => ({ decision: excerpt(row.decision.trim(), 500), reason: excerpt(row.reason.trim(), 500) }));
+    // Model-reported rationale for the shared graph: what was assumed, rejected and risky.
+    for (const key of ['assumptions', 'alternatives', 'risks']) result[key] = list(key, 8);
+    if (['high', 'medium', 'low'].includes(value.confidence)) {
+      result.confidence = value.confidence;
+      if (typeof value.confidenceReason === 'string' && value.confidenceReason.trim())
+        result.confidenceReason = excerpt(value.confidenceReason.trim(), 500);
+    }
     return result;
   }
   function stageUsage(report, index) {
