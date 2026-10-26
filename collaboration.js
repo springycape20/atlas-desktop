@@ -2,6 +2,7 @@ const answer = require('./colab-answer');
 const efficiency = require('./colab-efficiency');
 const taskGraph = require('./colab-graph');
 const reproductionRunner = require('./reproduction-runner');
+const { createStepCapture } = require('./step-timeline');
 const { createHash } = require('node:crypto');
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']),
   MODES = new Set(['build', 'plan', 'debug', 'compare']),
@@ -749,8 +750,11 @@ function createCollaboration({
         : { ...passChosen };
       // Reasoning summaries this pass's provider exposed (only with the setting on). They go into this
       // pass's report and graph node and are never put into any prompt.
-      const reasoning = [];
+      const reasoning = [],
+        // The tool steps this pass took, kept for its report and graph node and never put into a prompt.
+        steps = createStepCapture();
       passSettings.onActivity = (event) => {
+        if (event?.kind !== 'reasoning' && event?.provider === provider) steps.add(event);
         if (
           event?.kind === 'reasoning' &&
           event.provider === provider &&
@@ -1063,6 +1067,7 @@ function createCollaboration({
           userResponse: verdict.userResponse || '',
           handover: verdict.handover || null,
           ...(reasoning.length ? { reasoning: reasoning.map(({ provider, text }) => ({ provider, text })) } : {}),
+          ...(steps.list().length ? { steps: steps.list(), stepsOmitted: steps.omitted } : {}),
           ...(scope ? { milestone: scope } : {}),
           metrics: {
             promptCharacters: effectivePrompt.length,

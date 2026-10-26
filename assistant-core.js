@@ -39,6 +39,7 @@ function createDecoder(provider, onText, onActivity = () => {}, { reasoning = fa
             const activity = {
               id: 'claude:' + part.id,
               kind: part.name === 'TodoWrite' ? 'plan' : part.name === 'Bash' ? 'command' : 'activity',
+              tool: String(part.name || ''),
               status: 'running',
               text: String(
                 part.name === 'TodoWrite'

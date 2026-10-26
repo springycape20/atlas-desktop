@@ -170,6 +170,7 @@ function integrations() {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:desktop-permissions', value);
     },
     activity: (job, event) => {
+      for (const listener of job.passListeners || []) listener({ ...event, tool: 'atlas-gateway' });
       job.events.push({ ...event, at: Date.now() });
       job.events = job.events.slice(-100);
       emitJobs();
@@ -860,6 +861,18 @@ function findReferencedProviderHistory(prompt) {
   return providerHistory.request('search', { prompt });
 }
 async function runProvider(provider, prompt, cwd, settings, previousSessionId = '', onText = () => {}) {
+  const job = jobContext.getStore(),
+    listener = settings?.onActivity;
+  // ATLAS gateway actions reach the running pass through its job rather than the provider stream.
+  // Compare proposals run two passes at once, so the job keeps a set of listeners.
+  if (job && listener) (job.passListeners ||= new Set()).add(listener);
+  try {
+    return await runProviderTurn(provider, prompt, cwd, settings, previousSessionId, onText);
+  } finally {
+    job?.passListeners?.delete(listener);
+  }
+}
+async function runProviderTurn(provider, prompt, cwd, settings, previousSessionId, onText) {
   // onActivity lets one Colab pass capture its own activity (such as reasoning summaries) for its report.
   const { stageSignal, onActivity = () => {}, ...providerSettings } = settings;
   settings = providerSettings;

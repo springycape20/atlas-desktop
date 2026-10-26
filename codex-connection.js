@@ -200,6 +200,7 @@ class CodexConnection {
       t.activity({
         id: p.threadId + ':' + item.id,
         kind: item.type === 'commandExecution' ? 'command' : item.type === 'fileChange' ? 'files' : 'activity',
+        tool: item.type,
         text: String(text || item.type).slice(0, 1200),
         status: completed
           ? item.status === 'failed' || (Number.isInteger(item.exitCode) && item.exitCode !== 0)
