@@ -58,6 +58,7 @@
       draft: '',
       messages: [],
       preset: previous?.preset || 'balanced',
+      milestones: previous?.milestones || 'auto',
       rolesExplicit: previous?.rolesExplicit === true,
       adaptiveEffort: previous?.adaptiveEffort === true,
       reuseChecks: previous?.reuseChecks === true,
@@ -86,7 +87,7 @@
     .colab-workspace{min-width:0;display:grid;grid-template-columns:210px minmax(0,1fr);min-height:calc(100vh - 155px);border:1px solid #29414b;border-radius:18px;overflow:hidden;background:#0c171e}
     .colab-chats{padding:18px 12px;border-right:1px solid #243942;background:#0a141a}.colab-chats>button{width:100%;margin-bottom:18px}.colab-chat-list{display:flex;flex-direction:column;gap:6px;max-height:65vh;overflow:auto}.colab-chat-item{border:1px solid transparent;background:transparent;color:#a7bdc5;border-radius:9px;padding:12px 10px;text-align:left;cursor:pointer;overflow:hidden}.colab-chat-item[aria-current=true]{background:#183039;border-color:#34505c;color:#e0f1f3}.colab-chat-item span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}.colab-chat-item small{display:block;margin-top:6px;color:#81a5ad;font-size:10px}
     .colab-chat-main{min-width:0;display:flex;flex-direction:column;padding:24px 28px;max-height:calc(100vh - 155px)}.colab-chat-header{display:flex;justify-content:space-between;gap:14px;align-items:center}@media(max-width:1100px){.colab-chat-header>span.session-chip{display:none}}.colab-chat-header h1{margin:0;font:600 23px Inter,Segoe UI,sans-serif}.colab-chat-header p{font:11px/1.6 Inter,Segoe UI,sans-serif;color:#8faab5;margin:6px 0 0}.colab-config{margin-top:18px;border-bottom:1px solid #253c45;padding-bottom:15px}.colab-config summary{cursor:pointer;color:#a8cdd4;font-size:12px}.colab-config-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}.colab-config .field{margin:12px 0 0}.colab-folder-row{display:flex;align-items:center;gap:12px;margin-top:14px}.colab-folder-row span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px Consolas,monospace;color:#8faab5}.colab-folder-row button{flex:none}
-    .colab-transcript{flex:1;min-height:180px;overflow:auto;padding:24px 2px;scroll-behavior:smooth}.colab-empty{padding:40px 8px;text-align:center;color:#8ca8b3;font:13px/1.8 Inter,Segoe UI,sans-serif}.colab-empty strong{display:block;color:#d3e7eb;font-size:22px;font-weight:500;margin-bottom:9px}.colab-message{margin-bottom:22px;font:13px/1.8 Inter,Segoe UI,sans-serif;color:#d1e1e6}.colab-message strong{display:block;margin-bottom:7px;color:#88cad3;font-size:11px}.colab-message p{white-space:pre-wrap;overflow-wrap:anywhere;margin:0}.colab-message.user{max-width:90%;margin-left:auto;background:#1a3039;padding:12px 16px;border-radius:12px 12px 3px 12px}.colab-message.error{color:#f0c48f}.colab-composer{padding-top:12px;border-top:1px solid #253c45}.colab-composer textarea{display:block;width:100%;min-height:72px;max-height:170px;resize:vertical;border:1px solid #36505a;border-radius:12px;background:#08141b;color:#e0edf0;padding:14px;font:13px/1.6 Inter,Segoe UI,sans-serif}.colab-composer textarea:focus{outline:2px solid #70bfc8;outline-offset:2px}.colab-compose-footer{display:flex;align-items:center;gap:10px;margin-top:12px}.colab-compose-footer [role=status]{flex:1;color:#8faab5;font-size:11px;line-height:1.6}.colab-compose-footer button:disabled{opacity:.5;cursor:wait}
+    .colab-transcript{flex:1;min-height:180px;overflow:auto;padding:24px 2px;scroll-behavior:smooth}.colab-empty{padding:40px 8px;text-align:center;color:#8ca8b3;font:13px/1.8 Inter,Segoe UI,sans-serif}.colab-empty strong{display:block;color:#d3e7eb;font-size:22px;font-weight:500;margin-bottom:9px}.colab-message{margin-bottom:22px;font:13px/1.8 Inter,Segoe UI,sans-serif;color:#d1e1e6}.colab-message strong{display:block;margin-bottom:7px;color:#88cad3;font-size:11px}.colab-message p{white-space:pre-wrap;overflow-wrap:anywhere;margin:0}.colab-message.user{max-width:90%;margin-left:auto;background:#1a3039;padding:12px 16px;border-radius:12px 12px 3px 12px}.colab-message.error{color:#f0c48f}.verify-badge{display:inline-block;margin-left:8px;padding:1px 8px;border:1px solid currentColor;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:.02em;vertical-align:1px;cursor:help}.verify-badge[data-level=passed]{color:#7fd1a6}.verify-badge[data-level=failed]{color:#f39a8b}.verify-badge[data-level=partial],.verify-badge[data-level=unverified]{color:#f0c48f}.colab-composer{padding-top:12px;border-top:1px solid #253c45}.colab-composer textarea{display:block;width:100%;min-height:72px;max-height:170px;resize:vertical;border:1px solid #36505a;border-radius:12px;background:#08141b;color:#e0edf0;padding:14px;font:13px/1.6 Inter,Segoe UI,sans-serif}.colab-composer textarea:focus{outline:2px solid #70bfc8;outline-offset:2px}.colab-compose-footer{display:flex;align-items:center;gap:10px;margin-top:12px}.colab-compose-footer [role=status]{flex:1;color:#8faab5;font-size:11px;line-height:1.6}.colab-compose-footer button:disabled{opacity:.5;cursor:wait}
     @media(max-width:1000px){.colab-workspace{grid-template-columns:160px minmax(0,1fr)}.colab-chat-main{padding:20px}.colab-config-grid{grid-template-columns:1fr}.colab-config[open]{max-height:38vh;overflow:auto}}
     @media(max-width:750px){.workspace-nav{flex-wrap:wrap}.workspace-divider{display:none}.colab-workspace{width:100%;display:flex;flex-direction:column;min-height:70vh}.colab-chats{border-right:0;border-bottom:1px solid #243942;padding:12px}.colab-chats>button{width:auto;margin:0 0 10px}.colab-chat-list{flex-direction:row;max-height:75px}.colab-chat-item{min-width:130px;max-width:180px}.colab-chat-main{max-height:none;min-height:65vh;padding:18px}.colab-transcript{max-height:55vh}.colab-chat-header{align-items:flex-start}.colab-chat-header h1{font-size:21px}}
   `;
@@ -166,7 +167,7 @@
   const efficiencyControls = document.createElement('div');
   efficiencyControls.className = 'colab-config-grid';
   efficiencyControls.innerHTML =
-    '<label class="field">Efficiency<select id="colabPreset"><option value="economy">Economy · concise handovers and focused review</option><option value="balanced">Balanced · normal implementation and review</option><option value="thorough">Thorough · independent proposals and deeper review</option></select><small>Presets keep your models and shared effort. Explicit role choices are respected.</small></label><label class="field">Token warning (optional)<input id="colabTokenWarning" type="number" min="1" step="1" placeholder="Unlimited"><small>Pauses between stages using reported usage plus rough text estimates. Tool/context overhead may add usage. Resume grants another interval.</small></label><label class="toggle-row"><span>Adapt shared effort for blockers<small>Opt in to raise both providers to High for unresolved blockers; higher manual effort stays unchanged.</small></span><input id="colabAdaptiveEffort" type="checkbox"></label><label class="toggle-row"><span>Reuse unchanged ATLAS checks<small>Opt in only for checks based on local files, not time, network or external state. Reuse needs a complete identical snapshot, commands and environment; incomplete scans always rerun.</small></span><input id="colabReuseChecks" type="checkbox"></label><label class="field">Acceptance criteria (optional)<textarea id="colabCriteria" rows="2" maxlength="4000" placeholder="One required outcome per line"></textarea></label><label class="field">Out of scope (optional)<textarea id="colabOutOfScope" rows="2" maxlength="2000" placeholder="What should stay outside this task?"></textarea></label>';
+    '<label class="field">Efficiency<select id="colabPreset"><option value="economy">Economy · concise handovers and focused review</option><option value="balanced">Balanced · normal implementation and review</option><option value="thorough">Thorough · independent proposals and deeper review</option></select><small>Presets keep your models and shared effort. Explicit role choices are respected.</small></label><label class="field">Milestones<select id="colabMilestones"><option value="auto">Auto · the builder splits large build tasks</option><option value="on">On · plan milestones before every build task</option><option value="off">Off · always one build</option></select><small>Each milestone is built, checked and reviewed on its own, then a final review checks the whole task. Milestones without a check command are marked unverified.</small></label><label class="field">Token warning (optional)<input id="colabTokenWarning" type="number" min="1" step="1" placeholder="Unlimited"><small>Pauses between stages using reported usage plus rough text estimates. Tool/context overhead may add usage. Resume grants another interval.</small></label><label class="toggle-row"><span>Adapt shared effort for blockers<small>Opt in to raise both providers to High for unresolved blockers; higher manual effort stays unchanged.</small></span><input id="colabAdaptiveEffort" type="checkbox"></label><label class="toggle-row"><span>Reuse unchanged ATLAS checks<small>Opt in only for checks based on local files, not time, network or external state. Reuse needs a complete identical snapshot, commands and environment; incomplete scans always rerun.</small></span><input id="colabReuseChecks" type="checkbox"></label><label class="field">Acceptance criteria (optional)<textarea id="colabCriteria" rows="2" maxlength="4000" placeholder="One required outcome per line"></textarea></label><label class="field">Out of scope (optional)<textarea id="colabOutOfScope" rows="2" maxlength="2000" placeholder="What should stay outside this task?"></textarea></label>';
   panel.querySelector('#colabConfig').append(efficiencyControls);
   const efficiencyView = document.createElement('details');
   efficiencyView.className = 'colab-efficiency';
@@ -348,6 +349,7 @@
     renderEfficiency(chat);
     for (const [id, value] of [
       ['colabPreset', chat.preset || 'balanced'],
+      ['colabMilestones', chat.milestones || 'auto'],
       ['colabTokenWarning', chat.tokenWarning ?? ''],
       ['colabCriteria', chat.brief?.criteria || ''],
       ['colabOutOfScope', chat.brief?.outOfScope || ''],
@@ -433,7 +435,7 @@
     if (Array.isArray(job.events)) {
       const steps = new Map();
       for (const event of job.events.slice(-100)) {
-        const text = String(event.text || '').slice(0, 800);
+        const text = String(event.text || '').slice(0, event.kind === 'reasoning' ? 2000 : 800);
         if (!text) continue;
         const key = event.id ? event.provider + ':' + event.id : event.kind + ':' + text;
         steps.set(key, {
@@ -517,6 +519,23 @@
             run.openCommands = [...opened];
           }
         });
+      } else if (event.kind === 'reasoning') {
+        // Opt-in reasoning summaries stay collapsed and are labelled as the provider's own account.
+        const reasoning = document.createElement('details'),
+          heading = document.createElement('summary');
+        reasoning.className = 'task-command task-reasoning';
+        reasoning.open = (run.openCommands || []).includes(event.id);
+        heading.textContent =
+          (event.provider === 'claude' ? 'Claude thinking summary' : 'Codex reasoning summary') + ' · model-reported';
+        reasoning.append(heading, text);
+        row.append(reasoning);
+        reasoning.addEventListener('toggle', () => {
+          if (reasoning.isConnected) {
+            const opened = new Set(run.openCommands || []);
+            reasoning.open ? opened.add(event.id) : opened.delete(event.id);
+            run.openCommands = [...opened];
+          }
+        });
       } else if (event.kind === 'progress') {
         row.classList.add('task-progress');
         row.append(text);
@@ -524,7 +543,9 @@
       list.append(row);
     }
     note.className = 'colab-work-note';
-    note.textContent = 'Recent provider-reported actions and progress summaries.';
+    note.textContent = run.events.some((event) => event.kind === 'reasoning')
+      ? 'Recent provider-reported actions, progress and reasoning summaries. Reasoning summaries are what each model chose to report; ATLAS does not verify them.'
+      : 'Recent provider-reported actions and progress summaries.';
     details.append(summary, list, note);
     details.addEventListener('toggle', () => {
       if (details.isConnected) {
@@ -698,6 +719,8 @@
           message.content,
           message.at,
           JSON.stringify(message.attachments || []),
+          JSON.stringify(message.verification || null),
+          JSON.stringify(message.checkOffer || null),
           (comparisons.get(chat.id) || []).includes(message.id),
         ],
         () => {
@@ -721,6 +744,17 @@
             time.dateTime = new Date(message.at).toISOString();
             time.textContent = new Date(message.at).toLocaleString();
             label.append(time);
+          }
+          // What ATLAS itself verified; reviewer acceptance alone shows as Unverified.
+          if (message.role === 'assistant' && message.verification?.label) {
+            const badge = document.createElement('span');
+            badge.className = 'verify-badge';
+            badge.dataset.level = String(message.verification.level || '');
+            badge.textContent = message.verification.label;
+            badge.title = message.verification.reason || '';
+            badge.tabIndex = 0;
+            badge.setAttribute('aria-label', message.verification.label + '. ' + (message.verification.reason || ''));
+            label.append(badge);
           }
           article.append(label, content);
           if (message.role === 'assistant' && !message.error) {
@@ -749,6 +783,27 @@
             actions.append(copy, compare);
             article.append(actions);
           }
+          if (message.checkOffer && !message.checkOffer.answered && window.atlasCheckOffer)
+            article.append(
+              window.atlasCheckOffer.card(message.checkOffer, {
+                jobId: message.jobId,
+                toast,
+                onAnswered: (state, result) => {
+                  message.checkOffer = { ...message.checkOffer, answered: state };
+                  if (state === 'enabled') {
+                    toast('Completion checks are on for ' + (result?.profile?.name || 'this project') + '.');
+                    void window.atlasWorkspace?.refreshProfiles?.();
+                  }
+                  save();
+                  render();
+                },
+                onVerified: (verification) => {
+                  if (verification?.level) message.verification = verification;
+                  save();
+                  render();
+                },
+              }),
+            );
           window.atlasWorkspace?.messageAttachments(article, message.attachments);
           return article;
         },
@@ -987,6 +1042,7 @@
         context,
         workspaceId: chat.isolated !== false ? chat.workspaceId || '' : '',
         preset: chat.preset || 'balanced',
+        milestones: chat.milestones || 'auto',
         rolesExplicit: chat.rolesExplicit === true,
         adaptiveEffort: chat.adaptiveEffort === true,
         reuseChecks: chat.reuseChecks === true,
@@ -1085,6 +1141,8 @@
         jobId: value.id,
         content: String(value.result || value.error),
         ...(value.error ? { error: true } : {}),
+        ...(value.verification?.level ? { verification: value.verification } : {}),
+        ...(value.checkOffer?.checks?.length ? { checkOffer: value.checkOffer } : {}),
       });
     } else chat.busy = true;
     save();
@@ -1217,6 +1275,7 @@
   };
   for (const [id, key] of [
     ['colabPreset', 'preset'],
+    ['colabMilestones', 'milestones'],
     ['colabTokenWarning', 'tokenWarning'],
     ['colabAdaptiveEffort', 'adaptiveEffort'],
     ['colabReuseChecks', 'reuseChecks'],

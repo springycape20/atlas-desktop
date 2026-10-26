@@ -18,7 +18,113 @@
     synthesis: 'Combine proposals',
     clarify: 'Clarify verdict',
     reproduce: 'Reproduce bug',
+    decompose: 'Split into milestones',
+    plan_review: 'Review milestone plan',
+    plan_revise: 'Revise milestones',
   };
+  function stageLabel(row, phase, index) {
+    const name =
+      (row.milestone === 'final' || row.acceptance) && phase === 'review' ? 'Final review' : phaseName[phase] || phase;
+    return (/^M\d+$/.test(row.milestone || '') ? row.milestone + ' · ' : '') + name + ' · ' + (index + 1);
+  }
+  // Older handovers list decisions as plain strings; newer ones carry the stated reason.
+  const decisionText = (value) => (typeof value === 'string' ? value : text(value?.decision, 500));
+  const strings = (rows, limit) =>
+    (Array.isArray(rows) ? rows.filter((row) => typeof row === 'string') : []).slice(0, limit);
+  // A stage's public summary plus the rationale the provider stated, clearly marked as unverified.
+  function stageDetail(row) {
+    const h = row.handover,
+      section = (title, rows) => (rows.length ? title + ':\n' + rows.map((value) => '- ' + value).join('\n') : '');
+    const parts = h
+      ? [
+          section(
+            'Decisions',
+            (Array.isArray(h.decisions) ? h.decisions : [])
+              .slice(0, 8)
+              .map(
+                (value) =>
+                  text(decisionText(value), 500) + (value?.reason ? ' (because ' + text(value.reason, 500) + ')' : ''),
+              )
+              .filter((value) => value.trim()),
+          ),
+          section(
+            'Assumptions',
+            strings(h.assumptions, 8).map((value) => text(value, 500)),
+          ),
+          section(
+            'Alternatives considered',
+            strings(h.alternatives, 8).map((value) => text(value, 500)),
+          ),
+          section(
+            'Risks',
+            strings(h.risks, 8).map((value) => text(value, 500)),
+          ),
+          ['high', 'medium', 'low'].includes(h.confidence)
+            ? 'Confidence: ' + h.confidence + (h.confidenceReason ? ' - ' + text(h.confidenceReason, 500) : '')
+            : '',
+        ].filter(Boolean)
+      : [];
+    // Only present when the reasoning-summary setting was on for this pass.
+    const reasoning = (Array.isArray(row.reasoning) ? row.reasoning : [])
+      .slice(0, 12)
+      .map((item) => text(item?.text, 2000))
+      .filter((value) => value.trim());
+    return (
+      text(h?.summary || row.output, 2400) +
+      (parts.length ? '\n\nModel-reported rationale (not verified by ATLAS):\n' + parts.join('\n\n') : '') +
+      (reasoning.length
+        ? '\n\n' +
+          (row.provider === 'claude' ? 'Claude thinking' : 'Codex reasoning') +
+          ' summary (model-reported; only what the provider exposes):\n' +
+          reasoning.join('\n\n')
+        : '') +
+      stepList(row.steps, row.stepsOmitted)
+    );
+  }
+  // Tool steps a pass took, in order. Provider steps are provider-reported; gateway steps ran through ATLAS.
+  const validSteps = (steps) =>
+    (Array.isArray(steps) ? steps : []).filter((step) => step && typeof step.text === 'string').slice(0, 40);
+  function stepLabel(step) {
+    const exit = Number.isInteger(step.exitCode) ? ' · exit ' + step.exitCode : '';
+    const body = text(step.text.split('\n')[0], 100);
+    return step.type === 'command'
+      ? '$ ' + body + exit
+      : step.type === 'file'
+        ? 'Files: ' + body.replace(/^(?:Edit|Write|MultiEdit|NotebookEdit) · /, '')
+        : step.type === 'mcp' || step.type === 'gateway'
+          ? body.replace(/^Tool: /, step.type === 'gateway' ? 'ATLAS gateway: ' : 'MCP ')
+          : body;
+  }
+  function stepDuration(step) {
+    const ms = Number(step.endedAt) - Number(step.startedAt);
+    return Number.isFinite(ms) && ms >= 0 && step.endedAt
+      ? ms < 1000
+        ? ms + ' ms'
+        : (ms / 1000).toFixed(1) + ' s'
+      : '';
+  }
+  function stepList(steps, omitted = 0) {
+    const rows = validSteps(steps);
+    if (!rows.length) return '';
+    return (
+      '\n\nSteps (' +
+      rows.length +
+      (omitted > 0 ? ' shown, ' + omitted + ' more not recorded' : '') +
+      '; provider-reported unless marked ATLAS gateway):\n' +
+      rows
+        .map((step, i) =>
+          [i + 1 + '. ' + stepLabel(step), text(step.status, 20), stepDuration(step)].filter(Boolean).join(' · '),
+        )
+        .join('\n')
+    );
+  }
+  // Which steps get graph nodes: every failure, then the earliest others, in their original order.
+  function pickSteps(steps, cap) {
+    const rows = validSteps(steps).map((step, index) => ({ step, index })),
+      failed = rows.filter((row) => row.step.status === 'failed'),
+      rest = rows.filter((row) => row.step.status !== 'failed').slice(0, Math.max(0, cap - failed.length));
+    return [...failed, ...rest].sort((a, b) => a.index - b.index);
+  }
   function build({ task = '', reports = [], state = {}, active = null, outcome = '', verification = null } = {}) {
     const nodes = [],
       edges = [],
@@ -28,7 +134,7 @@
     function node(row) {
       if (ids.has(row.id)) return row.id;
       const optional =
-        ['decision', 'file'].includes(row.kind) ||
+        ['decision', 'file', 'step'].includes(row.kind) ||
         (row.kind === 'check' && row.origin === 'provider reported') ||
         (row.kind === 'issue' && row.status !== 'open');
       if (nodes.length >= (optional ? MAX_NODES - 16 : MAX_NODES)) {
@@ -46,6 +152,48 @@
       edgeIds.add(id);
       edges.push({ id, source, target, kind, origin });
     }
+    // Fewer step nodes per stage on long tasks; failures always get a node, the rest stay in details.
+    const stageCount = Math.max(1, Math.min(reports.length, MAX_REPORTS) + (active ? 1 : 0)),
+      stepCap = Math.max(3, Math.min(8, Math.floor(120 / stageCount)));
+    function addSteps(parent, steps, omitted, rank) {
+      const picked = pickSteps(steps, stepCap),
+        hidden = validSteps(steps).length - picked.length + (Number(omitted) || 0);
+      let previous = parent;
+      for (const { step, index } of picked) {
+        const id = node({
+          id: parent + ':step:' + index,
+          kind: 'step',
+          label: stepLabel(step),
+          detail: [
+            text(step.text, 300),
+            'Status: ' + text(step.status, 20) + (Number.isInteger(step.exitCode) ? ' · exit ' + step.exitCode : ''),
+            stepDuration(step) ? 'Duration: ' + stepDuration(step) : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          status: text(step.status, 20) || 'reported',
+          origin: step.type === 'gateway' ? 'ATLAS gateway' : 'provider reported',
+          provider: step.provider === 'claude' ? 'claude' : 'codex',
+          stepType: text(step.type, 20),
+          rank,
+        });
+        if (!id) break;
+        edge(previous, id, previous === parent ? 'runs' : 'then', 'provider reported');
+        previous = id;
+      }
+      if (hidden > 0) {
+        const id = node({
+          id: parent + ':steps-more',
+          kind: 'step',
+          label: '+' + hidden + ' more step' + (hidden === 1 ? '' : 's'),
+          detail: 'Select the stage to see every recorded step in order.',
+          status: 'summary',
+          origin: 'ATLAS recorded',
+          rank,
+        });
+        edge(previous, id, 'then', 'provider reported');
+      }
+    }
     node({
       id: 'task',
       kind: 'task',
@@ -55,7 +203,14 @@
       origin: 'user',
       rank: 0,
     });
-    const criteria = (state.criteria?.length ? state.criteria : [{ id: 'TASK', text: task }]).slice(0, 31);
+    // With milestones, the left column keeps the whole-task criteria; milestone criteria sit under their milestone.
+    const criteria = (
+      state.taskCriteria?.length
+        ? [...state.taskCriteria, ...(state.criteria || []).filter((row) => row.id === 'PLAN')]
+        : state.criteria?.length
+          ? state.criteria
+          : [{ id: 'TASK', text: task }]
+    ).slice(0, 31);
     for (const row of criteria) {
       const id = node({
         id: 'criterion:' + text(row.id, 80),
@@ -80,12 +235,71 @@
         kind: 'stage',
         phase,
         provider: row.provider === 'claude' ? 'claude' : 'codex',
-        label: (phaseName[phase] || phase) + ' · ' + (index + 1),
-        detail: text(row.handover?.summary || row.output, 2400),
+        label: stageLabel(row, phase, index),
+        detail: stageDetail(row),
         status: row.decision || 'reported',
         origin: 'provider reported',
         rank: index - first + 1,
       });
+    }
+    // Milestones: the plan as its own row, each with its criteria and its ATLAS check (or none).
+    const milestones = (state.milestones || []).slice(0, 8);
+    // Pending milestones start after any running stage so it never looks like part of a later milestone.
+    let pendingRank = reports.length - first + 1 + (active ? 1 : 0);
+    for (const [i, row] of milestones.entries()) {
+      const started = reports.findIndex((report, n) => n >= first && report.milestone === row.id),
+        rank = started >= 0 ? started - first + 1 : pendingRank++,
+        run = row.checkRun;
+      const id = node({
+        id: 'milestone:' + text(row.id, 8),
+        kind: 'milestone',
+        label: text(row.id, 8) + ' · ' + text(row.title, 90),
+        detail: [
+          text(row.goal),
+          ...(row.criteria || []).map((item) => text(item.id, 12) + ': ' + text(item.text, 300)),
+          'Check: ' + (text(row.check, 500) || 'none; reviewed without an ATLAS check (unverified)'),
+          row.summary ? 'Delivered: ' + text(row.summary, 600) : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        status: text(row.status, 20) + (row.unverified ? ' · unverified' : ''),
+        origin: 'provider planned',
+        rank,
+      });
+      edge(i ? 'milestone:' + text(milestones[i - 1].id, 8) : 'task', id, i ? 'then' : 'plans', 'provider planned');
+      for (const item of (row.criteria || []).slice(0, 6)) {
+        const child = node({
+          id: 'criterion:' + text(item.id, 80),
+          kind: 'criterion',
+          milestone: text(row.id, 8),
+          label: text(item.id, 80) + ': ' + text(item.text, 110),
+          detail: text(item.text),
+          status: row.status === 'done' ? 'accepted' : 'required',
+          origin: 'provider planned',
+          rank,
+        });
+        edge(id, child, 'requires');
+      }
+      if (run || !row.check) {
+        const child = node({
+          id: 'milestone-check:' + text(row.id, 8),
+          kind: 'check',
+          label:
+            text(row.id, 8) +
+            (run
+              ? ' check · ' + (Number.isInteger(run.exitCode) ? 'exit ' + run.exitCode : text(run.status, 40))
+              : ' · unverified, no check'),
+          detail: run
+            ? [text(run.command, 500), 'Status: ' + text(run.status, 40), text(run.error, 500), text(run.output, 1200)]
+                .filter(Boolean)
+                .join('\n')
+            : 'This milestone had no check command, so only the reviewer verified it.',
+          status: run ? text(run.status, 40) || 'unknown' : 'unverified',
+          origin: run ? 'ATLAS executed' : 'ATLAS recorded',
+          rank,
+        });
+        edge(id, child, run ? 'verified by' : 'check status');
+      }
     }
     for (const issue of (state.openIssues || []).slice(0, 30)) {
       const id = node({
@@ -139,13 +353,15 @@
         kind: 'stage',
         phase,
         provider: row.provider === 'claude' ? 'claude' : 'codex',
-        label: (phaseName[phase] || phase) + ' · ' + (index + 1),
-        detail: text(row.handover?.summary || row.output, 2400),
+        label: stageLabel(row, phase, index),
+        detail: stageDetail(row),
         status: row.decision || 'reported',
         origin: 'provider reported',
         rank: index - first + 1,
       });
-      edge('task', id, phase.startsWith('proposal_') ? 'proposes' : phase === 'reproduce' ? 'reproduces' : 'contains');
+      const milestone = milestones.find((item) => item.id === row.milestone),
+        parent = milestone && ids.has('milestone:' + milestone.id) ? 'milestone:' + milestone.id : 'task';
+      edge(parent, id, phase.startsWith('proposal_') ? 'proposes' : phase === 'reproduce' ? 'reproduces' : 'contains');
       // A reproduction informs the fix the same way proposals inform a build.
       if (phase.startsWith('proposal_') || phase === 'reproduce') proposals.push(id);
       else if (['build', 'draft', 'synthesis'].includes(phase)) {
@@ -153,17 +369,25 @@
         artifact = id;
       } else if (phase === 'review') {
         if (artifact) edge(artifact, id, 'reviewed by');
-        for (const criterion of criteria) edge('criterion:' + text(criterion.id, 80), id, 'checked against');
+        for (const criterion of milestone?.criteria || criteria)
+          edge('criterion:' + text(criterion.id, 80), id, 'checked against');
+      } else if (['decompose', 'plan_review', 'plan_revise'].includes(phase)) {
+        if (index > first)
+          edge('pass:' + (index - 1), id, phase === 'plan_review' ? 'plan reviewed by' : 'revises plan');
       } else if (['fix', 'revise'].includes(phase)) {
         if (index > first) edge('pass:' + (index - 1), id, 'requests fix');
         artifact = id;
       } else if (index > first) edge('pass:' + (index - 1), id, 'clarifies');
+      // Steps first, so the timeline sits directly under its stage above decisions, files and checks.
+      addSteps(id, row.steps, row.stepsOmitted, index - first + 1);
       for (const [i, decision] of (row.handover?.decisions || []).slice(0, 4).entries()) {
         const child = node({
           id: id + ':decision:' + i,
           kind: 'decision',
-          label: text(decision, 100),
-          detail: text(decision),
+          label: text(decisionText(decision), 100),
+          detail:
+            text(decisionText(decision)) +
+            (decision?.reason ? '\nReason (model-reported): ' + text(decision.reason, 500) : ''),
           status: 'reported',
           origin: 'provider reported',
           provider: row.provider,
@@ -218,13 +442,39 @@
         edge('criterion:' + text(issue.criterion, 80), issueId, 'blocked by', 'provider reported');
       }
     }
+    // Debug mode: reproduction runs ATLAS executed itself, beside the stages they gate.
+    const reproducer = [...nodes].reverse().find((row) => row.kind === 'stage' && row.phase === 'reproduce')?.id;
+    for (const [key, run, label, source] of [
+      ['before', state.reproduction?.before || state.rejectedReproduction, 'Reproduction before fix', reproducer],
+      ['after', state.reproduction?.after, 'Reproduction after fix', artifact],
+    ]) {
+      if (!run || typeof run !== 'object') continue;
+      const from = source || 'task',
+        id = node({
+          id: 'reproduction:' + key,
+          kind: 'check',
+          label: label + ' · ' + (Number.isInteger(run.exitCode) ? 'exit ' + run.exitCode : text(run.status, 40)),
+          detail: [
+            text(run.command, 500),
+            'Status: ' + text(run.status, 40),
+            text(run.error, 500),
+            text(run.output, 1200),
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          status: text(run.status, 40) || 'unknown',
+          origin: 'ATLAS executed',
+          rank: nodes.find((row) => row.id === from)?.rank || 1,
+        });
+      edge(from, id, key === 'before' ? 'reproduced by' : 'verified by');
+    }
     if (active) {
       const phase = active.phase || 'stage',
         id = node({
           id: 'active',
           kind: 'stage',
           label: active.cached ? 'Check saved proposal' : (phaseName[phase] || phase) + ' · running',
-          detail: 'Public workflow stage. Provider actions are shown in the chat activity.',
+          detail: 'Public workflow stage. Provider actions are shown in the chat activity.' + stepList(active.steps),
           phase,
           provider: active.provider,
           status: active.cached ? 'checking saved result' : 'running',
@@ -232,6 +482,8 @@
           rank: reports.length - first + 1,
         });
       edge(artifact || 'task', id, 'next');
+      // Steps of the running pass, published as they happen.
+      addSteps(id, active.steps, 0, reports.length - first + 1);
       if (active.parallel) {
         const sibling = node({
           id: 'active-peer',
@@ -301,9 +553,12 @@
         ? {
             provider: last.provider,
             phase: last.phase,
-            decisions: (last.handover?.decisions || []).slice(0, 4).map((value) => text(value, 160)),
+            decisions: (last.handover?.decisions || []).slice(0, 4).map((value) => text(decisionText(value), 160)),
             files: (last.handover?.changedFiles || []).slice(0, 8).map((value) => text(value, 140)),
             nextActions: (last.handover?.nextActions || []).slice(0, 4).map((value) => text(value, 160)),
+            // Stated risks and assumptions let the next stage check or answer them.
+            risks: strings(last.handover?.risks, 2).map((value) => text(value, 160)),
+            assumptions: strings(last.handover?.assumptions, 2).map((value) => text(value, 160)),
           }
         : null,
     };
@@ -316,6 +571,8 @@
         snapshot.lastHandover.files = snapshot.lastHandover.files.slice(0, 3);
         snapshot.lastHandover.decisions = snapshot.lastHandover.decisions.slice(0, 2);
         snapshot.lastHandover.nextActions = [];
+        snapshot.lastHandover.risks = snapshot.lastHandover.risks.slice(0, 1);
+        snapshot.lastHandover.assumptions = [];
       }
       value = JSON.stringify(snapshot);
     }
@@ -359,7 +616,8 @@
       ...current,
       outcome,
       nodes: current.nodes.map((node) =>
-        node.id === 'task' || node.status === 'running' || node.status === 'checking saved result'
+        node.id === 'task' ||
+        (node.kind !== 'step' && (node.status === 'running' || node.status === 'checking saved result'))
           ? { ...node, status: outcome }
           : node,
       ),

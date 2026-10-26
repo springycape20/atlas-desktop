@@ -1,5 +1,5 @@
 // Decode provider events without exposing tool output or reasoning to speech.
-function createDecoder(provider, onText, onActivity = () => {}) {
+function createDecoder(provider, onText, onActivity = () => {}, { reasoning = false } = {}) {
   let buffer = '',
     hasPartial = false;
   const seen = new Set(),
@@ -39,6 +39,7 @@ function createDecoder(provider, onText, onActivity = () => {}) {
             const activity = {
               id: 'claude:' + part.id,
               kind: part.name === 'TodoWrite' ? 'plan' : part.name === 'Bash' ? 'command' : 'activity',
+              tool: String(part.name || ''),
               status: 'running',
               text: String(
                 part.name === 'TodoWrite'
@@ -55,6 +56,17 @@ function createDecoder(provider, onText, onActivity = () => {}) {
             };
             tools.set(part.id, activity);
             onActivity(activity);
+          }
+        }
+    // Opt-in: the thinking Claude returns in its messages (summarized by the API on current models).
+    // Redacted thinking has nothing readable and is skipped.
+    if (provider === 'claude' && reasoning && event.type === 'assistant')
+      for (const [index, part] of (event.message?.content || []).entries())
+        if (part.type === 'thinking' && typeof part.thinking === 'string' && part.thinking.trim()) {
+          const key = 'thinking:' + (event.message.id || '') + ':' + index;
+          if (!seen.has(key)) {
+            seen.add(key);
+            onActivity({ id: key, kind: 'reasoning', text: part.thinking.trim().slice(0, 4000) });
           }
         }
     if (provider === 'claude' && event.type === 'assistant')

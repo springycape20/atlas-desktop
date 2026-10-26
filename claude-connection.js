@@ -44,6 +44,8 @@ class ClaudeConnection {
       this.sessionId,
     ];
     if (this.settings.claudeModel) args.push('--model', this.settings.claudeModel);
+    // Fixed Colab instructions go in the system prompt once per worker instead of in every pass.
+    if (this.settings.systemPrompt) args.push('--append-system-prompt', this.settings.systemPrompt);
     // The ATLAS gateway performs the action approval, avoiding a second prompt
     // for the wrapper itself. Other provider tools keep their normal rules.
     if (this.settings.atlasMcp)
@@ -342,7 +344,7 @@ class ClaudeConnection {
               this.close();
             }, settings.timeoutSeconds * 1000)
           : null;
-      turn.decode = createDecoder('claude', onText, activity);
+      turn.decode = createDecoder('claude', onText, activity, { reasoning: settings.showReasoning === true });
       turn.control = createClaudeControl({
         trustedAtlasTools: Boolean(this.settings.atlasMcp) && !this.settings.readOnly,
         manager: manager || { ask: async () => null },
@@ -427,6 +429,10 @@ class ClaudeConnectionPool {
         Boolean(options.settings.readOnly),
         Boolean(options.settings.permissionBypass),
         options.settings.atlasMcp || null,
+        // A worker's system prompt is fixed at launch, so workers with different ones are never shared.
+        options.settings.systemPrompt
+          ? require('node:crypto').createHash('sha256').update(options.settings.systemPrompt).digest('hex')
+          : '',
       ]),
       session = options.sessionId;
     if (session && this.sessions.has(session)) throw Error('This Claude conversation is already working.');

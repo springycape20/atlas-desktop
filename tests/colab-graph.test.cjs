@@ -192,3 +192,67 @@ test('resumed workflow graphs retain stable pass identities and existing evidenc
   for (const node of previous.nodes.filter((node) => node.kind !== 'task'))
     assert(updates.at(-1).nodes.some((next) => next.id === node.id));
 });
+test('milestones get their own row with criteria, checks and the stages they contain', () => {
+  const milestone = (id, title, status, extra = {}) => ({
+    id,
+    title,
+    status,
+    criteria: [{ id: id + '.1', text: title + ' works' }],
+    check: '',
+    unverified: true,
+    ...extra,
+  });
+  const result = graph.build({
+    task: 'Totals in cents',
+    reports: [
+      { provider: 'codex', phase: 'build', decision: 'ready', output: 'Planned' },
+      { provider: 'claude', phase: 'plan_review', decision: 'ready', milestone: 'plan' },
+      { provider: 'codex', phase: 'build', decision: 'ready', milestone: 'M1' },
+      { provider: 'claude', phase: 'review', decision: 'ready', milestone: 'M1' },
+      { provider: 'codex', phase: 'build', decision: 'ready', milestone: 'M2' },
+    ],
+    state: {
+      taskCriteria: [{ id: 'TASK', text: 'Totals in cents' }],
+      criteria: [
+        { id: 'TASK', text: 'Milestone M2 of 3' },
+        { id: 'M2.1', text: 'API works' },
+      ],
+      milestones: [
+        milestone('M1', 'Model', 'done', {
+          check: 'npm test -- model',
+          unverified: false,
+          checkRun: { command: 'npm test -- model', status: 'passed', exitCode: 0 },
+          summary: 'Model stores cents',
+        }),
+        milestone('M2', 'API', 'active'),
+        milestone('M3', 'Docs', 'pending'),
+      ],
+    },
+  });
+  const byId = (id) => result.nodes.find((node) => node.id === id),
+    linked = (source, target, kind) =>
+      result.edges.some((edge) => edge.source === source && edge.target === target && edge.kind === kind);
+  assert.equal(byId('milestone:M1').label, 'M1 · Model');
+  assert.equal(byId('milestone:M1').status, 'done');
+  assert.equal(byId('milestone:M2').status, 'active · unverified');
+  assert.equal(byId('milestone:M1').rank, 3, 'a milestone sits at its first stage');
+  assert(byId('milestone:M3').rank > byId('milestone:M2').rank, 'pending milestones follow the started ones');
+  assert(linked('task', 'milestone:M1', 'plans'));
+  assert(linked('milestone:M1', 'milestone:M2', 'then'));
+  assert(linked('milestone:M1', 'pass:2', 'contains'));
+  assert(linked('milestone:M1', 'criterion:M1.1', 'requires'));
+  assert(linked('criterion:M1.1', 'pass:3', 'checked against'));
+  assert.equal(byId('pass:2').label, 'M1 · Implementation · 3');
+  assert.equal(byId('pass:1').label, 'Review milestone plan · 2');
+  assert.equal(byId('milestone-check:M1').label, 'M1 check · exit 0');
+  assert.equal(byId('milestone-check:M1').origin, 'ATLAS executed');
+  assert.equal(byId('milestone-check:M2').status, 'unverified');
+  assert.equal(byId('criterion:TASK').detail, 'Totals in cents', 'the left column keeps the whole-task criteria');
+  assert.equal(byId('criterion:M2.1').milestone, 'M2');
+  const final = graph.build({
+    task: 'Totals in cents',
+    reports: [{ provider: 'claude', phase: 'review', decision: 'ready', milestone: 'final' }],
+    state: {},
+  });
+  assert.equal(final.nodes.find((node) => node.id === 'pass:0').label, 'Final review · 1');
+});

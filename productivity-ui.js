@@ -90,7 +90,7 @@
   alertButton.hidden = true;
   const style = el('style');
   style.textContent =
-    '.productivity-dialog{box-sizing:border-box;height:min(680px,90vh);overflow:hidden}.productivity-dialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}.productivity-dialog>.workspace-dialog-body{min-height:0;max-height:none;overflow:auto}.productivity-dialog>footer{max-height:80px;overflow:auto}.productivity-dialog>nav{padding:8px 16px;margin:0;border-bottom:1px solid #29414a}.productivity-dialog>nav button{font-size:11px;padding:6px 10px}.productivity-dialog p{font:12px/1.6 Segoe UI,sans-serif;overflow-wrap:anywhere}.productivity-dialog select,.productivity-dialog textarea{box-sizing:border-box}.workbench-row{padding:12px 0;border-bottom:1px solid #29414a}.workbench-row h3{margin:0 0 5px}.workbench-row pre{max-height:28vh}.workbench-row details{margin-top:8px;font-size:12px}.workbench-state{color:#8bcec1}.approval-alert{position:fixed;right:18px;bottom:55px;z-index:40;background:#604321;color:#ffe0ad;border:1px solid #b58649;border-radius:9px;padding:10px 14px;cursor:pointer}.approval-alert[hidden]{display:none}.workbench-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.productivity-dialog label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}.productivity-dialog input[type=checkbox]{width:auto}.workbench-result{width:100%;text-align:left;margin:4px 0}.workbench-queue-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}.workbench-queue-form label:has(textarea){grid-column:1/-1}.workbench-queue-form>button{width:fit-content}.workbench-queue-form input:disabled,.workbench-queue-form select:disabled{opacity:.5}@media(max-width:650px){.workbench-queue-form{grid-template-columns:1fr}}.workbench-message{color:#a9c3cd;font-size:12px}';
+    '.productivity-dialog{box-sizing:border-box;height:min(680px,90vh);overflow:hidden}.productivity-dialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}.productivity-dialog>.workspace-dialog-body{min-height:0;max-height:none;overflow:auto}.productivity-dialog>footer{max-height:80px;overflow:auto}.productivity-dialog>nav{padding:8px 16px;margin:0;border-bottom:1px solid #29414a}.productivity-dialog>nav button{font-size:11px;padding:6px 10px}.productivity-dialog p{font:12px/1.6 Segoe UI,sans-serif;overflow-wrap:anywhere}.productivity-dialog select,.productivity-dialog textarea{box-sizing:border-box}.workbench-row{padding:12px 0;border-bottom:1px solid #29414a}.workbench-row h3{margin:0 0 5px}.workbench-row pre{max-height:28vh}.workbench-row details{margin-top:8px;font-size:12px}.workbench-state{color:#8bcec1}.verify-state[data-level=failed]{color:#f39a8b}.verify-state[data-level=partial],.verify-state[data-level=unverified]{color:#f0c48f}.approval-alert{position:fixed;right:18px;bottom:55px;z-index:40;background:#604321;color:#ffe0ad;border:1px solid #b58649;border-radius:9px;padding:10px 14px;cursor:pointer}.approval-alert[hidden]{display:none}.workbench-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.productivity-dialog label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}.productivity-dialog input[type=checkbox]{width:auto}.workbench-result{width:100%;text-align:left;margin:4px 0}.workbench-queue-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}.workbench-queue-form label:has(textarea){grid-column:1/-1}.workbench-queue-form>button{width:fit-content}.workbench-queue-form input:disabled,.workbench-queue-form select:disabled{opacity:.5}@media(max-width:650px){.workbench-queue-form{grid-template-columns:1fr}}.workbench-message{color:#a9c3cd;font-size:12px}';
   document.head.append(style);
   const row = (name, detail) => {
     const node = el('section', undefined, 'workbench-row');
@@ -112,7 +112,13 @@
     return input;
   };
   function verification(node, job) {
-    const verification = job.verification || job.result?.verification;
+    const verification = job.verification || job.result?.verification,
+      badge = job.verificationBadge || job.result?.verificationBadge;
+    if (badge?.label) {
+      const row = el('p', badge.label + ' · ' + (badge.reason || ''), 'workbench-state verify-state');
+      row.dataset.level = String(badge.level || '');
+      node.append(row);
+    }
     node.append(el('p', 'Completion checks: ' + (verification?.status || 'not checked'), 'workbench-state'));
     if (verification?.reason) node.append(el('p', verification.reason));
     for (const result of verification?.results || []) {
@@ -123,6 +129,20 @@
       );
       node.append(details);
     }
+    // Assistant tasks and Colab tasks both show the once-per-project offer here until it is answered.
+    if (job.checkOffer && !job.checkOffer.answered && window.atlasCheckOffer)
+      node.append(
+        window.atlasCheckOffer.card(job.checkOffer, {
+          jobId: job.id,
+          toast: (text) => (status.textContent = text),
+          onAnswered: (state) => {
+            if (state === 'enabled') {
+              status.textContent = 'Completion checks are on for this project.';
+              void window.atlasWorkspace?.refreshProfiles?.();
+            }
+          },
+        }),
+      );
   }
   async function showQueue(version) {
     const [state, profiles] = await Promise.all([api.taskQueue(), api.projects()]);
@@ -136,10 +156,21 @@
     pause.checked = state.pauseBetween;
     pauseLabel.prepend(pause);
     body.append(pauseLabel);
+    const concurrency = select(
+      'Run at once',
+      [
+        ['1', 'One task at a time'],
+        ['2', 'Up to 2 Colab tasks'],
+        ['3', 'Up to 3 Colab tasks'],
+      ],
+      body,
+    );
+    concurrency.value = String(state.concurrency || 1);
+    concurrency.onchange = () => void api.taskQueue({ action: 'concurrency', value: Number(concurrency.value) });
     button(
       'Start / continue',
       async () => {
-        await api.taskQueue({ action: 'start', pauseBetween: pause.checked });
+        await api.taskQueue({ action: 'start', pauseBetween: pause.checked, concurrency: Number(concurrency.value) });
         await open('Queue');
       },
       controls,
@@ -152,7 +183,7 @@
       },
       controls,
     );
-    const stateText = el('p', state.paused ? 'Queue paused.' : 'Queue running.', 'workbench-state');
+    const stateText = el('p', queueSummary(state), 'workbench-state');
     stateText.id = 'queueState';
     body.append(stateText);
     const form = el('form', undefined, 'workbench-queue-form'),
@@ -177,6 +208,14 @@
       task = field('Task', 'textarea', form);
     task.rows = 2;
     task.maxLength = 20000;
+    const waitLabel = el(
+        'label',
+        'Wait for the task above (start after it finishes and its changes are applied or discarded)',
+      ),
+      wait = el('input');
+    wait.type = 'checkbox';
+    waitLabel.prepend(wait);
+    form.append(waitLabel);
     roles.disabled = true;
     provider.onchange = () => (roles.disabled = provider.value !== 'colab');
     button(
@@ -192,6 +231,7 @@
             profileId: selected.id,
             provider: provider.value,
             roles: roles.value,
+            waitForPrevious: wait.checked,
           },
         });
         await open('Queue');
@@ -204,16 +244,43 @@
     body.append(list);
     renderQueueItems(list, state);
     status.textContent =
-      'Tasks run one at a time. Pause stops the next task; stop a running task in Tasks. The queue always pauses after restarting ATLAS.';
+      'Tasks start in order. Colab tasks can run side by side (up to the Run at once limit), each in its own isolated checkout; Assistant tasks edit the folder directly and always run alone. Pause stops new tasks from starting; stop a running task in Tasks. The queue always pauses after restarting ATLAS.';
+  }
+  function queueSummary(state) {
+    const active = state.items.filter((item) => item.status === 'running').length;
+    return (
+      (state.paused ? 'Queue paused.' : 'Queue running.') +
+      (active ? ' ' + active + (active === 1 ? ' task' : ' tasks') + ' running.' : '')
+    );
   }
   function renderQueueItems(list, state) {
     list.replaceChildren();
     for (const item of state.items) {
       const node = el('section', undefined, 'workbench-row');
-      node.append(el('h3', item.prompt), el('p', item.provider + ' · ' + item.status + ' · ' + item.cwd));
+      node.append(
+        el('h3', item.prompt),
+        el(
+          'p',
+          item.provider +
+            ' · ' +
+            item.status +
+            (item.waitForPrevious ? ' · waits for the task above' : '') +
+            ' · ' +
+            item.cwd,
+        ),
+      );
       if (item.error) node.append(el('p', item.error));
       const actions = el('div', undefined, 'workspace-actions');
       node.append(actions);
+      if (item.status === 'queued')
+        button(
+          item.waitForPrevious ? "Don't wait for the task above" : 'Wait for the task above',
+          async () => {
+            await api.taskQueue({ action: 'wait', id: item.id, wait: !item.waitForPrevious });
+            await open('Queue');
+          },
+          actions,
+        );
       if (item.status === 'queued')
         for (const [text, direction] of [
           ['Move up', 'up'],
@@ -614,7 +681,15 @@
     );
     verification(body, job);
     const details = el('details');
-    details.append(el('summary', 'Commands and activity'), el('pre', (job.events || []).map((e) => e.text).join('\n')));
+    details.append(
+      el('summary', 'Commands and activity'),
+      el(
+        'pre',
+        (job.events || [])
+          .map((e) => (e.kind === 'reasoning' ? 'Reasoning summary (model-reported): ' : '') + e.text)
+          .join('\n'),
+      ),
+    );
     body.append(details);
     if (job.changeId && job.status !== 'running') button('Review checkpoint / undo', () => previewRestore(job));
     if (job.recoveryChangeId) button('Undo last restore', () => previewRestore(job, true));
@@ -769,17 +844,19 @@
           card.dataset.approvalId = request.id;
           if (request.permissionScope) card.append(el('small', request.permissionScope));
           card.append(el('h3', request.provider + ' · ' + request.title));
+          let target = '';
           try {
-            const data = JSON.parse(request.details.split('\n\n')[0]),
-              target = [data.mode, data.path || data.executable || data.name || data.command]
-                .filter(Boolean)
-                .join(' · ');
-            if (target) {
-              const brief = el('p', target, 'approval-target');
-              brief.title = target;
-              card.append(brief);
-            }
-          } catch {}
+            const data = JSON.parse(request.details.split('\n\n')[0]);
+            target = [data.mode, data.path || data.executable || data.name || data.command].filter(Boolean).join(' · ');
+          } catch {
+            // ATLAS's own command requests (reproductions, milestone checks) are plain text; show the command.
+            target = (String(request.details || '').match(/^Command: (.+)$/m) || [])[1] || '';
+          }
+          if (target) {
+            const brief = el('p', target, 'approval-target');
+            brief.title = target;
+            card.append(brief);
+          }
           const disclosure = el('details', undefined, 'approval-request-details');
           disclosure.append(el('summary', 'Request details'), el('pre', request.details));
           card.append(disclosure);
@@ -881,7 +958,7 @@
       const list = body.querySelector('#queueItems');
       if (list) renderQueueItems(list, state);
       const label = body.querySelector('#queueState');
-      if (label) label.textContent = state.paused ? 'Queue paused.' : 'Queue running.';
+      if (label) label.textContent = queueSummary(state);
     }
   });
   api.onJobs((patch) => {

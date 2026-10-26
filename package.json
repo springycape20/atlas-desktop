@@ -1,6 +1,6 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.6.15",
+  "version": "0.7.0",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
@@ -19,7 +19,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:dispute-ui": "electron tests/colab-dispute.browser.cjs",
-    "test:settings-ui": "electron tests/settings.browser.cjs"
+    "test:settings-ui": "electron tests/settings.browser.cjs",
+    "test:release-ui": "electron tests/release-screens.browser.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0",

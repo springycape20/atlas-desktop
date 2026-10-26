@@ -34,6 +34,11 @@ async function detectProject(folder) {
   if (await exists('CMakeLists.txt')) types.push('CMake');
   return { cwd, name: path.basename(cwd), types, checks, installs };
 }
+// Under Windows' default execution policy PowerShell blocks the npm.ps1-style shims Node package
+// managers install, so "npm test" fails before it starts. Point these names at their .cmd shims
+// for this command only; the user's command and execution policy are left unchanged.
+const CMD_SHIMS =
+  "foreach ($shim in 'npm','npx','pnpm','yarn') { $found = Get-Command ($shim + '.cmd') -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if ($found) { Set-Alias -Name $shim -Value $found.Source } }\n";
 function runCheck(command, cwd, { signal, timeoutMs = 120000, spawnProcess = spawn } = {}) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -52,6 +57,7 @@ function runCheck(command, cwd, { signal, timeoutMs = 120000, spawnProcess = spa
               '-EncodedCommand',
               Buffer.from(
                 '$ErrorActionPreference="Stop"; $ProgressPreference="SilentlyContinue"; ' +
+                  CMD_SHIMS +
                   command +
                   '\nif ($LASTEXITCODE) { exit $LASTEXITCODE }',
                 'utf16le',

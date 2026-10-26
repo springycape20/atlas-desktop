@@ -1,5 +1,12 @@
-ATLAS 0.6.15 keeps Colab Git setup out of shared and personal profile folders.
+ATLAS 0.7.0 makes Colab better at finishing complex work, and shows you what it checked and why.
 
-- **Safer Git setup in Colab:** Colab now refuses to set up Git in the shared Public folder (`C:\Users\Public`), its Documents, Desktop, and Downloads folders, and other people's profile folders under `C:\Users`, the same way it already refuses your own user folder. Dedicated project folders inside them still work.
+- **Debug mode proves the fix.** ATLAS now runs the bug's reproduction itself: it must fail before the fix and pass after it before the work is reviewed. The command is shown on the approval card the first time it needs to run.
+- **Large tasks run as milestones.** In Build mode, Colab can split a big task into 3–8 milestones. The reviewer approves the plan, each milestone is built, checked and reviewed in turn, and a final review checks the whole task. Choose **Milestones: Auto** (default), **On** or **Off** in Colab's efficiency options.
+- **See what was actually verified.** Finished tasks show **Checks passed**, **Checks failed**, **Partly verified** or **Unverified**. When a project has no checks, ATLAS offers once to turn on the checks it detects, or to run them on that task.
+- **The "why" behind each step.** Select a stage in the workflow graph to see its decisions and reasons, assumptions, alternatives considered, risks and confidence, plus a timeline of the commands, file changes and tool calls it ran. Optionally turn on **Settings > Transparency > Show model reasoning summaries** (Codex reasoning summaries; Claude Code doesn't currently share its thinking text).
+- **Run queued Colab tasks side by side.** Set **Run at once** in the queue to run up to three Colab tasks together, each in its own isolated checkout. Mark a task **Wait for the task above** when it builds on the previous one.
+- **Accepting changes is smoother.** Accept now applies a task on top of newer commits in your project. If that conflicts, your project is left unchanged, and **Update task checkout** brings the task up to date so the conflict can be resolved there.
+- **Fixed:** npm, npx, pnpm and yarn completion checks no longer fail under Windows' default PowerShell settings.
+- **Good to know:** a task that is approved only after fixes now gets one more review in a fresh session, and first build prompts may propose milestones (set Milestones to Off to keep single builds).
 
 Install over your existing version to preserve conversations and settings. Packaged installations can use **Settings > App updates > Check for updates**, then download and restart to install. Windows x64. Close older ATLAS instances before updating. Computer control uses the separate Windows-MCP integration, not another chat application's private runtime.

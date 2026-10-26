@@ -300,3 +300,16 @@ test('Codex reuses one app-server process across separate requests', async (t) =
     );
   assert.equal(spawns, 1);
 });
+test('Colab workers start with the protocol as an appended system prompt and are keyed by it', async (t) => {
+  const { run, children } = fixture(t),
+    settings = (systemPrompt) => ({ effort: 'medium', timeoutSeconds: 0, systemPrompt });
+  const first = await run({ owner: 'colab:chat', settings: settings('PROTOCOL "quoted" {json}') });
+  await run({ owner: 'colab:chat', settings: settings('PROTOCOL "quoted" {json}'), sessionId: first.sessionId });
+  assert.equal(children.length, 1, 'passes with the same instructions reuse the worker');
+  const args = children[0].args;
+  assert.equal(args[args.indexOf('--append-system-prompt') + 1], 'PROTOCOL "quoted" {json}');
+  await run({ owner: 'colab:chat', settings: settings('CHANGED PROTOCOL') });
+  assert.equal(children.length, 2, 'a different system prompt never reuses a worker');
+  await run({ owner: 'assistant:other', settings: { effort: 'medium', timeoutSeconds: 0 } });
+  assert.equal(children.at(-1).args.includes('--append-system-prompt'), false, 'Assistant workers are unchanged');
+});

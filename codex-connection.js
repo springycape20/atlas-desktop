@@ -170,6 +170,14 @@ class CodexConnection {
       t.messages.set(p.item.id, p.item.text || old);
       if (p.item.phase === 'final_answer') t.final = p.item.text;
     }
+    // Opt-in: pass on the reasoning summary Codex chose to expose, never the raw reasoning content.
+    if (message.method === 'item/completed' && p.item?.type === 'reasoning' && t.showReasoning) {
+      const summary = (Array.isArray(p.item.summary) ? p.item.summary : [])
+        .map((part) => (typeof part === 'string' ? part : typeof part?.text === 'string' ? part.text : ''))
+        .filter((part) => part.trim())
+        .join('\n\n');
+      if (summary) t.activity({ id: p.threadId + ':' + p.item.id, kind: 'reasoning', text: summary.slice(0, 4000) });
+    }
     if (
       ['item/started', 'item/completed'].includes(message.method) &&
       p.item &&
@@ -192,6 +200,7 @@ class CodexConnection {
       t.activity({
         id: p.threadId + ':' + item.id,
         kind: item.type === 'commandExecution' ? 'command' : item.type === 'fileChange' ? 'files' : 'activity',
+        tool: item.type,
         text: String(text || item.type).slice(0, 1200),
         status: completed
           ? item.status === 'failed' || (Number.isInteger(item.exitCode) && item.exitCode !== 0)
@@ -256,6 +265,8 @@ class CodexConnection {
         },
       };
     if (settings.codexModel) params.model = settings.codexModel;
+    // Fixed Colab instructions are set once per thread as developer instructions, not in every turn.
+    if (settings.systemPrompt) params.developerInstructions = settings.systemPrompt;
     // Internal Colab passes stay in this app-server's memory. Never resume old
     // persisted helper threads or fall back to saving a private pass to Recents.
     if (internal && sessionId && !this.internalSessions.has(sessionId)) sessionId = '';
@@ -285,6 +296,7 @@ class CodexConnection {
         onApproval,
         messages: new Map(),
         commentary: new Set(),
+        showReasoning: settings.showReasoning === true,
         turnId: null,
         cancelled: false,
       };
@@ -322,6 +334,9 @@ class CodexConnection {
             : { type: 'workspaceWrite', writableRoots: [cwd] },
         ...(settings.codexModel ? { model: settings.codexModel } : {}),
         ...(settings.effort ? { effort: settings.effort } : {}),
+        // Codex only produces reasoning summaries when asked; with the setting off nothing changes.
+        // Live checks found "auto" returns empty summaries and "concise" only a heading, so ask for "detailed".
+        ...(settings.showReasoning === true ? { summary: 'detailed' } : {}),
         input: [{ type: 'text', text: prompt }],
       }).then(
         (result) => {

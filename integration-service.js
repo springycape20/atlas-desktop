@@ -946,6 +946,7 @@ function createIntegrationService({
   }
   return {
     desktopPermissions: () => permissions.list(),
+    deniedFiles: () => permissions.deniedFiles(),
     grantDesktop,
     revokeDesktop,
     list,

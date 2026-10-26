@@ -170,6 +170,7 @@ function integrations() {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:desktop-permissions', value);
     },
     activity: (job, event) => {
+      for (const listener of job.passListeners || []) listener({ ...event, tool: 'atlas-gateway' });
       job.events.push({ ...event, at: Date.now() });
       job.events = job.events.slice(-100);
       emitJobs();
@@ -228,8 +229,44 @@ async function checkTask(job) {
     at: Date.now(),
   });
   job.events = job.events.slice(-100);
+  await badgeTask(job);
+  if (job.verificationBadge?.level === 'unverified') job.checkOffer = await offerChecks(job);
+  if (job.result && typeof job.result === 'object') job.result.checkOffer = job.checkOffer || null;
   emitJobs();
-  if (job.result) job.result.verification = job.verification;
+}
+// What ATLAS verified about a finished task, for its badge and status line.
+async function badgeTask(job) {
+  // The badge only matters for work that changed files; read-only Colab modes never get one.
+  const changedFiles =
+    job.collaboration && ['plan', 'compare'].includes(job.request?.mode)
+      ? 0
+      : job.changeId
+        ? ((
+            await changes()
+              .report(job.changeId, true)
+              .catch(() => null)
+          )?.files?.length ?? null)
+        : null;
+  job.verificationBadge = require('./verification-badge').verificationBadge({
+    verification: job.verification,
+    result: job.collaboration ? job.result : null,
+    changedFiles,
+  });
+  if (job.result && typeof job.result === 'object') {
+    job.result.verification = job.verification;
+    job.result.verificationBadge = job.verificationBadge;
+  }
+}
+// Once per project folder, an unverified task offers the checks Project setup detects there
+// (or the folder profile's own commands when automatic checks are off).
+async function offerChecks(job) {
+  const folder = job.projectFolder || job.cwd;
+  try {
+    const detected = (await require('./project-tools').detectProject(folder)).checks;
+    return await workspace().checkOffer(folder, detected, job.request?.profileId || '');
+  } catch {
+    return null;
+  }
 }
 let workspaceService;
 let projectContextService;
@@ -284,6 +321,7 @@ function defaultSettings() {
     voiceDeviceId: '',
     speechDetail: 'brief',
     speakResponses: true,
+    showReasoning: false,
     launchAtStartup: false,
     voiceEngine: 'kokoro',
     kokoroVoice: 'bm_george',
@@ -319,6 +357,8 @@ function sanitizeSettings(value) {
     claudeModels: cleanModels(value?.claudeModels),
     voiceDeviceId: typeof value?.voiceDeviceId === 'string' ? value.voiceDeviceId.slice(0, 512) : '',
     speakResponses: value?.speakResponses !== false,
+    // Opt-in: providers' own reasoning summaries, shown labelled as model-reported.
+    showReasoning: value?.showReasoning === true,
     launchAtStartup: value?.launchAtStartup === true,
     speechDetail: value?.speechDetail === 'full' ? 'full' : 'brief',
     voiceEngine: ['kokoro', 'windows', 'elevenlabs'].includes(value?.voiceEngine)
@@ -821,7 +861,20 @@ function findReferencedProviderHistory(prompt) {
   return providerHistory.request('search', { prompt });
 }
 async function runProvider(provider, prompt, cwd, settings, previousSessionId = '', onText = () => {}) {
-  const { stageSignal, ...providerSettings } = settings;
+  const job = jobContext.getStore(),
+    listener = settings?.onActivity;
+  // ATLAS gateway actions reach the running pass through its job rather than the provider stream.
+  // Compare proposals run two passes at once, so the job keeps a set of listeners.
+  if (job && listener) (job.passListeners ||= new Set()).add(listener);
+  try {
+    return await runProviderTurn(provider, prompt, cwd, settings, previousSessionId, onText);
+  } finally {
+    job?.passListeners?.delete(listener);
+  }
+}
+async function runProviderTurn(provider, prompt, cwd, settings, previousSessionId, onText) {
+  // onActivity lets one Colab pass capture its own activity (such as reasoning summaries) for its report.
+  const { stageSignal, onActivity = () => {}, ...providerSettings } = settings;
   settings = providerSettings;
   if (provider === 'claude') {
     const executable = findClaudeExecutable();
@@ -860,6 +913,7 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
             }
           },
           activity: (activity) => {
+            onActivity({ ...activity, provider: 'claude' });
             if (job) {
               job.events.push({ ...activity, provider: 'claude', at: Date.now() });
               job.events = job.events.slice(-100);
@@ -916,6 +970,7 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
             params,
           ),
         activity: (event) => {
+          onActivity({ ...event, provider: 'codex' });
           if (job) {
             job.events.push({ ...event, provider: 'codex', at: Date.now() });
             job.events = job.events.slice(-100);
@@ -1033,6 +1088,9 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       changeId,
       changesError,
       verification,
+      verificationBadge,
+      checkOffer,
+      projectFolder,
       recoveryChangeId,
       sessions,
       preparedProposals,
@@ -1062,6 +1120,9 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       changeId,
       changesError,
       verification,
+      verificationBadge,
+      checkOffer,
+      projectFolder,
       recoveryChangeId,
       sessions,
       graphRunId,
@@ -1148,6 +1209,7 @@ async function startCollaboration(event, input) {
         ? source.workspaceId
         : '',
     preset: efficiency.preset(source.preset),
+    milestones: ['auto', 'on', 'off'].includes(source.milestones) ? source.milestones : 'auto',
     rolesExplicit: source.rolesExplicit === true,
     adaptiveEffort: source.adaptiveEffort === true,
     reuseChecks: source.reuseChecks === true,
@@ -1218,6 +1280,8 @@ async function startCollaboration(event, input) {
       colabChatId: request.chatId,
       prompt: task,
       cwd: folder,
+      // The project folder itself; cwd moves to an isolated worktree when one is used.
+      projectFolder: folder,
       conversationId: request.chatId,
       status: 'running',
       statusText: 'Preparing workspace',
@@ -1304,8 +1368,37 @@ async function startCollaboration(event, input) {
         : await projectContext()
             .context(job.cwd, task, { signal: job.signal })
             .catch(() => '');
+      // Provider-written commands ATLAS runs itself (reproductions, milestone checks), logged in the task activity.
+      const runJobCommand = async (label, command, start) => {
+        job.statusText = label + ': ' + command;
+        job.events.push({ kind: 'command', text: label + ': ' + command, at: Date.now() });
+        emitJobs();
+        const run = await start({
+          cwd: job.cwd,
+          signal: job.signal,
+          project,
+          assess: async (value) =>
+            require('./desktop-action-policy').assessDesktopAction('PowerShell', { command: value }, job.cwd, {
+              denied: await integrations().deniedFiles(),
+            }),
+          ask: ({ title, details }) =>
+            approvals.ask({ jobId: job.id, provider: 'ATLAS', title, details, signal: job.signal }),
+        });
+        job.events.push({
+          kind: 'command',
+          text:
+            label +
+            ': ' +
+            run.status +
+            (run.exitCode === null || run.exitCode === undefined ? '' : ' (exit ' + run.exitCode + ')'),
+          at: Date.now(),
+        });
+        emitJobs();
+        return run;
+      };
       const run = require('./collaboration').createCollaboration({
         runProvider,
+        fixedInstructions: 'system',
         canResumeSession: (provider, id) => provider !== 'codex' || Boolean(codexConnection?.hasInternalSession?.(id)),
         graphChanged: async (graph) =>
           publishCollaborationGraph(job, require('./colab-graph').withVerification(graph, job.verification), event),
@@ -1326,6 +1419,24 @@ async function startCollaboration(event, input) {
           }
           return job.verification;
         },
+        reproduce: (command, phase) =>
+          runJobCommand(
+            phase === 'before' ? 'Reproduction before the fix' : 'Reproduction after the fix',
+            command,
+            (shared) => require('./reproduction-runner').runReproduction(command, { ...shared, phase }),
+          ),
+        milestoneCheck: (command, milestone) =>
+          runJobCommand('Check for milestone ' + milestone, command, (shared) =>
+            require('./provider-command').runProviderCommand(command, {
+              ...shared,
+              phase: milestone,
+              title: 'Run the milestone check?',
+              purpose:
+                'ATLAS runs this provider-written check after each change to milestone ' +
+                milestone +
+                '; it must pass before the milestone is reviewed.',
+            }),
+          ),
         saveReport: async (report, index, raw) => {
           const folder = path.join(app.getPath('userData'), 'colab-reports', job.id);
           await mkdir(folder, { recursive: true });
@@ -1363,9 +1474,7 @@ async function startCollaboration(event, input) {
       job.status = result.outcome;
       job.statusText =
         result.outcome === 'completed'
-          ? job.verification?.status === 'failed'
-            ? 'Complete · checks failed'
-            : 'Complete'
+          ? require('./verification-badge').completeStatus(job.verificationBadge)
           : result.limitation || 'Needs attention';
       if (!event.sender.isDestroyed())
         event.sender.send('atlas:collab-status', {
@@ -1374,6 +1483,8 @@ async function startCollaboration(event, input) {
           status: job.statusText,
           outcome: result.outcome,
           result: result.output,
+          verification: job.verificationBadge,
+          checkOffer: job.checkOffer || null,
           usage: result.usage,
           limitation: result.limitation,
           workspaceId: job.workspaceId,
@@ -1449,10 +1560,14 @@ function setupIpc() {
           roles: row.roles,
           isolated: true,
         });
+        // Queue-started Colab jobs run in their own worktrees, so they don't block the queue's
+        // other parallel items the way a task you started yourself does.
+        if (activeJobs.get(result.id)) activeJobs.get(result.id).queued = true;
         await activeJobs.get(result.id).promise;
         const job = activeJobs.get(result.id);
         return {
           jobId: result.id,
+          workspaceId: job.workspaceId || '',
           checksFailed: job.verification?.status === 'failed',
           needsAttention: job.result?.outcome !== 'completed',
           reason: job.result?.limitation,
@@ -1462,11 +1577,23 @@ function setupIpc() {
       await startAssistant(event, { requestId: id, prompt: row.prompt, cwd: row.cwd, profileId: row.profileId });
       return { jobId: id, checksFailed: activeJobs.get(id).verification?.status === 'failed' };
     },
+    // The queue still waits for tasks you started yourself; its own items count toward its limit instead.
     canRun: () =>
       !quitting &&
       mainWindow &&
       !mainWindow.isDestroyed() &&
-      ![...activeJobs.values()].some((job) => job.status === 'running'),
+      ![...activeJobs.values()].some((job) => job.status === 'running' && !job.queued),
+    // An isolated queue task is settled once its changes are accepted or discarded.
+    settled: async (row) => {
+      if (row.provider !== 'colab' || !row.result?.workspaceId) return true;
+      return (
+        (
+          await workspace()
+            .tree(row.result.workspaceId)
+            .catch(() => ({ state: 'gone' }))
+        ).state !== 'active'
+      );
+    },
   });
   require('./change-ipc').registerChangeIpc({
     ipcMain,
@@ -1509,6 +1636,45 @@ function setupIpc() {
     return { provider: report.provider, phase: report.phase, output };
   });
   ipcMain.handle('atlas:collab', (event, request) => startCollaboration(event, request));
+  // Answers to the once-per-project offer to turn on completion checks, or a one-off run of the
+  // offered checks on a finished task. Only commands recorded with the offer can run.
+  ipcMain.handle('atlas:check-offer', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (request.action !== 'run') {
+      const result = await workspace().answerCheckOffer(request);
+      // Other finished tasks from the same folder stop showing the answered offer.
+      for (const job of activeJobs.values())
+        if (
+          job.checkOffer &&
+          path.resolve(job.checkOffer.cwd).toLowerCase() === path.resolve(request.cwd).toLowerCase()
+        )
+          job.checkOffer = { ...job.checkOffer, answered: request.answer === 'enable' ? 'enabled' : 'declined' };
+      await persistJobs();
+      emitJobs();
+      return result;
+    }
+    const job = activeJobs.get(request.jobId);
+    if (!job || job.status === 'running') throw Error('This task is not available to check now.');
+    const allowed = await workspace().offeredChecks(job.projectFolder || job.cwd),
+      commands = allowed.filter((command) => Array.isArray(request.commands) && request.commands.includes(command));
+    if (!commands.length) throw Error('Choose at least one of the offered checks.');
+    job.verification = await require('./project-tools').completionChecks(
+      { autoCheck: true, checkCommands: commands.join('\n') },
+      job.cwd,
+      {
+        progress: (text) => {
+          job.events.push({ kind: 'command', text, at: Date.now() });
+          emitJobs();
+        },
+      },
+    );
+    await badgeTask(job);
+    if (job.status === 'completed')
+      job.statusText = require('./verification-badge').completeStatus(job.verificationBadge);
+    await persistJobs();
+    emitJobs();
+    return { verification: job.verificationBadge, status: job.verification.status };
+  });
   ipcMain.handle('atlas:model-catalog', async (event, provider) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     return (await models().get(provider)).models;
@@ -1905,7 +2071,7 @@ function setupIpc() {
         await checkTask(job);
         if (job.stopped || controller.signal.aborted) throw Error('Task stopped.');
         job.status = 'completed';
-        job.statusText = job.verification?.status === 'failed' ? 'Complete · checks failed' : 'Complete';
+        job.statusText = require('./verification-badge').completeStatus(job.verificationBadge);
         return result;
       } catch (error) {
         job.status = job.stopped || 'failed';
@@ -2160,6 +2326,7 @@ async function createWindow() {
         '/app-ui.js',
         '/assistant-chat.js',
         '/chat-render.js',
+        '/check-offer-ui.js',
         '/colab-graph.js',
         '/colab-graph-ui.js',
         '/colab-efficiency.js',

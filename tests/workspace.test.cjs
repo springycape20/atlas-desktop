@@ -68,7 +68,7 @@ test('original changes block acceptance and discard preserves a recovery snapsho
   const review = await service.review(tree.id);
   await assert.rejects(
     service.reviewAction({ id: tree.id, action: 'accept', token: review.token }),
-    /original checkout changed/,
+    /original checkout has uncommitted changes/,
   );
   await service.reviewAction({ id: tree.id, action: 'discard', token: review.token });
   assert.equal(await fs.readFile(path.join(repo, 'example.txt'), 'utf8'), 'user edits');
