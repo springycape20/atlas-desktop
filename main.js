@@ -228,8 +228,27 @@ async function checkTask(job) {
     at: Date.now(),
   });
   job.events = job.events.slice(-100);
+  // The badge only matters for work that changed files; read-only Colab modes never get one.
+  const changedFiles =
+    job.collaboration && ['plan', 'compare'].includes(job.request?.mode)
+      ? 0
+      : job.changeId
+        ? ((
+            await changes()
+              .report(job.changeId, true)
+              .catch(() => null)
+          )?.files?.length ?? null)
+        : null;
+  job.verificationBadge = require('./verification-badge').verificationBadge({
+    verification: job.verification,
+    result: job.collaboration ? job.result : null,
+    changedFiles,
+  });
   emitJobs();
-  if (job.result) job.result.verification = job.verification;
+  if (job.result && typeof job.result === 'object') {
+    job.result.verification = job.verification;
+    job.result.verificationBadge = job.verificationBadge;
+  }
 }
 let workspaceService;
 let projectContextService;
@@ -1033,6 +1052,7 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       changeId,
       changesError,
       verification,
+      verificationBadge,
       recoveryChangeId,
       sessions,
       preparedProposals,
@@ -1062,6 +1082,7 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       changeId,
       changesError,
       verification,
+      verificationBadge,
       recoveryChangeId,
       sessions,
       graphRunId,
@@ -1410,9 +1431,7 @@ async function startCollaboration(event, input) {
       job.status = result.outcome;
       job.statusText =
         result.outcome === 'completed'
-          ? job.verification?.status === 'failed'
-            ? 'Complete · checks failed'
-            : 'Complete'
+          ? require('./verification-badge').completeStatus(job.verificationBadge)
           : result.limitation || 'Needs attention';
       if (!event.sender.isDestroyed())
         event.sender.send('atlas:collab-status', {
@@ -1421,6 +1440,7 @@ async function startCollaboration(event, input) {
           status: job.statusText,
           outcome: result.outcome,
           result: result.output,
+          verification: job.verificationBadge,
           usage: result.usage,
           limitation: result.limitation,
           workspaceId: job.workspaceId,
@@ -1952,7 +1972,7 @@ function setupIpc() {
         await checkTask(job);
         if (job.stopped || controller.signal.aborted) throw Error('Task stopped.');
         job.status = 'completed';
-        job.statusText = job.verification?.status === 'failed' ? 'Complete · checks failed' : 'Complete';
+        job.statusText = require('./verification-badge').completeStatus(job.verificationBadge);
         return result;
       } catch (error) {
         job.status = job.stopped || 'failed';

@@ -90,7 +90,7 @@
   alertButton.hidden = true;
   const style = el('style');
   style.textContent =
-    '.productivity-dialog{box-sizing:border-box;height:min(680px,90vh);overflow:hidden}.productivity-dialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}.productivity-dialog>.workspace-dialog-body{min-height:0;max-height:none;overflow:auto}.productivity-dialog>footer{max-height:80px;overflow:auto}.productivity-dialog>nav{padding:8px 16px;margin:0;border-bottom:1px solid #29414a}.productivity-dialog>nav button{font-size:11px;padding:6px 10px}.productivity-dialog p{font:12px/1.6 Segoe UI,sans-serif;overflow-wrap:anywhere}.productivity-dialog select,.productivity-dialog textarea{box-sizing:border-box}.workbench-row{padding:12px 0;border-bottom:1px solid #29414a}.workbench-row h3{margin:0 0 5px}.workbench-row pre{max-height:28vh}.workbench-row details{margin-top:8px;font-size:12px}.workbench-state{color:#8bcec1}.approval-alert{position:fixed;right:18px;bottom:55px;z-index:40;background:#604321;color:#ffe0ad;border:1px solid #b58649;border-radius:9px;padding:10px 14px;cursor:pointer}.approval-alert[hidden]{display:none}.workbench-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.productivity-dialog label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}.productivity-dialog input[type=checkbox]{width:auto}.workbench-result{width:100%;text-align:left;margin:4px 0}.workbench-queue-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}.workbench-queue-form label:has(textarea){grid-column:1/-1}.workbench-queue-form>button{width:fit-content}.workbench-queue-form input:disabled,.workbench-queue-form select:disabled{opacity:.5}@media(max-width:650px){.workbench-queue-form{grid-template-columns:1fr}}.workbench-message{color:#a9c3cd;font-size:12px}';
+    '.productivity-dialog{box-sizing:border-box;height:min(680px,90vh);overflow:hidden}.productivity-dialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}.productivity-dialog>.workspace-dialog-body{min-height:0;max-height:none;overflow:auto}.productivity-dialog>footer{max-height:80px;overflow:auto}.productivity-dialog>nav{padding:8px 16px;margin:0;border-bottom:1px solid #29414a}.productivity-dialog>nav button{font-size:11px;padding:6px 10px}.productivity-dialog p{font:12px/1.6 Segoe UI,sans-serif;overflow-wrap:anywhere}.productivity-dialog select,.productivity-dialog textarea{box-sizing:border-box}.workbench-row{padding:12px 0;border-bottom:1px solid #29414a}.workbench-row h3{margin:0 0 5px}.workbench-row pre{max-height:28vh}.workbench-row details{margin-top:8px;font-size:12px}.workbench-state{color:#8bcec1}.verify-state[data-level=failed]{color:#f39a8b}.verify-state[data-level=partial],.verify-state[data-level=unverified]{color:#f0c48f}.approval-alert{position:fixed;right:18px;bottom:55px;z-index:40;background:#604321;color:#ffe0ad;border:1px solid #b58649;border-radius:9px;padding:10px 14px;cursor:pointer}.approval-alert[hidden]{display:none}.workbench-inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.productivity-dialog label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}.productivity-dialog input[type=checkbox]{width:auto}.workbench-result{width:100%;text-align:left;margin:4px 0}.workbench-queue-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}.workbench-queue-form label:has(textarea){grid-column:1/-1}.workbench-queue-form>button{width:fit-content}.workbench-queue-form input:disabled,.workbench-queue-form select:disabled{opacity:.5}@media(max-width:650px){.workbench-queue-form{grid-template-columns:1fr}}.workbench-message{color:#a9c3cd;font-size:12px}';
   document.head.append(style);
   const row = (name, detail) => {
     const node = el('section', undefined, 'workbench-row');
@@ -112,7 +112,13 @@
     return input;
   };
   function verification(node, job) {
-    const verification = job.verification || job.result?.verification;
+    const verification = job.verification || job.result?.verification,
+      badge = job.verificationBadge || job.result?.verificationBadge;
+    if (badge?.label) {
+      const row = el('p', badge.label + ' · ' + (badge.reason || ''), 'workbench-state verify-state');
+      row.dataset.level = String(badge.level || '');
+      node.append(row);
+    }
     node.append(el('p', 'Completion checks: ' + (verification?.status || 'not checked'), 'workbench-state'));
     if (verification?.reason) node.append(el('p', verification.reason));
     for (const result of verification?.results || []) {
