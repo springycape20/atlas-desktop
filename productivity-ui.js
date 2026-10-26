@@ -156,10 +156,21 @@
     pause.checked = state.pauseBetween;
     pauseLabel.prepend(pause);
     body.append(pauseLabel);
+    const concurrency = select(
+      'Run at once',
+      [
+        ['1', 'One task at a time'],
+        ['2', 'Up to 2 Colab tasks'],
+        ['3', 'Up to 3 Colab tasks'],
+      ],
+      body,
+    );
+    concurrency.value = String(state.concurrency || 1);
+    concurrency.onchange = () => void api.taskQueue({ action: 'concurrency', value: Number(concurrency.value) });
     button(
       'Start / continue',
       async () => {
-        await api.taskQueue({ action: 'start', pauseBetween: pause.checked });
+        await api.taskQueue({ action: 'start', pauseBetween: pause.checked, concurrency: Number(concurrency.value) });
         await open('Queue');
       },
       controls,
@@ -172,7 +183,7 @@
       },
       controls,
     );
-    const stateText = el('p', state.paused ? 'Queue paused.' : 'Queue running.', 'workbench-state');
+    const stateText = el('p', queueSummary(state), 'workbench-state');
     stateText.id = 'queueState';
     body.append(stateText);
     const form = el('form', undefined, 'workbench-queue-form'),
@@ -197,6 +208,14 @@
       task = field('Task', 'textarea', form);
     task.rows = 2;
     task.maxLength = 20000;
+    const waitLabel = el(
+        'label',
+        'Wait for the task above (start after it finishes and its changes are applied or discarded)',
+      ),
+      wait = el('input');
+    wait.type = 'checkbox';
+    waitLabel.prepend(wait);
+    form.append(waitLabel);
     roles.disabled = true;
     provider.onchange = () => (roles.disabled = provider.value !== 'colab');
     button(
@@ -212,6 +231,7 @@
             profileId: selected.id,
             provider: provider.value,
             roles: roles.value,
+            waitForPrevious: wait.checked,
           },
         });
         await open('Queue');
@@ -224,16 +244,43 @@
     body.append(list);
     renderQueueItems(list, state);
     status.textContent =
-      'Tasks run one at a time. Pause stops the next task; stop a running task in Tasks. The queue always pauses after restarting ATLAS.';
+      'Tasks start in order. Colab tasks can run side by side (up to the Run at once limit), each in its own isolated checkout; Assistant tasks edit the folder directly and always run alone. Pause stops new tasks from starting; stop a running task in Tasks. The queue always pauses after restarting ATLAS.';
+  }
+  function queueSummary(state) {
+    const active = state.items.filter((item) => item.status === 'running').length;
+    return (
+      (state.paused ? 'Queue paused.' : 'Queue running.') +
+      (active ? ' ' + active + (active === 1 ? ' task' : ' tasks') + ' running.' : '')
+    );
   }
   function renderQueueItems(list, state) {
     list.replaceChildren();
     for (const item of state.items) {
       const node = el('section', undefined, 'workbench-row');
-      node.append(el('h3', item.prompt), el('p', item.provider + ' · ' + item.status + ' · ' + item.cwd));
+      node.append(
+        el('h3', item.prompt),
+        el(
+          'p',
+          item.provider +
+            ' · ' +
+            item.status +
+            (item.waitForPrevious ? ' · waits for the task above' : '') +
+            ' · ' +
+            item.cwd,
+        ),
+      );
       if (item.error) node.append(el('p', item.error));
       const actions = el('div', undefined, 'workspace-actions');
       node.append(actions);
+      if (item.status === 'queued')
+        button(
+          item.waitForPrevious ? "Don't wait for the task above" : 'Wait for the task above',
+          async () => {
+            await api.taskQueue({ action: 'wait', id: item.id, wait: !item.waitForPrevious });
+            await open('Queue');
+          },
+          actions,
+        );
       if (item.status === 'queued')
         for (const [text, direction] of [
           ['Move up', 'up'],
@@ -909,7 +956,7 @@
       const list = body.querySelector('#queueItems');
       if (list) renderQueueItems(list, state);
       const label = body.querySelector('#queueState');
-      if (label) label.textContent = state.paused ? 'Queue paused.' : 'Queue running.';
+      if (label) label.textContent = queueSummary(state);
     }
   });
   api.onJobs((patch) => {

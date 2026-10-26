@@ -17,6 +17,7 @@ function registerProductivityIpc({
   history,
   run,
   canRun,
+  settled,
   integrations,
 }) {
   const send = (name, value) => {
@@ -27,6 +28,7 @@ function registerProductivityIpc({
       directory: app.getPath('userData'),
       run,
       canRun,
+      settled,
       notify: (value) => send('queue', value),
     }),
     plugins = createPluginDiscovery({ findCodex, findClaude, codex });

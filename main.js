@@ -1559,10 +1559,14 @@ function setupIpc() {
           roles: row.roles,
           isolated: true,
         });
+        // Queue-started Colab jobs run in their own worktrees, so they don't block the queue's
+        // other parallel items the way a task you started yourself does.
+        if (activeJobs.get(result.id)) activeJobs.get(result.id).queued = true;
         await activeJobs.get(result.id).promise;
         const job = activeJobs.get(result.id);
         return {
           jobId: result.id,
+          workspaceId: job.workspaceId || '',
           checksFailed: job.verification?.status === 'failed',
           needsAttention: job.result?.outcome !== 'completed',
           reason: job.result?.limitation,
@@ -1572,11 +1576,23 @@ function setupIpc() {
       await startAssistant(event, { requestId: id, prompt: row.prompt, cwd: row.cwd, profileId: row.profileId });
       return { jobId: id, checksFailed: activeJobs.get(id).verification?.status === 'failed' };
     },
+    // The queue still waits for tasks you started yourself; its own items count toward its limit instead.
     canRun: () =>
       !quitting &&
       mainWindow &&
       !mainWindow.isDestroyed() &&
-      ![...activeJobs.values()].some((job) => job.status === 'running'),
+      ![...activeJobs.values()].some((job) => job.status === 'running' && !job.queued),
+    // An isolated queue task is settled once its changes are accepted or discarded.
+    settled: async (row) => {
+      if (row.provider !== 'colab' || !row.result?.workspaceId) return true;
+      return (
+        (
+          await workspace()
+            .tree(row.result.workspaceId)
+            .catch(() => ({ state: 'gone' }))
+        ).state !== 'active'
+      );
+    },
   });
   require('./change-ipc').registerChangeIpc({
     ipcMain,
