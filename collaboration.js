@@ -197,18 +197,20 @@ function checkIssue(checks) {
     regression: false,
   };
 }
-// A reproduction that still fails after a build or fix, as a blocker the builder must fix.
-function reproductionIssue(run) {
+// A provider-written command ATLAS reran that still fails, as a blocker the builder must fix.
+function commandIssue(id, criterion, label, run) {
   return {
-    id: 'REPRO',
-    criterion: 'REPRO',
+    id,
+    criterion,
     summary:
-      'The reproduction still fails after the fix: ' +
+      label +
+      ' still fails after the fix: ' +
       efficiency.excerpt(run.command, 240) +
       ' (' +
       run.status +
       (run.exitCode === null || run.exitCode === undefined ? '' : ', exit ' + run.exitCode) +
-      '). Fix the root cause; do not weaken, skip or delete the reproduction.',
+      '). Fix the root cause; do not weaken, skip or delete the ' +
+      (id === 'REPRO' ? 'reproduction.' : 'check.'),
     evidence: JSON.stringify({
       command: efficiency.excerpt(run.command, 240),
       status: run.status,
@@ -219,6 +221,7 @@ function reproductionIssue(run) {
     regression: false,
   };
 }
+const reproductionIssue = (run) => commandIssue('REPRO', 'REPRO', 'The reproduction', run);
 // Why a reproduction ATLAS ran before the fix does not count as reproducing the bug.
 function reproductionRejected(run) {
   if (run.status === 'missing')
@@ -243,6 +246,8 @@ function reproductionStatus(row) {
     (row.after ? '; latest ATLAS run after the fix: ' + exit(row.after) : '')
   );
 }
+const milestoneShape =
+  'Put the plan in the status JSON as milestones: [{"title":"...","goal":"...","criteria":["..."],"check":"..."}], 3 to 8 milestones in build order, each with 1 to 6 acceptance criteria and a check: one command that tests that milestone and exits non-zero on failure, or an empty string when nothing can be run (such milestones are reviewed without an ATLAS check).';
 const protocol =
   'Return a brief summary of results and actual checks before the status line. End with one final line: ATLAS_COLAB_STATUS {"decision":"ready","criteria":[],"blockingIssues":[],"disputedIssueIds":[]}. Use ready when the original task is satisfied, even if optional improvements remain. Use changes_requested only for actual blockers, each with {"id":"F1","criterion":"TASK","summary":"required fix","evidence":"specific file/check/reference","regression":false}. Reuse open IDs. If you are fixing and believe an open blocker is not actually required, do not change code for it; add {"id":"F1","reason":"why it is not required, with evidence"} to a "disputes" array in the status JSON. Use blocked for missing access, dependencies, decisions, or work you cannot finish; explain the reason above the verdict. Never invent a blocker just to continue collaboration. Optional polish, style preferences, speculative risks, and unrelated work belong only in non-blocking notes. For the shared task graph, include a concise handover object in the status JSON with summary, decisions, changedFiles, checks, nextActions (short text arrays). Include only public conclusions and actual actions, not hidden reasoning. Keep it concise and factual. Also include userResponse in the status JSON: a final answer ready to show the user. Adapt its length to the task: one or two natural sentences for a greeting or response test; a short outcome and relevant verification for ordinary changes; detailed explanations, code, evidence and limitations when the request requires depth. Keep the preceding stage report short and avoid repeating the full userResponse in it. Keep proposal selection, reviewer approval, criteria IDs, protocol repairs and routine no-op bookkeeping out of userResponse. Include actual blockers and material caveats. criteria must be plain text strings, not objects. Do not expose hidden reasoning or claim checks you did not run.';
 function createCollaboration({
@@ -263,6 +268,14 @@ function createCollaboration({
     status: 'unavailable',
     exitCode: null,
     reason: 'ATLAS cannot run reproduction commands here.',
+  }),
+  // Milestones run each milestone's own check command: (command, milestoneId) => run result.
+  milestoneCheck = async (command, milestone) => ({
+    command,
+    phase: milestone,
+    status: 'unavailable',
+    exitCode: null,
+    reason: 'ATLAS cannot run milestone checks here.',
   }),
   saveReport = async () => '',
 }) {
@@ -289,6 +302,7 @@ function createCollaboration({
     tokenWarning = null,
     brief = {},
     rulings = {},
+    milestones: splitting = 'auto',
   }) {
     if (!EFFORTS.has(effort) || !MODES.has(mode) || !ROLES.has(roles))
       throw Error('Choose a supported Colab mode, roles and effort.');
@@ -309,6 +323,11 @@ function createCollaboration({
       readonly = ['plan', 'compare'].includes(mode),
       builder = roles === 'claude-builds' ? 'claude' : 'codex',
       reviewer = builder === 'codex' ? 'claude' : 'codex';
+    // Large build tasks can run as milestones: Off never splits, On always plans first, and Auto
+    // lets the builder return a plan instead of implementing when the task is too big for one pass.
+    if (!['auto', 'on', 'off'].includes(splitting)) splitting = 'auto';
+    const canSplit = mode === 'build' && splitting !== 'off' && !answer.isSimpleMessage(task),
+      splitFirst = canSplit && splitting === 'on';
     const identity = digest({ task, cwd, mode, roles, instructions, attachmentContext });
     const reports = structuredClone(checkpoints);
     if (reports.length > limit)
@@ -364,7 +383,9 @@ function createCollaboration({
                 ? 'proposal_first'
                 : readonly
                   ? 'draft'
-                  : 'build',
+                  : splitFirst
+                    ? 'decompose'
+                    : 'build',
           criteria: [{ id: 'TASK', text: task }],
           openIssues: [],
           stalls: 0,
@@ -409,6 +430,7 @@ function createCollaboration({
         reason: '',
         stalls: 0,
         reproFailures: 0,
+        checkFailures: 0,
         bestOpenCount: state.openIssues.length || undefined,
         phase:
           state.retryPhase ||
@@ -422,15 +444,25 @@ function createCollaboration({
         clarify: null,
       };
     }
-    // The user's ruling on a builder–reviewer dispute is final for the rest of the task.
-    const overruled = (id) => (state.rulings || []).some((row) => row.id === id && row.ruling === 'builder');
+    const activeMilestone = () => (state.milestones && !state.finalStage ? state.milestones[state.milestone] : null),
+      // Which part of the task blockers and rulings belong to: a milestone, the final review, or the whole task.
+      scopeKey = () => (state.finalStage ? 'final' : activeMilestone()?.id || null),
+      rulingsInScope = () => (state.rulings || []).filter((row) => (row.milestone ?? null) === scopeKey());
+    // The user's ruling on a builder–reviewer dispute is final for the rest of that milestone (or task).
+    // Milestones reuse blocker IDs, so a ruling never carries over to another milestone.
+    const overruled = (id) => rulingsInScope().some((row) => row.id === id && row.ruling === 'builder');
     if (state.dispute) {
       const decided = state.dispute.issues.filter((row) => ['builder', 'reviewer'].includes(rulings?.[row.id]));
       if (decided.length !== state.dispute.issues.length)
         throw Error('Choose who is right for each disputed blocker before resuming.');
       state.rulings = [
         ...(state.rulings || []),
-        ...decided.map((row) => ({ id: row.id, summary: row.summary, ruling: rulings[row.id] })),
+        ...decided.map((row) => ({
+          id: row.id,
+          summary: row.summary,
+          ruling: rulings[row.id],
+          milestone: scopeKey(),
+        })),
       ];
       state.openIssues = state.openIssues.filter((row) => !overruled(row.id));
       state.dispute = null;
@@ -538,20 +570,152 @@ function createCollaboration({
         );
       return false;
     }
+    // Milestones: while one runs, its criteria are the active ones; TASK stays as its scope line
+    // so reviewers keep a valid criterion for task-wide blockers such as failed checks.
+    function milestoneCriteria(row) {
+      return [
+        {
+          id: 'TASK',
+          text:
+            'Milestone ' +
+            row.id +
+            ' of ' +
+            state.milestones.length +
+            ': ' +
+            row.title +
+            (row.goal ? ' - ' + row.goal : '') +
+            '. The original request is context; later milestones are out of scope.',
+        },
+        ...row.criteria,
+      ];
+    }
+    function resetScope() {
+      Object.assign(state, {
+        openIssues: [],
+        stalls: 0,
+        bestOpenCount: undefined,
+        reviewed: false,
+        lastRevision: null,
+        checkRetried: false,
+        disputes: [],
+        checkFailures: 0,
+      });
+    }
+    function proposePlan(plan, by) {
+      state.taskCriteria ||= structuredClone(state.criteria);
+      state.milestones = plan.map((row) => ({ ...row, status: 'pending', unverified: !row.check, summary: '' }));
+      state.planBy = by;
+      state.criteria = [
+        ...state.taskCriteria,
+        {
+          id: 'PLAN',
+          text: 'The milestones cover the whole request in 3 to 8 ordered steps that can each be built, checked and reviewed on their own.',
+        },
+      ];
+      state.phase = 'plan_review';
+    }
+    function startMilestone(i) {
+      state.milestone = i;
+      state.milestones[i].status = 'active';
+      state.criteria = milestoneCriteria(state.milestones[i]);
+      resetScope();
+      state.phase = 'build';
+    }
+    // After the last milestone, one review checks the whole request and every milestone together.
+    function startFinalReview() {
+      state.finalStage = true;
+      state.criteria = [...state.taskCriteria, ...state.milestones.flatMap((row) => row.criteria)];
+      resetScope();
+      state.phase = 'review';
+    }
+    // What providers see of the plan: full detail for the active milestone (and all of them while
+    // planning or in the final review), summaries for finished ones, titles only for later ones.
+    function milestoneBoard() {
+      const detailed = (row) => !state.planApproved || state.finalStage || row.status === 'active';
+      return state.milestones.map((row) => ({
+        id: row.id,
+        title: row.title,
+        status: row.status,
+        ...(detailed(row)
+          ? {
+              goal: row.goal || undefined,
+              criteria: row.criteria.map((item) => item.id + ': ' + item.text),
+              check: row.check || 'none (unverified: reviewed without an ATLAS check)',
+            }
+          : {}),
+        ...(row.summary ? { summary: row.summary } : {}),
+        ...(row.checkRun ? { atlasCheck: row.checkRun.status + ', exit ' + row.checkRun.exitCode } : {}),
+      }));
+    }
+    // A milestone's own check must pass before its review; a failing run goes back to the builder.
+    async function confirmMilestoneCheck(fingerprintNow) {
+      const row = activeMilestone();
+      if (!row?.check) return true;
+      const run = await milestoneCheck(row.check, row.id);
+      if (signal?.aborted) throw Error('Collaboration stopped.');
+      row.checkRun = reproductionRunner.summarize(run, fingerprintNow);
+      if (reproductionRunner.passes(run)) {
+        state.checkFailures = 0;
+        state.openIssues = state.openIssues.filter((issue) => issue.id !== 'MCHECK');
+        return true;
+      }
+      checksForReview = null;
+      if (['missing', 'denied', 'unavailable'].includes(run.status)) {
+        attention(
+          'ATLAS could not run the check for milestone ' +
+            row.id +
+            ': ' +
+            (run.reason || run.status) +
+            ' The milestone cannot be reviewed until its check passes.',
+          'review',
+        );
+        return false;
+      }
+      state.checkFailures = (state.checkFailures || 0) + 1;
+      state.openIssues = [
+        ...state.openIssues.filter((issue) => issue.id !== 'MCHECK'),
+        commandIssue('MCHECK', 'TASK', 'The check for milestone ' + row.id, run),
+      ];
+      state.phase = 'fix';
+      if (state.checkFailures >= 3)
+        attention(
+          'The check for milestone ' +
+            row.id +
+            ' still fails after the build and two fixes. Review the milestone before continuing.',
+          'fix',
+        );
+      else
+        progress(
+          'The check for milestone ' +
+            row.id +
+            ' still fails after ' +
+            (builder === 'codex' ? 'Codex' : 'Claude') +
+            "'s changes; sending it back before review.",
+        );
+      return false;
+    }
     for (let index = reports.length; index < limit && !state.outcome; index++) {
       if (signal?.aborted) throw Error('Collaboration stopped.');
       if (reports.length + extraCount() >= limit) break;
       if (state.parallelPending && state.phase !== 'proposal_second' && reports.length + extraCount() + 1 >= limit)
         break;
       if (state.reviewSession && !canResumeSession(reviewer, state.reviewSession)) state.reviewSession = '';
-      // Never review a debug fix without a passing reproduction for the current files,
-      // including after a resume or edits made since the last run.
-      if (mode === 'debug' && state.reproduction && state.phase === 'review' && !readonly) {
+      if (state.finalReviewSession && !canResumeSession(reviewer, state.finalReviewSession))
+        state.finalReviewSession = '';
+      // Never review a debug fix or a milestone without a passing ATLAS run of its command for the
+      // current files, including after a resume or edits made since the last run.
+      const gate =
+        mode === 'debug' && state.reproduction
+          ? { last: state.reproduction.after, confirm: confirmReproduction }
+          : activeMilestone()?.check
+            ? { last: activeMilestone().checkRun, confirm: confirmMilestoneCheck }
+            : null;
+      if (gate && state.phase === 'review' && !readonly) {
         const current = await readFingerprint(),
-          last = state.reproduction.after;
+          last = gate.last;
         const stale =
           !reproductionRunner.passes(last) || Boolean(current && last.fingerprint && current !== last.fingerprint);
-        if (stale && !(await confirmReproduction(current)) && state.outcome) {
+        if (stale && !(await gate.confirm(current)) && state.outcome) {
           if (reports.length) {
             reports.at(-1).state = structuredClone(state);
             await checkpoint(structuredClone(reports));
@@ -563,13 +727,20 @@ function createCollaboration({
         clarifying = phase === 'clarify',
         target = clarifying ? state.clarify.phase : phase;
       const reviewing = target === 'review',
-        proposing = target.startsWith('proposal_');
+        proposing = target.startsWith('proposal_'),
+        planning = ['decompose', 'plan_review', 'plan_revise'].includes(target),
+        // Auto: the first build may return a milestone plan instead of implementing.
+        offerSplit = canSplit && splitting === 'auto' && target === 'build' && !state.milestones,
+        scope = planning ? 'plan' : scopeKey(),
+        // The final acceptance review starts a fresh reviewer session instead of resuming milestone reviews.
+        sessionKey = state.finalStage ? 'finalReviewSession' : 'reviewSession',
+        resumesSession = reviewing || target === 'plan_review';
       const provider = clarifying
         ? state.clarify.provider
-        : reviewing || phase === 'proposal_second' || target === 'reproduce'
+        : reviewing || phase === 'proposal_second' || target === 'reproduce' || target === 'plan_review'
           ? reviewer
           : builder;
-      const readOnly = readonly || reviewing || proposing || clarifying;
+      const readOnly = readonly || reviewing || proposing || clarifying || planning;
       const effectiveEffort =
           adaptiveEffort && state.openIssues.length && ['low', 'medium'].includes(effort) ? 'high' : effort,
         passChosen = { ...chosen, effort: effectiveEffort };
@@ -587,11 +758,19 @@ function createCollaboration({
         synthesis: 'synthesizing the proposals',
         clarify: 'clarifying the completion verdict',
         reproduce: 'reproducing the bug',
+        decompose: 'splitting the task into milestones',
+        plan_review: 'reviewing the milestone plan',
+        plan_revise: 'revising the milestone plan',
       };
       progress(
         (provider === 'codex' ? 'Codex' : 'Claude') +
           ' is ' +
           stages[phase] +
+          (state.finalStage
+            ? ' for the final acceptance review'
+            : activeMilestone()
+              ? ' on milestone ' + (state.milestone + 1) + '/' + state.milestones.length
+              : '') +
           ' (pass ' +
           (index + 1) +
           (passLimit === null ? ' · unlimited passes' : '/' + limit) +
@@ -602,6 +781,7 @@ function createCollaboration({
         provider,
         parallel: phase === 'proposal_first' && !reports.length && limit >= 2 && !tokenWarning,
         cached: phase === 'proposal_second' && Boolean(state.parallelPending),
+        milestone: scope,
       });
       const independent = phase === 'proposal_second';
       const previous = proposing ? '' : efficiency.priorReports(reports, state, phase, preset);
@@ -626,16 +806,25 @@ function createCollaboration({
           ? 'Give an independent proposal for the original request; do not edit files. Proposals do not approve implementation.'
           : reviewing
             ? 'You are the final reviewer, not a second implementer. Verify the current work against the fixed acceptance criteria. Approve with ready when required work is satisfied. Do not edit files. Only concrete in-scope blockers can request a fix. After the first review, inspect only the open issues and actual regressions introduced by the fix; new regressions require regression:true and specific evidence. Do not reopen resolved issues or optional improvements.'
-            : target === 'reproduce'
-              ? 'You are reproducing a reported bug before anyone fixes it. Find the smallest reliable reproduction, preferably an automated test in the existing test suite that fails because of the bug. Do not fix the bug or change application code. Describe it in the status JSON as reproduction: {"steps":"...","command":"...","files":[...],"observed":"...","expected":"..."}. Use ready once the bug is reproduced; use blocked if you cannot reproduce it, saying what you tried.'
-              : target === 'fix' || target === 'revise'
-                ? 'Address only the listed open blocking issues, preserving all correct work. Do not broaden the task. If a blocker is impossible or needs a user decision, report blocked.'
-                : phase === 'synthesis'
-                  ? 'Synthesize the two independent analyses into the requested final comparison. Do not edit files or execute commands.'
-                  : 'Complete the original request. Derive a short list of acceptance criteria directly from it in the criteria array; do not add optional work. ' +
-                    (roles === 'proposals'
-                      ? 'Choose or combine the two proposals and state the selected approach before implementing.'
-                      : '');
+            : target === 'decompose'
+              ? 'Split the original request into 3 to 8 ordered milestones before anyone implements it. Do not edit files. Derive a short list of acceptance criteria for the whole request in the criteria array. ' +
+                milestoneShape +
+                ' If the request is small enough to build and review well in one pass, return ready with an empty milestones array instead.'
+              : target === 'plan_review'
+                ? 'You are reviewing a milestone plan before any implementation. Do not edit files. Approve with ready when the milestones together cover the whole request in a sensible order, each is small enough to build and review on its own, and each milestone that changes code has a check command that would actually test it. Use changes_requested only for concrete plan problems, with criterion PLAN or the task criterion the plan misses.'
+                : target === 'plan_revise'
+                  ? 'Revise the milestone plan to resolve the listed open blocking issues. Do not edit files. Return the complete revised plan in milestones. ' +
+                    milestoneShape
+                  : target === 'reproduce'
+                    ? 'You are reproducing a reported bug before anyone fixes it. Find the smallest reliable reproduction, preferably an automated test in the existing test suite that fails because of the bug. Do not fix the bug or change application code. Describe it in the status JSON as reproduction: {"steps":"...","command":"...","files":[...],"observed":"...","expected":"..."}. Use ready once the bug is reproduced; use blocked if you cannot reproduce it, saying what you tried.'
+                    : target === 'fix' || target === 'revise'
+                      ? 'Address only the listed open blocking issues, preserving all correct work. Do not broaden the task. If a blocker is impossible or needs a user decision, report blocked.'
+                      : phase === 'synthesis'
+                        ? 'Synthesize the two independent analyses into the requested final comparison. Do not edit files or execute commands.'
+                        : 'Complete the original request. Derive a short list of acceptance criteria directly from it in the criteria array; do not add optional work. ' +
+                          (roles === 'proposals'
+                            ? 'Choose or combine the two proposals and state the selected approach before implementing.'
+                            : '');
       direction +=
         ' Establish a short task brief from the original request and user criteria; ask one focused question only if a missing decision blocks required work. Do not add optional scope.';
       if (preset === 'economy')
@@ -663,6 +852,20 @@ function createCollaboration({
       if (reviewing && state.disputes?.length)
         direction +=
           ' The builder disputed some blockers. For each one, either withdraw it by leaving it out of blockingIssues when the builder is right, or keep it with evidence that directly answers the builder reasoning.';
+      if (offerSplit && !clarifying)
+        direction +=
+          ' If this request is too large to implement and review well in one pass (for example several independent parts or many files), do not edit any files; instead return ready with your criteria and a milestones plan. ' +
+          milestoneShape +
+          ' Otherwise implement it normally and leave milestones out.';
+      if (activeMilestone() && ['build', 'fix'].includes(target))
+        direction +=
+          ' This task is being built in milestones. Implement only the active milestone in MILESTONES; keep earlier milestones working and do not start later ones.';
+      if (activeMilestone() && reviewing)
+        direction +=
+          ' This review covers one milestone. Check only the active milestone criteria and regressions in earlier milestones; later milestones are out of scope. When ready, put a short summary of what this milestone delivered in userResponse.';
+      if (state.finalStage && reviewing)
+        direction +=
+          ' This is the final acceptance review of a task built in milestones. Each milestone was reviewed on its own; now check the whole original request and every milestone criterion together, especially how the milestones fit together. Milestones marked unverified had no ATLAS check, so inspect them directly. When ready, userResponse is the complete final answer covering all milestones.';
       if (readonly) direction += ' This is an analysis-only task: do not edit files or execute commands.';
       const prompt =
         direction +
@@ -675,10 +878,11 @@ function createCollaboration({
         JSON.stringify(state.criteria) +
         '\nOPEN BLOCKING ISSUES: ' +
         JSON.stringify(state.openIssues) +
-        (state.rulings?.length
+        (state.milestones ? '\nMILESTONES: ' + JSON.stringify(milestoneBoard()) : '') +
+        (rulingsInScope().length
           ? '\nUSER RULINGS (final; do not raise again or dispute again): ' +
             JSON.stringify(
-              state.rulings.map((row) => ({
+              rulingsInScope().map((row) => ({
                 id: row.id,
                 summary: row.summary,
                 decision: row.ruling === 'builder' ? 'not required' : 'required, must be fixed',
@@ -735,11 +939,11 @@ function createCollaboration({
             await reviewContext(efficiency.PRESETS[preset].diff, {
               phase: target,
               full: preset === 'thorough',
-              continued: Boolean(state.reviewSession),
+              continued: Boolean(state[sessionKey]),
             }),
             efficiency.PRESETS[preset].diff,
           );
-      if (projectContext && (proposing || ['build', 'draft'].includes(target)) && !clarifying)
+      if (projectContext && (proposing || ['build', 'draft', 'decompose'].includes(target)) && !clarifying)
         evidence += '\n' + efficiency.excerpt(projectContext, preset === 'economy' ? 3500 : 6000);
       if (!proposing && !clarifying)
         evidence += '\n' + taskGraph.context({ reports, state, limit: preset === 'economy' ? 1800 : 2600 });
@@ -820,12 +1024,12 @@ function createCollaboration({
           effectivePrompt,
           cwd,
           passSettings,
-          reviewing ? state.reviewSession || '' : '',
+          resumesSession ? state[sessionKey] || '' : '',
           () => {},
         );
         after = await readFingerprint();
       }
-      if (reviewing && result.sessionId) state.reviewSession = result.sessionId;
+      if (resumesSession && result.sessionId) state[sessionKey] = result.sessionId;
       if (signal?.aborted) throw Error('Collaboration stopped.');
       const verdict = parseVerdict(result.output),
         report = {
@@ -844,6 +1048,7 @@ function createCollaboration({
           fingerprintAfter: after,
           userResponse: verdict.userResponse || '',
           handover: verdict.handover || null,
+          ...(scope ? { milestone: scope } : {}),
           metrics: {
             promptCharacters: effectivePrompt.length,
             legacyPromptCharacters: prompt.length - previous.length + legacyPrevious.length,
@@ -882,8 +1087,50 @@ function createCollaboration({
             'A provider reported blocked work. Review its summary and supply the missing decision, access or dependency.',
           );
         else if (proposing)
-          state.phase = target === 'proposal_first' ? 'proposal_second' : mode === 'compare' ? 'synthesis' : 'build';
-        else if (target === 'reproduce') {
+          state.phase =
+            target === 'proposal_first'
+              ? 'proposal_second'
+              : mode === 'compare'
+                ? 'synthesis'
+                : splitFirst
+                  ? 'decompose'
+                  : 'build';
+        else if (target === 'decompose' || target === 'plan_revise') {
+          if (target === 'decompose' && verdict.criteria.length && !state.scopeFrozen) {
+            state.criteria = [
+              { id: 'TASK', text: task },
+              ...verdict.criteria.map((text, i) => ({ id: 'AC' + (i + 1), text })),
+            ];
+            state.scopeFrozen = true;
+          }
+          if (verdict.decision !== 'ready')
+            attention('The builder could not finish a milestone plan. Review its report before continuing.');
+          else if (verdict.milestones) proposePlan(verdict.milestones, provider);
+          else if (target === 'decompose') {
+            state.phase = 'build';
+            progress('The builder kept the task as a single build.');
+          } else attention('The builder did not return a revised milestone plan.', 'plan_revise');
+        } else if (target === 'plan_review') {
+          if (verdict.decision === 'ready') {
+            state.planApproved = true;
+            progress('The milestone plan was approved; starting milestone 1 of ' + state.milestones.length + '.');
+            startMilestone(0);
+          } else {
+            const criteria = new Set(state.criteria.map((row) => row.id)),
+              invalid = verdict.issues.find((issue) => !criteria.has(issue.criterion));
+            state.planRevisions = (state.planRevisions || 0) + 1;
+            if (invalid) attention('A plan review blocker does not match the task criteria: ' + invalid.id + '.');
+            else {
+              state.openIssues = verdict.issues;
+              state.phase = 'plan_revise';
+              if (state.planRevisions > 2)
+                attention(
+                  'The milestone plan still has blockers after two revisions. Review the plan before continuing.',
+                  'plan_revise',
+                );
+            }
+          }
+        } else if (target === 'reproduce') {
           if (verdict.decision !== 'ready' || !verdict.reproduction)
             attention('The bug was not reproduced. Review what was tried, then add details and resume.', 'reproduce');
           else {
@@ -913,7 +1160,6 @@ function createCollaboration({
             }
           }
         } else if (!reviewing) {
-          state.artifact = artifact;
           if (verdict.criteria.length && ['build', 'draft', 'synthesis'].includes(target) && !state.scopeFrozen) {
             state.criteria = [
               { id: 'TASK', text: task },
@@ -921,9 +1167,23 @@ function createCollaboration({
             ];
             state.scopeFrozen = true;
           }
-          if (verdict.decision !== 'ready')
+          if (offerSplit && verdict.decision === 'ready' && verdict.milestones) {
+            proposePlan(verdict.milestones, provider);
+            // A plan is meant to replace implementing; edits alongside it need the user to look first.
+            if (
+              original.fingerprintBefore &&
+              original.fingerprintAfter &&
+              original.fingerprintAfter !== original.fingerprintBefore
+            )
+              attention(
+                'The builder returned a milestone plan but also changed files. Review those changes; resuming sends the plan to review with them in place.',
+                'plan_review',
+              );
+          } else if (verdict.decision !== 'ready') {
+            state.artifact = artifact;
             attention('The builder has unfinished required work. Review the remaining blockers before continuing.');
-          else {
+          } else {
+            state.artifact = artifact;
             state.phase = 'review';
             state.lastRevision = {
               before: original.fingerprintBefore,
@@ -933,16 +1193,21 @@ function createCollaboration({
             state.disputes = verdict.disputes.filter(
               (row) =>
                 state.openIssues.some((issue) => issue.id === row.id) &&
-                !(state.rulings || []).some((ruling) => ruling.id === row.id),
+                !rulingsInScope().some((ruling) => ruling.id === row.id),
             );
             // Run the configured checks before spending a review pass. Failures go straight back
             // to the builder once per build or fix; if they persist, the reviewer judges them.
             if (!readonly) {
               const checks = await verify();
               checksForReview = checks;
-              const reproduced = mode === 'debug' && state.reproduction ? await confirmReproduction(after) : true;
-              if (!reproduced) {
-                // The failing reproduction is the hard gate; failed checks ride along with it.
+              const gatePassed =
+                mode === 'debug' && state.reproduction
+                  ? await confirmReproduction(after)
+                  : activeMilestone()
+                    ? await confirmMilestoneCheck(after)
+                    : true;
+              if (!gatePassed) {
+                // A failing reproduction or milestone check is the hard gate; failed checks ride along with it.
                 if (checks?.status === 'failed' && state.phase === 'fix')
                   state.openIssues = [...state.openIssues.filter((row) => row.id !== 'CHECKS'), checkIssue(checks)];
               } else if (checks?.status === 'failed' && !state.checkRetried) {
@@ -968,7 +1233,28 @@ function createCollaboration({
               'The reviewer approved, but the reproduction has not passed an ATLAS run after the fix.',
               'review',
             );
-          else {
+          else if (activeMilestone()?.check && !reproductionRunner.passes(activeMilestone().checkRun))
+            attention(
+              'The reviewer approved milestone ' +
+                activeMilestone().id +
+                ', but its check has not passed an ATLAS run for this work.',
+              'review',
+            );
+          else if (activeMilestone()) {
+            const row = activeMilestone();
+            row.status = 'done';
+            row.summary = efficiency.excerpt(
+              answer.stripProtocol(verdict.userResponse || verdict.handover?.summary || verdict.output),
+              600,
+            );
+            if (state.milestone + 1 < state.milestones.length) {
+              progress('Milestone ' + row.id + ' accepted; starting ' + state.milestones[state.milestone + 1].id + '.');
+              startMilestone(state.milestone + 1);
+            } else {
+              progress('All milestones accepted; starting the final acceptance review.');
+              startFinalReview();
+            }
+          } else {
             state.outcome = 'completed';
             state.reason = 'The final reviewer accepted the current work against the original request.';
           }
@@ -1070,7 +1356,14 @@ function createCollaboration({
           ? state.reason
           : limit < minimum
             ? 'Pass budget was below the full ' + minimum + '-pass collaboration. The latest work may be unreviewed.'
-            : 'The selected pass limit was reached before the final reviewer accepted the current work.';
+            : 'The selected pass limit was reached before the final reviewer accepted the current work.' +
+              (state.planApproved
+                ? ' Milestones accepted: ' +
+                  state.milestones.filter((row) => row.status === 'done').length +
+                  ' of ' +
+                  state.milestones.length +
+                  '.'
+                : '');
     const accounted = [
       ...reports,
       ...(state.supersededProposals || []),
@@ -1115,6 +1408,7 @@ function createCollaboration({
       openIssues: state.openIssues,
       dispute: state.dispute || null,
       reproduction: state.reproduction || null,
+      milestones: state.milestones || null,
       criteria: state.criteria,
       providers: accounted.map((row) => row.provider),
       effort,
