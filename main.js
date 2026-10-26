@@ -1398,6 +1398,7 @@ async function startCollaboration(event, input) {
       };
       const run = require('./collaboration').createCollaboration({
         runProvider,
+        fixedInstructions: 'system',
         canResumeSession: (provider, id) => provider !== 'codex' || Boolean(codexConnection?.hasInternalSession?.(id)),
         graphChanged: async (graph) =>
           publishCollaborationGraph(job, require('./colab-graph').withVerification(graph, job.verification), event),

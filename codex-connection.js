@@ -265,6 +265,8 @@ class CodexConnection {
         },
       };
     if (settings.codexModel) params.model = settings.codexModel;
+    // Fixed Colab instructions are set once per thread as developer instructions, not in every turn.
+    if (settings.systemPrompt) params.developerInstructions = settings.systemPrompt;
     // Internal Colab passes stay in this app-server's memory. Never resume old
     // persisted helper threads or fall back to saving a private pass to Recents.
     if (internal && sessionId && !this.internalSessions.has(sessionId)) sessionId = '';

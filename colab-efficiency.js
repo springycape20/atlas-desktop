@@ -147,7 +147,10 @@
       complete = hasIn && hasOut && raw.complete !== false;
     const input = hasIn ? raw.inputTokens : 0,
       output = hasOut ? raw.outputTokens : 0,
-      estimateIn = Math.ceil((report.metrics?.promptCharacters || 0) / 4),
+      // Fixed instructions sent as a system prompt still reach the model on every request.
+      estimateIn = Math.ceil(
+        ((report.metrics?.promptCharacters || 0) + (report.metrics?.systemPromptCharacters || 0)) / 4,
+      ),
       estimateOut = estimate(report.output);
     return {
       index,

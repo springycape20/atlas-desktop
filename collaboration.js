@@ -279,7 +279,11 @@ function createCollaboration({
     reason: 'ATLAS cannot run milestone checks here.',
   }),
   saveReport = async () => '',
+  // 'system' sends the fixed protocol once as provider instructions (Codex developer instructions,
+  // Claude's appended system prompt) instead of repeating it in every pass's prompt.
+  fixedInstructions = 'prompt',
 }) {
+  const systemProtocol = fixedInstructions === 'system';
   return async function collaborate({
     task,
     cwd,
@@ -770,6 +774,7 @@ function createCollaboration({
         live.steps = steps.list();
         void publishGraph(live).catch(() => {});
       };
+      if (systemProtocol) passSettings.systemPrompt = protocol;
       passSettings.onActivity = (event) => {
         if (event?.kind !== 'reasoning' && event?.provider === provider && steps.add(event) && !liveTimer) {
           liveTimer = setTimeout(showLive, Math.max(0, 1500 - (Date.now() - liveAt)));
@@ -905,7 +910,7 @@ function createCollaboration({
         (checkpoints.length && !proposing
           ? 'This run resumes saved stages. Inspect existing progress and partial changes before any action.\n'
           : '') +
-        protocol +
+        (systemProtocol ? 'Follow the ATLAS Colab protocol in your instructions for the status line.' : protocol) +
         '\nFIXED CRITERIA: ' +
         JSON.stringify(state.criteria) +
         '\nOPEN BLOCKING ISSUES: ' +
@@ -1092,7 +1097,10 @@ function createCollaboration({
           ...(scope ? { milestone: scope } : {}),
           metrics: {
             promptCharacters: effectivePrompt.length,
-            legacyPromptCharacters: prompt.length - previous.length + legacyPrevious.length,
+            // Sent as provider instructions instead of in the prompt (cacheable, counted separately).
+            ...(systemProtocol ? { systemPromptCharacters: protocol.length } : {}),
+            legacyPromptCharacters:
+              prompt.length - previous.length + legacyPrevious.length + (systemProtocol ? protocol.length : 0),
             contextCharacters: history.characters,
             historyTurns: history.selectedTurns,
             effort: effectiveEffort,
