@@ -66,6 +66,25 @@ function cleanMilestones(value) {
     };
   });
 }
+// The status JSON object at the start of text. Providers sometimes add a sentence or a closing
+// fence after it (seen live), which would otherwise cost a clarification pass.
+function leadingJson(text) {
+  if (!text.startsWith('{')) return text;
+  let depth = 0,
+    quoted = false,
+    escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (quoted) {
+      if (escape) escape = false;
+      else if (char === '\\') escape = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === '{') depth++;
+    else if (char === '}' && --depth === 0) return text.slice(0, i + 1);
+  }
+  return text;
+}
 function parseVerdict(value) {
   const raw = String(value || '').trim(),
     match = [...raw.matchAll(/^[ \t*_\x60]*ATLAS_COLAB_STATUS\b/gm)].at(-1),
@@ -77,7 +96,7 @@ function parseVerdict(value) {
       .replace(/[\s*_\x60]+$/, '')
       .trim();
     try {
-      const data = JSON.parse(tail);
+      const data = JSON.parse(leadingJson(tail));
       if (!['ready', 'changes_requested', 'blocked'].includes(data.decision)) throw Error('Unknown decision.');
       const issues = data.blockingIssues ?? [];
       if (!Array.isArray(issues) || issues.length > 30) throw Error('Use up to 30 concrete blocking issues.');
@@ -858,7 +877,7 @@ function createCollaboration({
                   ? 'Revise the milestone plan to resolve the listed open blocking issues. Do not edit files. Return the complete revised plan in milestones. ' +
                     milestoneShape
                   : target === 'reproduce'
-                    ? 'You are reproducing a reported bug before anyone fixes it. Find the smallest reliable reproduction, preferably an automated test in the existing test suite that fails because of the bug. Do not fix the bug or change application code. Describe it in the status JSON as reproduction: {"steps":"...","command":"...","files":[...],"observed":"...","expected":"..."}. Use ready once the bug is reproduced; use blocked if you cannot reproduce it, saying what you tried.'
+                    ? 'You are reproducing a reported bug before anyone fixes it. Find the smallest reliable reproduction, preferably an automated test in the existing test suite that fails because of the bug. Do not fix the bug or change application code. Describe it in the status JSON as reproduction: {"steps":"...","command":"...","files":[...],"observed":"...","expected":"..."}. ATLAS runs your command itself after this pass and only continues if it fails, so give a command even if you could not run it here (for example because a command was not approved); say so in your report. Use ready once you have a reproduction and its command; use blocked only if you cannot find a way to reproduce the bug at all, saying what you tried.'
                     : target === 'fix' || target === 'revise'
                       ? 'Address only the listed open blocking issues, preserving all correct work. Do not broaden the task. If a blocker is impossible or needs a user decision, report blocked.'
                       : phase === 'synthesis'
