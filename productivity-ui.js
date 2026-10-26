@@ -634,7 +634,15 @@
     );
     verification(body, job);
     const details = el('details');
-    details.append(el('summary', 'Commands and activity'), el('pre', (job.events || []).map((e) => e.text).join('\n')));
+    details.append(
+      el('summary', 'Commands and activity'),
+      el(
+        'pre',
+        (job.events || [])
+          .map((e) => (e.kind === 'reasoning' ? 'Reasoning summary (model-reported): ' : '') + e.text)
+          .join('\n'),
+      ),
+    );
     body.append(details);
     if (job.changeId && job.status !== 'running') button('Review checkpoint / undo', () => previewRestore(job));
     if (job.recoveryChangeId) button('Undo last restore', () => previewRestore(job, true));

@@ -444,6 +444,7 @@ function hydrateSettings(value) {
   $('#routeMode').value = settings.routeMode || 'auto';
   $('#requestTimeout').value = String(settings.timeoutSeconds ?? 0);
   $('#speakResponses').checked = settings.speakResponses !== false;
+  $('#showReasoning').checked = settings.showReasoning === true;
   $('#launchAtStartup').checked = settings.launchAtStartup === true;
   $('#codexSandbox').value = settings.codexSandbox || 'workspace-write';
   $('#permissionBypass').checked = settings.permissionBypass === true;
@@ -729,6 +730,7 @@ $('#settingsSave').addEventListener('click', async () => {
     routeMode: $('#routeMode').value,
     timeoutSeconds: Number($('#requestTimeout').value),
     speakResponses: $('#speakResponses').checked,
+    showReasoning: $('#showReasoning').checked,
     launchAtStartup: $('#launchAtStartup').checked,
     voiceEngine: $('#voiceEngine').value,
     kokoroVoice: $('#kokoroVoice').value,
@@ -1184,7 +1186,16 @@ function renderJobs(items) {
         job.status +
         '\n\nREPORTED ACTIVITY\n' +
         (job.events || [])
-          .map((e) => new Date(e.at).toLocaleTimeString() + ' · ' + e.kind + ' · ' + e.text)
+          .map(
+            (e) =>
+              new Date(e.at).toLocaleTimeString() +
+              ' · ' +
+              (e.kind === 'reasoning'
+                ? (e.provider === 'claude' ? 'Claude thinking' : 'Codex reasoning') + ' summary (model-reported)'
+                : e.kind) +
+              ' · ' +
+              e.text,
+          )
           .join('\n') +
         '\n\nRESULT\n' +
         (job.result?.output || job.error || job.statusText);

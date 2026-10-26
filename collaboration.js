@@ -746,7 +746,21 @@ function createCollaboration({
         passChosen = { ...chosen, effort: effectiveEffort };
       const passSettings = readOnly
         ? { ...passChosen, readOnly: true, permissionBypass: false, codexSandbox: 'read-only' }
-        : passChosen;
+        : { ...passChosen };
+      // Reasoning summaries this pass's provider exposed (only with the setting on). They go into this
+      // pass's report and graph node and are never put into any prompt.
+      const reasoning = [];
+      passSettings.onActivity = (event) => {
+        if (
+          event?.kind === 'reasoning' &&
+          event.provider === provider &&
+          typeof event.text === 'string' &&
+          event.text.trim() &&
+          reasoning.length < 12 &&
+          !reasoning.some((row) => row.id === event.id)
+        )
+          reasoning.push({ id: event.id, provider, text: efficiency.excerpt(event.text.trim(), 2000) });
+      };
       const stages = {
         build: 'implementing the task',
         fix: 'fixing the agreed blockers',
@@ -1048,6 +1062,7 @@ function createCollaboration({
           fingerprintAfter: after,
           userResponse: verdict.userResponse || '',
           handover: verdict.handover || null,
+          ...(reasoning.length ? { reasoning: reasoning.map(({ provider, text }) => ({ provider, text })) } : {}),
           ...(scope ? { milestone: scope } : {}),
           metrics: {
             promptCharacters: effectivePrompt.length,

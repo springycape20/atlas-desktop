@@ -342,7 +342,7 @@ class ClaudeConnection {
               this.close();
             }, settings.timeoutSeconds * 1000)
           : null;
-      turn.decode = createDecoder('claude', onText, activity);
+      turn.decode = createDecoder('claude', onText, activity, { reasoning: settings.showReasoning === true });
       turn.control = createClaudeControl({
         trustedAtlasTools: Boolean(this.settings.atlasMcp) && !this.settings.readOnly,
         manager: manager || { ask: async () => null },

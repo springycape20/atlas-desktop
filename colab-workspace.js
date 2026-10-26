@@ -435,7 +435,7 @@
     if (Array.isArray(job.events)) {
       const steps = new Map();
       for (const event of job.events.slice(-100)) {
-        const text = String(event.text || '').slice(0, 800);
+        const text = String(event.text || '').slice(0, event.kind === 'reasoning' ? 2000 : 800);
         if (!text) continue;
         const key = event.id ? event.provider + ':' + event.id : event.kind + ':' + text;
         steps.set(key, {
@@ -519,6 +519,23 @@
             run.openCommands = [...opened];
           }
         });
+      } else if (event.kind === 'reasoning') {
+        // Opt-in reasoning summaries stay collapsed and are labelled as the provider's own account.
+        const reasoning = document.createElement('details'),
+          heading = document.createElement('summary');
+        reasoning.className = 'task-command task-reasoning';
+        reasoning.open = (run.openCommands || []).includes(event.id);
+        heading.textContent =
+          (event.provider === 'claude' ? 'Claude thinking summary' : 'Codex reasoning summary') + ' · model-reported';
+        reasoning.append(heading, text);
+        row.append(reasoning);
+        reasoning.addEventListener('toggle', () => {
+          if (reasoning.isConnected) {
+            const opened = new Set(run.openCommands || []);
+            reasoning.open ? opened.add(event.id) : opened.delete(event.id);
+            run.openCommands = [...opened];
+          }
+        });
       } else if (event.kind === 'progress') {
         row.classList.add('task-progress');
         row.append(text);
@@ -526,7 +543,9 @@
       list.append(row);
     }
     note.className = 'colab-work-note';
-    note.textContent = 'Recent provider-reported actions and progress summaries.';
+    note.textContent = run.events.some((event) => event.kind === 'reasoning')
+      ? 'Recent provider-reported actions, progress and reasoning summaries. Reasoning summaries are what each model chose to report; ATLAS does not verify them.'
+      : 'Recent provider-reported actions and progress summaries.';
     details.append(summary, list, note);
     details.addEventListener('toggle', () => {
       if (details.isConnected) {

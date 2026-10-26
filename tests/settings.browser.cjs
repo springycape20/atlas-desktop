@@ -50,7 +50,7 @@ app.whenReady().then(async () => {
       $('#settingsOpen').click();await wait(200);
       if(!$('#settingsDialog').open)fail('Settings did not open');
       const order=nav().map(b=>b.dataset.section);
-      const expected=['Provider accounts','Models','Assistant','Voice','Microphone','Permissions','Startup','App updates','Tools and data'];
+      const expected=['Provider accounts','Models','Assistant','Voice','Microphone','Permissions','Transparency','Startup','App updates','Tools and data'];
       if(JSON.stringify(order)!==JSON.stringify(expected))fail('Section order: '+JSON.stringify(order));
       if(JSON.stringify(shown())!=='["Provider accounts"]')fail('Expected only Provider accounts, saw '+JSON.stringify(shown()));
       if(nav()[0].getAttribute('aria-current')!=='true')fail('Current section is not marked');
@@ -60,6 +60,7 @@ app.whenReady().then(async () => {
       if(textOf('Provider accounts').includes('Show log file'))fail('Show log file is still under Provider accounts');
       for(const label of ['Installed plugins and tools','Import chats from Codex or Claude','Show log file'])if(!textOf('Tools and data').includes(label))fail(label+' missing from Tools and data');
       if(textOf('App updates').includes('Installed plugins and tools'))fail('Plugins button is still under App updates');
+      if(!textOf('Transparency').includes('Show model reasoning summaries')||$('#showReasoning').checked)fail('Reasoning summaries toggle missing or not off by default');
       // Switching sections, with the keyboard too.
       nav().find(b=>b.dataset.section==='Voice').click();await wait(50);
       if(JSON.stringify(shown())!=='["Voice"]')fail('Voice did not show: '+JSON.stringify(shown()));

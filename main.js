@@ -320,6 +320,7 @@ function defaultSettings() {
     voiceDeviceId: '',
     speechDetail: 'brief',
     speakResponses: true,
+    showReasoning: false,
     launchAtStartup: false,
     voiceEngine: 'kokoro',
     kokoroVoice: 'bm_george',
@@ -355,6 +356,8 @@ function sanitizeSettings(value) {
     claudeModels: cleanModels(value?.claudeModels),
     voiceDeviceId: typeof value?.voiceDeviceId === 'string' ? value.voiceDeviceId.slice(0, 512) : '',
     speakResponses: value?.speakResponses !== false,
+    // Opt-in: providers' own reasoning summaries, shown labelled as model-reported.
+    showReasoning: value?.showReasoning === true,
     launchAtStartup: value?.launchAtStartup === true,
     speechDetail: value?.speechDetail === 'full' ? 'full' : 'brief',
     voiceEngine: ['kokoro', 'windows', 'elevenlabs'].includes(value?.voiceEngine)
@@ -857,7 +860,8 @@ function findReferencedProviderHistory(prompt) {
   return providerHistory.request('search', { prompt });
 }
 async function runProvider(provider, prompt, cwd, settings, previousSessionId = '', onText = () => {}) {
-  const { stageSignal, ...providerSettings } = settings;
+  // onActivity lets one Colab pass capture its own activity (such as reasoning summaries) for its report.
+  const { stageSignal, onActivity = () => {}, ...providerSettings } = settings;
   settings = providerSettings;
   if (provider === 'claude') {
     const executable = findClaudeExecutable();
@@ -896,6 +900,7 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
             }
           },
           activity: (activity) => {
+            onActivity({ ...activity, provider: 'claude' });
             if (job) {
               job.events.push({ ...activity, provider: 'claude', at: Date.now() });
               job.events = job.events.slice(-100);
@@ -952,6 +957,7 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
             params,
           ),
         activity: (event) => {
+          onActivity({ ...event, provider: 'codex' });
           if (job) {
             job.events.push({ ...event, provider: 'codex', at: Date.now() });
             job.events = job.events.slice(-100);

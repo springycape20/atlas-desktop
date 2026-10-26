@@ -63,9 +63,20 @@
             : '',
         ].filter(Boolean)
       : [];
+    // Only present when the reasoning-summary setting was on for this pass.
+    const reasoning = (Array.isArray(row.reasoning) ? row.reasoning : [])
+      .slice(0, 12)
+      .map((item) => text(item?.text, 2000))
+      .filter((value) => value.trim());
     return (
       text(h?.summary || row.output, 2400) +
-      (parts.length ? '\n\nModel-reported rationale (not verified by ATLAS):\n' + parts.join('\n\n') : '')
+      (parts.length ? '\n\nModel-reported rationale (not verified by ATLAS):\n' + parts.join('\n\n') : '') +
+      (reasoning.length
+        ? '\n\n' +
+          (row.provider === 'claude' ? 'Claude thinking' : 'Codex reasoning') +
+          ' summary (model-reported; only what the provider exposes):\n' +
+          reasoning.join('\n\n')
+        : '')
     );
   }
   function build({ task = '', reports = [], state = {}, active = null, outcome = '', verification = null } = {}) {
