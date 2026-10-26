@@ -701,6 +701,7 @@
           message.at,
           JSON.stringify(message.attachments || []),
           JSON.stringify(message.verification || null),
+          JSON.stringify(message.checkOffer || null),
           (comparisons.get(chat.id) || []).includes(message.id),
         ],
         () => {
@@ -763,6 +764,27 @@
             actions.append(copy, compare);
             article.append(actions);
           }
+          if (message.checkOffer && !message.checkOffer.answered && window.atlasCheckOffer)
+            article.append(
+              window.atlasCheckOffer.card(message.checkOffer, {
+                jobId: message.jobId,
+                toast,
+                onAnswered: (state, result) => {
+                  message.checkOffer = { ...message.checkOffer, answered: state };
+                  if (state === 'enabled') {
+                    toast('Completion checks are on for ' + (result?.profile?.name || 'this project') + '.');
+                    void window.atlasWorkspace?.refreshProfiles?.();
+                  }
+                  save();
+                  render();
+                },
+                onVerified: (verification) => {
+                  if (verification?.level) message.verification = verification;
+                  save();
+                  render();
+                },
+              }),
+            );
           window.atlasWorkspace?.messageAttachments(article, message.attachments);
           return article;
         },
@@ -1101,6 +1123,7 @@
         content: String(value.result || value.error),
         ...(value.error ? { error: true } : {}),
         ...(value.verification?.level ? { verification: value.verification } : {}),
+        ...(value.checkOffer?.checks?.length ? { checkOffer: value.checkOffer } : {}),
       });
     } else chat.busy = true;
     save();

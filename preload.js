@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('atlas', {
   jobs: (request) => ipcRenderer.invoke('atlas:jobs', request),
   collabReport: (request) => ipcRenderer.invoke('atlas:collab-report', request),
   collaborate: (request) => ipcRenderer.invoke('atlas:collab', request),
+  checkOffer: (request) => ipcRenderer.invoke('atlas:check-offer', request),
   modelCatalog: (provider) => ipcRenderer.invoke('atlas:model-catalog', provider),
   onCollaborationStatus: (callback) => {
     const listener = (_event, value) => callback(value);

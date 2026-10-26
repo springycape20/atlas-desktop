@@ -228,6 +228,13 @@ async function checkTask(job) {
     at: Date.now(),
   });
   job.events = job.events.slice(-100);
+  await badgeTask(job);
+  if (job.verificationBadge?.level === 'unverified') job.checkOffer = await offerChecks(job);
+  if (job.result && typeof job.result === 'object') job.result.checkOffer = job.checkOffer || null;
+  emitJobs();
+}
+// What ATLAS verified about a finished task, for its badge and status line.
+async function badgeTask(job) {
   // The badge only matters for work that changed files; read-only Colab modes never get one.
   const changedFiles =
     job.collaboration && ['plan', 'compare'].includes(job.request?.mode)
@@ -244,10 +251,20 @@ async function checkTask(job) {
     result: job.collaboration ? job.result : null,
     changedFiles,
   });
-  emitJobs();
   if (job.result && typeof job.result === 'object') {
     job.result.verification = job.verification;
     job.result.verificationBadge = job.verificationBadge;
+  }
+}
+// Once per project folder, an unverified task offers the checks Project setup detects there
+// (or the folder profile's own commands when automatic checks are off).
+async function offerChecks(job) {
+  const folder = job.projectFolder || job.cwd;
+  try {
+    const detected = (await require('./project-tools').detectProject(folder)).checks;
+    return await workspace().checkOffer(folder, detected, job.request?.profileId || '');
+  } catch {
+    return null;
   }
 }
 let workspaceService;
@@ -1053,6 +1070,8 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       changesError,
       verification,
       verificationBadge,
+      checkOffer,
+      projectFolder,
       recoveryChangeId,
       sessions,
       preparedProposals,
@@ -1083,6 +1102,8 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       changesError,
       verification,
       verificationBadge,
+      checkOffer,
+      projectFolder,
       recoveryChangeId,
       sessions,
       graphRunId,
@@ -1240,6 +1261,8 @@ async function startCollaboration(event, input) {
       colabChatId: request.chatId,
       prompt: task,
       cwd: folder,
+      // The project folder itself; cwd moves to an isolated worktree when one is used.
+      projectFolder: folder,
       conversationId: request.chatId,
       status: 'running',
       statusText: 'Preparing workspace',
@@ -1441,6 +1464,7 @@ async function startCollaboration(event, input) {
           outcome: result.outcome,
           result: result.output,
           verification: job.verificationBadge,
+          checkOffer: job.checkOffer || null,
           usage: result.usage,
           limitation: result.limitation,
           workspaceId: job.workspaceId,
@@ -1576,6 +1600,45 @@ function setupIpc() {
     return { provider: report.provider, phase: report.phase, output };
   });
   ipcMain.handle('atlas:collab', (event, request) => startCollaboration(event, request));
+  // Answers to the once-per-project offer to turn on completion checks, or a one-off run of the
+  // offered checks on a finished task. Only commands recorded with the offer can run.
+  ipcMain.handle('atlas:check-offer', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (request.action !== 'run') {
+      const result = await workspace().answerCheckOffer(request);
+      // Other finished tasks from the same folder stop showing the answered offer.
+      for (const job of activeJobs.values())
+        if (
+          job.checkOffer &&
+          path.resolve(job.checkOffer.cwd).toLowerCase() === path.resolve(request.cwd).toLowerCase()
+        )
+          job.checkOffer = { ...job.checkOffer, answered: request.answer === 'enable' ? 'enabled' : 'declined' };
+      await persistJobs();
+      emitJobs();
+      return result;
+    }
+    const job = activeJobs.get(request.jobId);
+    if (!job || job.status === 'running') throw Error('This task is not available to check now.');
+    const allowed = await workspace().offeredChecks(job.projectFolder || job.cwd),
+      commands = allowed.filter((command) => Array.isArray(request.commands) && request.commands.includes(command));
+    if (!commands.length) throw Error('Choose at least one of the offered checks.');
+    job.verification = await require('./project-tools').completionChecks(
+      { autoCheck: true, checkCommands: commands.join('\n') },
+      job.cwd,
+      {
+        progress: (text) => {
+          job.events.push({ kind: 'command', text, at: Date.now() });
+          emitJobs();
+        },
+      },
+    );
+    await badgeTask(job);
+    if (job.status === 'completed')
+      job.statusText = require('./verification-badge').completeStatus(job.verificationBadge);
+    await persistJobs();
+    emitJobs();
+    return { verification: job.verificationBadge, status: job.verification.status };
+  });
   ipcMain.handle('atlas:model-catalog', async (event, provider) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     return (await models().get(provider)).models;
@@ -2227,6 +2290,7 @@ async function createWindow() {
         '/app-ui.js',
         '/assistant-chat.js',
         '/chat-render.js',
+        '/check-offer-ui.js',
         '/colab-graph.js',
         '/colab-graph-ui.js',
         '/colab-efficiency.js',

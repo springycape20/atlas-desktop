@@ -125,6 +125,85 @@ function createWorkspaceService(directory, options = {}) {
   async function profile(id) {
     return structuredClone((await state()).profiles.find((p) => p.id === id) || null);
   }
+  const samePath = (a, b) =>
+    process.platform === 'win32'
+      ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
+      : path.resolve(a) === path.resolve(b);
+  const lines = (value) =>
+    String(value || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  // Once per project folder, when a task there finishes unverified, ATLAS offers to turn on
+  // completion checks: the folder profile's own commands if it has them, otherwise the ones
+  // Project setup detects. Only those recorded commands can later be enabled or run.
+  async function checkOffer(folder, detected = [], profileId = '') {
+    return serial(async () => {
+      const s = await state(),
+        cwd = await fs.realpath(folder);
+      s.checkOffers ||= {};
+      if (Object.keys(s.checkOffers).some((key) => samePath(key, cwd))) return null;
+      const owner =
+        (profileId && s.profiles.find((row) => row.id === profileId && samePath(row.cwd, cwd))) ||
+        s.profiles.find((row) => samePath(row.cwd, cwd));
+      if (owner?.autoCheck && lines(owner.checkCommands).length) return null;
+      const configured = lines(owner?.checkCommands),
+        checks = (configured.length ? configured : detected.map((row) => String(row).trim()).filter(Boolean)).slice(
+          0,
+          12,
+        );
+      if (!checks.length) return null;
+      s.checkOffers[cwd] = { state: 'offered', checks, at: Date.now() };
+      await save();
+      return { cwd, checks, configured: configured.length > 0, profileName: owner?.name || '' };
+    });
+  }
+  async function offeredChecks(folder) {
+    const s = await state(),
+      key = Object.keys(s.checkOffers || {}).find((row) => samePath(row, folder));
+    return key ? [...s.checkOffers[key].checks] : [];
+  }
+  async function answerCheckOffer({ cwd, answer, commands = [] } = {}) {
+    return serial(async () => {
+      if (!['enable', 'decline'].includes(answer)) throw Error('Choose whether to enable these checks.');
+      const s = await state(),
+        key = Object.keys(s.checkOffers || {}).find((row) => samePath(row, String(cwd || '')));
+      if (!key) throw Error('This check offer is no longer available.');
+      const offer = s.checkOffers[key];
+      if (answer === 'decline') {
+        Object.assign(offer, { state: 'declined', answeredAt: Date.now() });
+        await save();
+        return { answer };
+      }
+      const chosen = offer.checks.filter((command) => Array.isArray(commands) && commands.includes(command));
+      if (!chosen.length) throw Error('Choose at least one of the offered checks.');
+      let owner = s.profiles.find((row) => samePath(row.cwd, key));
+      if (owner) {
+        // Never replace commands the user already configured; only switch automatic checks on.
+        if (!lines(owner.checkCommands).length) owner.checkCommands = chosen.join('\n');
+        owner.autoCheck = true;
+      } else {
+        if (s.profiles.length >= 100) throw Error('Up to 100 project profiles are supported.');
+        owner = {
+          id: randomUUID(),
+          name: path.basename(key).slice(0, 100) || 'Project',
+          cwd: key,
+          instructions: '',
+          commands: '',
+          checkCommands: chosen.join('\n'),
+          autoCheck: true,
+          codexModel: '',
+          claudeModel: '',
+          effort: 'medium',
+          maxRuntimeSeconds: null,
+        };
+        s.profiles.push(owner);
+      }
+      Object.assign(offer, { state: 'enabled', answeredAt: Date.now() });
+      await save();
+      return { answer, profile: structuredClone(owner) };
+    });
+  }
   async function importBuffers(files) {
     return serial(async () => {
       const s = await state();
@@ -539,6 +618,9 @@ function createWorkspaceService(directory, options = {}) {
   return {
     profiles,
     profile,
+    checkOffer,
+    offeredChecks,
+    answerCheckOffer,
     importPaths,
     importBuffers,
     attachments,

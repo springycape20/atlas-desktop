@@ -129,6 +129,20 @@
       );
       node.append(details);
     }
+    // Assistant tasks and Colab tasks both show the once-per-project offer here until it is answered.
+    if (job.checkOffer && !job.checkOffer.answered && window.atlasCheckOffer)
+      node.append(
+        window.atlasCheckOffer.card(job.checkOffer, {
+          jobId: job.id,
+          toast: (text) => (status.textContent = text),
+          onAnswered: (state) => {
+            if (state === 'enabled') {
+              status.textContent = 'Completion checks are on for this project.';
+              void window.atlasWorkspace?.refreshProfiles?.();
+            }
+          },
+        }),
+      );
   }
   async function showQueue(version) {
     const [state, profiles] = await Promise.all([api.taskQueue(), api.projects()]);
