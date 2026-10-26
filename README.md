@@ -25,7 +25,7 @@ Pick a **mode** for each task:
 | Mode | What happens |
 |---|---|
 | **Build and review** | One model implements the task, ATLAS runs your project's checks, and the other model reviews against the task's acceptance criteria. Blockers go back to the builder until the reviewer accepts. |
-| **Debug · reproduce, fix, verify** | The reviewer first reproduces the bug, ideally as a failing test, without fixing it. The builder then fixes the root cause, and the reviewer confirms the reproduction now passes. If the bug can't be reproduced, Colab stops and says what was tried. |
+| **Debug · reproduce, fix, verify** | The reviewer first reproduces the bug, ideally as a failing test, without fixing it. ATLAS runs the reproduction command itself and only continues if it fails. After each fix ATLAS runs it again; it must pass before the reviewer sees the work. If the bug can't be reproduced, Colab stops and says what was tried. |
 | **Plan** | A read-only plan, reviewed before you change anything. |
 | **Compare approaches** | Both models propose independently, then the proposals are combined into one comparison. Read-only. |
 

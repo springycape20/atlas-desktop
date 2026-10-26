@@ -218,6 +218,32 @@
         edge('criterion:' + text(issue.criterion, 80), issueId, 'blocked by', 'provider reported');
       }
     }
+    // Debug mode: reproduction runs ATLAS executed itself, beside the stages they gate.
+    const reproducer = [...nodes].reverse().find((row) => row.kind === 'stage' && row.phase === 'reproduce')?.id;
+    for (const [key, run, label, source] of [
+      ['before', state.reproduction?.before || state.rejectedReproduction, 'Reproduction before fix', reproducer],
+      ['after', state.reproduction?.after, 'Reproduction after fix', artifact],
+    ]) {
+      if (!run || typeof run !== 'object') continue;
+      const from = source || 'task',
+        id = node({
+          id: 'reproduction:' + key,
+          kind: 'check',
+          label: label + ' · ' + (Number.isInteger(run.exitCode) ? 'exit ' + run.exitCode : text(run.status, 40)),
+          detail: [
+            text(run.command, 500),
+            'Status: ' + text(run.status, 40),
+            text(run.error, 500),
+            text(run.output, 1200),
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          status: text(run.status, 40) || 'unknown',
+          origin: 'ATLAS executed',
+          rank: nodes.find((row) => row.id === from)?.rank || 1,
+        });
+      edge(from, id, key === 'before' ? 'reproduced by' : 'verified by');
+    }
     if (active) {
       const phase = active.phase || 'stage',
         id = node({

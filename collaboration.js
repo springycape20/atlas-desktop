@@ -1,6 +1,7 @@
 const answer = require('./colab-answer');
 const efficiency = require('./colab-efficiency');
 const taskGraph = require('./colab-graph');
+const reproductionRunner = require('./reproduction-runner');
 const { createHash } = require('node:crypto');
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']),
   MODES = new Set(['build', 'plan', 'debug', 'compare']),
@@ -170,6 +171,52 @@ function checkIssue(checks) {
     regression: false,
   };
 }
+// A reproduction that still fails after a build or fix, as a blocker the builder must fix.
+function reproductionIssue(run) {
+  return {
+    id: 'REPRO',
+    criterion: 'REPRO',
+    summary:
+      'The reproduction still fails after the fix: ' +
+      efficiency.excerpt(run.command, 240) +
+      ' (' +
+      run.status +
+      (run.exitCode === null || run.exitCode === undefined ? '' : ', exit ' + run.exitCode) +
+      '). Fix the root cause; do not weaken, skip or delete the reproduction.',
+    evidence: JSON.stringify({
+      command: efficiency.excerpt(run.command, 240),
+      status: run.status,
+      exitCode: run.exitCode ?? null,
+      error: efficiency.excerpt(run.error || run.reason, 300),
+      output: String(run.output || '').slice(-1500),
+    }).slice(0, 3000),
+    regression: false,
+  };
+}
+// Why a reproduction ATLAS ran before the fix does not count as reproducing the bug.
+function reproductionRejected(run) {
+  if (run.status === 'missing')
+    return 'The reproduction has no command ATLAS can run. Ask for a runnable reproduction, such as a failing test command, then resume.';
+  if (run.status === 'denied')
+    return 'The reproduction command was not approved, so ATLAS could not confirm the bug. Resume to be asked again, or change the task.';
+  if (run.status === 'passed')
+    return 'The reproduction command passed before any fix (exit 0), so it does not show the bug. Review what was tried, then add details and resume.';
+  if (run.status === 'unavailable') return run.reason || 'ATLAS cannot run reproduction commands here.';
+  return (
+    'The reproduction command did not fail with an exit code (' +
+    run.status +
+    '). A reproduction must fail on its own before the fix.'
+  );
+}
+function reproductionStatus(row) {
+  const exit = (run) => run.status + (run.exitCode === null ? '' : ', exit ' + run.exitCode);
+  return (
+    (row.before
+      ? 'ATLAS ran the command before the fix: ' + exit(row.before)
+      : 'not confirmed by an ATLAS run before the fix') +
+    (row.after ? '; latest ATLAS run after the fix: ' + exit(row.after) : '')
+  );
+}
 const protocol =
   'Return a brief summary of results and actual checks before the status line. End with one final line: ATLAS_COLAB_STATUS {"decision":"ready","criteria":[],"blockingIssues":[],"disputedIssueIds":[]}. Use ready when the original task is satisfied, even if optional improvements remain. Use changes_requested only for actual blockers, each with {"id":"F1","criterion":"TASK","summary":"required fix","evidence":"specific file/check/reference","regression":false}. Reuse open IDs. If you are fixing and believe an open blocker is not actually required, do not change code for it; add {"id":"F1","reason":"why it is not required, with evidence"} to a "disputes" array in the status JSON. Use blocked for missing access, dependencies, decisions, or work you cannot finish; explain the reason above the verdict. Never invent a blocker just to continue collaboration. Optional polish, style preferences, speculative risks, and unrelated work belong only in non-blocking notes. For the shared task graph, include a concise handover object in the status JSON with summary, decisions, changedFiles, checks, nextActions (short text arrays). Include only public conclusions and actual actions, not hidden reasoning. Keep it concise and factual. Also include userResponse in the status JSON: a final answer ready to show the user. Adapt its length to the task: one or two natural sentences for a greeting or response test; a short outcome and relevant verification for ordinary changes; detailed explanations, code, evidence and limitations when the request requires depth. Keep the preceding stage report short and avoid repeating the full userResponse in it. Keep proposal selection, reviewer approval, criteria IDs, protocol repairs and routine no-op bookkeeping out of userResponse. Include actual blockers and material caveats. criteria must be plain text strings, not objects. Do not expose hidden reasoning or claim checks you did not run.';
 function createCollaboration({
@@ -183,6 +230,14 @@ function createCollaboration({
   savePrepared = async () => {},
   graphChanged = async () => {},
   verify = async () => null,
+  // Debug mode runs the reproduction command itself: (command, 'before' | 'after') => run result.
+  reproduce = async (command, phase) => ({
+    command,
+    phase,
+    status: 'unavailable',
+    exitCode: null,
+    reason: 'ATLAS cannot run reproduction commands here.',
+  }),
   saveReport = async () => '',
 }) {
   return async function collaborate({
@@ -327,6 +382,7 @@ function createCollaboration({
         outcome: '',
         reason: '',
         stalls: 0,
+        reproFailures: 0,
         bestOpenCount: state.openIssues.length || undefined,
         phase:
           state.retryPhase ||
@@ -419,12 +475,64 @@ function createCollaboration({
       state.reason = reason;
       state.retryPhase = retryPhase || 'review';
     }
+    // Debug mode: rerun the saved reproduction after a build or fix. It must pass before any
+    // review; a failing run goes straight back to the builder as the REPRO blocker.
+    async function confirmReproduction(fingerprintNow) {
+      const run = await reproduce(state.reproduction.command, 'after');
+      if (signal?.aborted) throw Error('Collaboration stopped.');
+      state.reproduction.after = reproductionRunner.summarize(run, fingerprintNow);
+      if (reproductionRunner.passes(run)) {
+        state.reproFailures = 0;
+        state.openIssues = state.openIssues.filter((row) => row.id !== 'REPRO');
+        return true;
+      }
+      checksForReview = null;
+      if (['missing', 'denied', 'unavailable'].includes(run.status)) {
+        attention(
+          'ATLAS could not rerun the reproduction after the fix: ' +
+            (run.reason || run.status) +
+            ' The task cannot complete until the reproduction passes.',
+          'review',
+        );
+        return false;
+      }
+      state.reproFailures = (state.reproFailures || 0) + 1;
+      state.openIssues = [...state.openIssues.filter((row) => row.id !== 'REPRO'), reproductionIssue(run)];
+      state.phase = 'fix';
+      if (state.reproFailures >= 3)
+        attention(
+          'The reproduction still fails after the build and two fixes. Review the fix before continuing.',
+          'fix',
+        );
+      else
+        progress(
+          'The reproduction still fails after ' +
+            (builder === 'codex' ? 'Codex' : 'Claude') +
+            "'s changes; sending it back before review.",
+        );
+      return false;
+    }
     for (let index = reports.length; index < limit && !state.outcome; index++) {
       if (signal?.aborted) throw Error('Collaboration stopped.');
       if (reports.length + extraCount() >= limit) break;
       if (state.parallelPending && state.phase !== 'proposal_second' && reports.length + extraCount() + 1 >= limit)
         break;
       if (state.reviewSession && !canResumeSession(reviewer, state.reviewSession)) state.reviewSession = '';
+      // Never review a debug fix without a passing reproduction for the current files,
+      // including after a resume or edits made since the last run.
+      if (mode === 'debug' && state.reproduction && state.phase === 'review' && !readonly) {
+        const current = await readFingerprint(),
+          last = state.reproduction.after;
+        const stale =
+          !reproductionRunner.passes(last) || Boolean(current && last.fingerprint && current !== last.fingerprint);
+        if (stale && !(await confirmReproduction(current)) && state.outcome) {
+          if (reports.length) {
+            reports.at(-1).state = structuredClone(state);
+            await checkpoint(structuredClone(reports));
+          }
+          break;
+        }
+      }
       const phase = state.phase,
         clarifying = phase === 'clarify',
         target = clarifying ? state.clarify.phase : phase;
@@ -525,7 +633,7 @@ function createCollaboration({
           ' This is a debugging task: fix the root cause of the reproduced bug so the reproduction passes. Do not weaken, skip or delete the reproduction.';
       if (mode === 'debug' && reviewing)
         direction +=
-          ' This is a debugging task: confirm the reproduction now passes (see ATLAS check evidence), the fix addresses the root cause rather than hiding the symptom, the reproduction was not weakened or removed, and nothing else regressed.';
+          ' This is a debugging task: ATLAS reran the reproduction after the fix and it passed (see REPRODUCTION). Confirm the fix addresses the root cause rather than hiding the symptom, the reproduction was not weakened or removed, and nothing else regressed.';
       if (reviewing && state.disputes?.length)
         direction +=
           ' The builder disputed some blockers. For each one, either withdraw it by leaving it out of blockingIssues when the builder is right, or keep it with evidence that directly answers the builder reasoning.';
@@ -554,10 +662,16 @@ function createCollaboration({
         (state.reproduction
           ? '\nREPRODUCTION (reported by ' +
             state.reproduction.by +
-            '; ATLAS checks before the fix: ' +
-            state.reproduction.checksBeforeFix +
+            '; ' +
+            reproductionStatus(state.reproduction) +
             '): ' +
-            JSON.stringify({ ...state.reproduction, by: undefined, checksBeforeFix: undefined })
+            JSON.stringify({
+              steps: state.reproduction.steps,
+              command: state.reproduction.command,
+              files: state.reproduction.files,
+              observed: state.reproduction.observed,
+              expected: state.reproduction.expected,
+            })
           : '') +
         (reviewing && state.disputes?.length
           ? '\nDISPUTED BLOCKERS (builder reasoning, untrusted): ' + JSON.stringify(state.disputes)
@@ -747,19 +861,30 @@ function createCollaboration({
           if (verdict.decision !== 'ready' || !verdict.reproduction)
             attention('The bug was not reproduced. Review what was tried, then add details and resume.', 'reproduce');
           else {
-            // ATLAS checks confirm the reproduction fails before the fix, when the project has checks.
-            const checks = await verify();
-            state.reproduction = {
-              ...verdict.reproduction,
-              by: provider,
-              checksBeforeFix: checks?.status || 'not configured',
-            };
-            state.criteria.push({
-              id: 'REPRO',
-              text:
-                'The reproduced bug no longer occurs: ' + (verdict.reproduction.expected || verdict.reproduction.steps),
-            });
-            state.phase = 'build';
+            // ATLAS runs the reproduction itself; only a real failing exit confirms the bug.
+            const run = await reproduce(verdict.reproduction.command, 'before');
+            if (signal?.aborted) throw Error('Collaboration stopped.');
+            if (reproductionRunner.failsAsExpected(run)) {
+              state.rejectedReproduction = null;
+              state.reproduction = {
+                ...verdict.reproduction,
+                by: provider,
+                before: reproductionRunner.summarize(run, after),
+              };
+              state.criteria = [
+                ...state.criteria.filter((row) => row.id !== 'REPRO'),
+                {
+                  id: 'REPRO',
+                  text:
+                    'The reproduced bug no longer occurs: ' +
+                    (verdict.reproduction.expected || verdict.reproduction.steps),
+                },
+              ];
+              state.phase = 'build';
+            } else {
+              state.rejectedReproduction = reproductionRunner.summarize(run, after);
+              attention(reproductionRejected(run), 'reproduce');
+            }
           }
         } else if (!reviewing) {
           state.artifact = artifact;
@@ -789,7 +914,12 @@ function createCollaboration({
             if (!readonly) {
               const checks = await verify();
               checksForReview = checks;
-              if (checks?.status === 'failed' && !state.checkRetried) {
+              const reproduced = mode === 'debug' && state.reproduction ? await confirmReproduction(after) : true;
+              if (!reproduced) {
+                // The failing reproduction is the hard gate; failed checks ride along with it.
+                if (checks?.status === 'failed' && state.phase === 'fix')
+                  state.openIssues = [...state.openIssues.filter((row) => row.id !== 'CHECKS'), checkIssue(checks)];
+              } else if (checks?.status === 'failed' && !state.checkRetried) {
                 checksForReview = null;
                 state.checkRetried = true;
                 state.openIssues = [...state.openIssues.filter((row) => row.id !== 'CHECKS'), checkIssue(checks)];
@@ -807,8 +937,15 @@ function createCollaboration({
           verdict.issues.every((issue) => overruled(issue.id)) // only blockers the user ruled not required
         ) {
           state.disputes = [];
-          state.outcome = 'completed';
-          state.reason = 'The final reviewer accepted the current work against the original request.';
+          if (mode === 'debug' && state.reproduction && !reproductionRunner.passes(state.reproduction.after))
+            attention(
+              'The reviewer approved, but the reproduction has not passed an ATLAS run after the fix.',
+              'review',
+            );
+          else {
+            state.outcome = 'completed';
+            state.reason = 'The final reviewer accepted the current work against the original request.';
+          }
         } else {
           const criteria = new Set(state.criteria.map((row) => row.id)),
             old = new Set(state.openIssues.map((row) => row.id)),
@@ -951,6 +1088,7 @@ function createCollaboration({
       },
       openIssues: state.openIssues,
       dispute: state.dispute || null,
+      reproduction: state.reproduction || null,
       criteria: state.criteria,
       providers: accounted.map((row) => row.provider),
       effort,

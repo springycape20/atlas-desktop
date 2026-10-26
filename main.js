@@ -1326,6 +1326,35 @@ async function startCollaboration(event, input) {
           }
           return job.verification;
         },
+        reproduce: async (command, phase) => {
+          const label = phase === 'before' ? 'Reproduction before the fix' : 'Reproduction after the fix';
+          job.statusText = label + ': ' + command;
+          job.events.push({ kind: 'command', text: label + ': ' + command, at: Date.now() });
+          emitJobs();
+          const run = await require('./reproduction-runner').runReproduction(command, {
+            cwd: job.cwd,
+            signal: job.signal,
+            project,
+            phase,
+            assess: async (value) =>
+              require('./desktop-action-policy').assessDesktopAction('PowerShell', { command: value }, job.cwd, {
+                denied: await integrations().deniedFiles(),
+              }),
+            ask: ({ title, details }) =>
+              approvals.ask({ jobId: job.id, provider: 'ATLAS', title, details, signal: job.signal }),
+          });
+          job.events.push({
+            kind: 'command',
+            text:
+              label +
+              ': ' +
+              run.status +
+              (run.exitCode === null || run.exitCode === undefined ? '' : ' (exit ' + run.exitCode + ')'),
+            at: Date.now(),
+          });
+          emitJobs();
+          return run;
+        },
         saveReport: async (report, index, raw) => {
           const folder = path.join(app.getPath('userData'), 'colab-reports', job.id);
           await mkdir(folder, { recursive: true });
