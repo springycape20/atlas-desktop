@@ -390,6 +390,40 @@ function createColabJobs({
     job.promise.catch(() => {});
     return { id };
   }
-  return { start };
+  // A Colab task started by the task queue: always isolated, and it doesn't hold the queue the way a
+  // task you started yourself does. Returns what the queue records for the item.
+  async function runQueued(event, row) {
+    const result = await start(event, {
+      task: row.prompt,
+      cwd: row.cwd,
+      profileId: row.profileId,
+      roles: row.roles,
+      isolated: true,
+    });
+    // Queue-started Colab jobs run in their own worktrees, so they don't block the queue's
+    // other parallel items the way a task you started yourself does.
+    if (jobs.get(result.id)) jobs.get(result.id).queued = true;
+    await jobs.get(result.id).promise;
+    const job = jobs.get(result.id);
+    return {
+      jobId: result.id,
+      workspaceId: job.workspaceId || '',
+      checksFailed: job.verification?.status === 'failed',
+      needsAttention: job.result?.outcome !== 'completed',
+      reason: job.result?.limitation,
+    };
+  }
+  // An isolated queue task is settled once its changes are accepted or discarded.
+  async function settled(row) {
+    if (row.provider !== 'colab' || !row.result?.workspaceId) return true;
+    return (
+      (
+        await workspace()
+          .tree(row.result.workspaceId)
+          .catch(() => ({ state: 'gone' }))
+      ).state !== 'active'
+    );
+  }
+  return { start, runQueued, settled };
 }
 module.exports = { createColabJobs };

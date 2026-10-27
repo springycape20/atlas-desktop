@@ -1168,27 +1168,7 @@ function setupIpc() {
     },
     run: async (row) => {
       const event = { sender: mainWindow.webContents, senderFrame: { url: mainWindow.webContents.getURL() } };
-      if (row.provider === 'colab') {
-        const result = await colabJobs.start(event, {
-          task: row.prompt,
-          cwd: row.cwd,
-          profileId: row.profileId,
-          roles: row.roles,
-          isolated: true,
-        });
-        // Queue-started Colab jobs run in their own worktrees, so they don't block the queue's
-        // other parallel items the way a task you started yourself does.
-        if (activeJobs.get(result.id)) activeJobs.get(result.id).queued = true;
-        await activeJobs.get(result.id).promise;
-        const job = activeJobs.get(result.id);
-        return {
-          jobId: result.id,
-          workspaceId: job.workspaceId || '',
-          checksFailed: job.verification?.status === 'failed',
-          needsAttention: job.result?.outcome !== 'completed',
-          reason: job.result?.limitation,
-        };
-      }
+      if (row.provider === 'colab') return colabJobs.runQueued(event, row);
       const id = randomUUID();
       await startAssistant(event, { requestId: id, prompt: row.prompt, cwd: row.cwd, profileId: row.profileId });
       return { jobId: id, checksFailed: activeJobs.get(id).verification?.status === 'failed' };
@@ -1199,17 +1179,7 @@ function setupIpc() {
       mainWindow &&
       !mainWindow.isDestroyed() &&
       ![...activeJobs.values()].some((job) => job.status === 'running' && !job.queued),
-    // An isolated queue task is settled once its changes are accepted or discarded.
-    settled: async (row) => {
-      if (row.provider !== 'colab' || !row.result?.workspaceId) return true;
-      return (
-        (
-          await workspace()
-            .tree(row.result.workspaceId)
-            .catch(() => ({ state: 'gone' }))
-        ).state !== 'active'
-      );
-    },
+    settled: colabJobs.settled,
   });
   require('./change-ipc').registerChangeIpc({
     ipcMain,
