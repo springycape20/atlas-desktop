@@ -1,9 +1,10 @@
-ATLAS 0.8.0 lets a chat allow PowerShell once instead of approving every command, and shows you every command it ran with its output.
+ATLAS 0.8.1 gives conversations more of the window, quiets the screen around them, and gives ATLAS its own icon.
 
-- **Allow PowerShell for a chat.** When Windows-MCP asks to run a PowerShell command, the approval card now offers **Allow for this chat**, **Allow once** and **Deny**. Allowing the chat lets later commands run without asking, still in the task's working folder. Programs those commands start (such as node, npm or python) can't be inspected by ATLAS, and the card says so.
-- **Risky commands still ask.** Even in an allowed chat, ATLAS asks before a command that deletes files or data, changes the registry, runs as administrator or changes security settings, changes disks or shuts down or restarts the PC, touches Windows system or program files, runs hidden or encoded code, or uses a file or folder you denied before. The card says which.
-- **Stop it any time.** Chats that allow PowerShell show a **PowerShell allowed for this chat · Revoke** bar; in Colab the run details heading also says so. Revoking applies before the next command, including one already waiting to start. Turning off Windows control clears every chat's PowerShell permission.
-- **See every command and its output.** Each PowerShell call appears in the task activity as a row you can expand to see the folder, the full command and its output, and how it was approved: for this chat, by screen control, or once.
-- **Fixed:** a queued Colab task could make the queue pause for a moment before starting the next one when **Run at once** was above 1.
+- **Conversations use the whole window.** ATLAS now fills wide screens instead of stopping at 1500px, with chats in a readable column. Messages are larger and easier to read.
+- **Hide the chat list.** The **‹** button at the top of the saved-chat list hides it in both Assistant and Colab, and **›** brings it back. ATLAS remembers your choice.
+- **More room above the message box.** The Assistant's mic, attachments, Effort, computer control and working folder now share one row under the message box, and the greeting sits beside the chat title.
+- **A calmer screen.** Status reads in plain words ("Auto router · Wake word off · Ready"), everything uses one typeface, and buttons are flat outlines. Teal is kept for status and Send.
+- **The ATLAS Beacon.** ATLAS has its own icon on the taskbar, desktop, Start menu and in the app, replacing Electron's. While a reply or task runs, the Beacon lights orange, and it goes back to white when the work is done.
+- **Menu icons** for Assistant and Colab.
 
 Install over your existing version to preserve conversations and settings. Packaged installations can use **Settings > App updates > Check for updates**, then download and restart to install. Windows x64. Close older ATLAS instances before updating. Computer control uses the separate Windows-MCP integration, not another chat application's private runtime.

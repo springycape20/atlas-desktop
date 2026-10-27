@@ -36,6 +36,28 @@
   search.setAttribute('aria-label', 'Search Assistant chats');
   projects.setAttribute('aria-label', 'Filter Assistant chats by workspace');
   sidebar.append(fresh, importButton, projects, search, list);
+  // One choice hides or shows the saved-chat lists of both Assistant and Colab, remembered across restarts.
+  const listToggles = [sidebar, document.querySelector('.colab-chats')].filter(Boolean).map((aside) => {
+    const toggle = node('button', undefined, 'quiet-button chat-list-toggle');
+    toggle.type = 'button';
+    aside.prepend(toggle);
+    return toggle;
+  });
+  const showLists = (hidden) => {
+    document.body.classList.toggle('chat-lists-hidden', hidden);
+    for (const toggle of listToggles) {
+      toggle.textContent = hidden ? '›' : '‹';
+      toggle.title = toggle.ariaLabel = hidden ? 'Show chat list' : 'Hide chat list';
+      toggle.setAttribute('aria-expanded', String(!hidden));
+    }
+  };
+  showLists(localStorage.getItem('atlas.chatListsHidden') === '1');
+  for (const toggle of listToggles)
+    toggle.addEventListener('click', () => {
+      const hidden = !document.body.classList.contains('chat-lists-hidden');
+      localStorage.setItem('atlas.chatListsHidden', hidden ? '1' : '0');
+      showLists(hidden);
+    });
   const heading = node('header', undefined, 'assistant-chat-heading'),
     title = node('h1', 'Assistant'),
     latest = node('button', 'Latest ↓', 'quiet-button');

@@ -111,7 +111,7 @@ function getAppUpdates() {
   return (updateService ||= require('./app-updates').createAppUpdates({
     app,
     updater: app.isPackaged ? require('electron-updater').autoUpdater : null,
-    busy: () => [...activeJobs.values()].some((job) => job.status === 'running'),
+    busy: jobsRunning,
     notify: (value) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:update-status', value);
     },
@@ -1110,6 +1110,16 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
   });
 }
 
+const jobsRunning = () => [...activeJobs.values()].some((job) => job.status === 'running');
+// The taskbar Beacon lights orange while any Assistant reply or Colab task runs.
+let iconWorking = false;
+function showWorkingIcon() {
+  const working = jobsRunning();
+  if (working === iconWorking) return;
+  iconWorking = working;
+  mainWindow.setIcon(path.join(__dirname, 'assets', working ? 'app-icon-working.png' : 'app-icon.png'));
+}
+
 let jobsEmitTimer,
   sentJobs = new Map();
 function emitJobs() {
@@ -1118,6 +1128,7 @@ function emitJobs() {
   jobsEmitTimer = setTimeout(() => {
     jobsEmitTimer = null;
     if (!mainWindow || mainWindow.isDestroyed()) return;
+    showWorkingIcon();
     const next = new Map(),
       upsert = [];
     for (const job of jobSnapshots({ graphs: false })) {
@@ -1895,15 +1906,22 @@ async function createWindow() {
         '/code-syntax.js',
         '/syntax-worker.js',
         '/syntax-highlight.js',
+        '/assets/beacon.png',
+        '/assets/beacon-working.png',
       ].includes(url.pathname)
     ) {
       return new Response('Not found', { status: 404 });
     }
-    const javascript = url.pathname.endsWith('.js');
-    const html = await readFile(path.join(__dirname, javascript ? url.pathname.slice(1) : 'index.html'));
+    const javascript = url.pathname.endsWith('.js'),
+      image = url.pathname.endsWith('.png');
+    const html = await readFile(path.join(__dirname, javascript || image ? url.pathname.slice(1) : 'index.html'));
     return new Response(html, {
       headers: {
-        'Content-Type': javascript ? 'application/javascript; charset=utf-8' : 'text/html; charset=utf-8',
+        'Content-Type': image
+          ? 'image/png'
+          : javascript
+            ? 'application/javascript; charset=utf-8'
+            : 'text/html; charset=utf-8',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'no-referrer',
       },
@@ -1913,7 +1931,9 @@ async function createWindow() {
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   const width = Math.min(1440, area.width),
     height = Math.min(920, area.height);
+  iconWorking = false;
   mainWindow = new BrowserWindow({
+    icon: path.join(__dirname, 'assets', 'app-icon.png'),
     width,
     height,
     x: area.x + Math.floor((area.width - width) / 2),

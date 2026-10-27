@@ -32,7 +32,7 @@ let cwd = '',
 if (location.protocol === 'file:') {
   $('#connection').textContent = 'OPEN VIA START-CLAUDE-UI.CMD';
   $('#connection').style.color = 'var(--amber)';
-  sub.textContent = 'CLOSE THIS FILE AND LAUNCH START-CLAUDE-UI.CMD FOR MIC ACCESS';
+  sub.textContent = 'Close this file and launch Start-Claude-UI.cmd for mic access';
   mic.disabled = true;
   mic.title = 'Open the local site using Start-Claude-UI.cmd';
 }
@@ -46,7 +46,7 @@ $('#speechStatus').textContent = 'AVAILABLE';
 window.atlas.onProviderProgress(({ provider, status }) => {
   if ($('#sessionStatus').textContent === 'PROCESSING') {
     if (provider) $('#coreEngine').textContent = provider.toUpperCase();
-    sub.textContent = (status || 'Working').toUpperCase();
+    sub.textContent = status || 'Working';
   }
 });
 function resetListen() {
@@ -216,7 +216,7 @@ async function inspectWakeUtterance(rate) {
         $('#form').requestSubmit();
       } else {
         $('#greeting').textContent = 'At your service.';
-        sub.textContent = 'GO AHEAD · I’M LISTENING';
+        sub.textContent = 'Go ahead · I’m listening';
         cue(720);
         void startRecording({ purpose: 'wake', timeoutMs: 20000 });
       }
@@ -834,7 +834,7 @@ async function restoreActiveConversation() {
     renderAnswer(lastAnswer?.content || '');
     response.classList.add('show');
     $('#greeting').textContent = 'Welcome back.';
-    $('#sub').textContent = 'CONTINUING YOUR SAVED CONVERSATION';
+    $('#sub').textContent = 'Continuing your saved conversation';
   } catch {
     conversationId = '';
     localStorage.removeItem('atlas.activeConversation');
@@ -908,7 +908,7 @@ async function openHistoryItem(item, button) {
           .join('\n\n');
         $('#response').classList.add('show');
         $('#greeting').textContent = 'Welcome back.';
-        $('#sub').textContent = 'CONTINUING SAVED ATLAS CONVERSATION';
+        $('#sub').textContent = 'Continuing your saved conversation';
         $('#historyDialog').close();
         $('#prompt').focus();
       });
@@ -963,7 +963,7 @@ function setPath(p) {
   if (!p) return;
   cwd = p;
   if ($('#colabFolder')) $('#colabFolder').textContent = p;
-  $('#folder').textContent = 'WORKING DIRECTORY · ' + p;
+  $('#folder').textContent = 'Working folder · ' + p;
   $('#workspaceLabel').textContent = p.split(/[\\/]/).filter(Boolean).pop() || p;
   $('#workspacePath').textContent = p;
   try {
@@ -1020,7 +1020,7 @@ async function sendMessage(prompt, options = {}) {
   sizeAssistantComposer();
   $('#sessionStatus').textContent = 'PROCESSING';
   $('#greeting').textContent = 'On it.';
-  sub.textContent = 'WORKING · YOU CAN KEEP TALKING';
+  sub.textContent = 'Working · you can keep talking';
   orb.classList.add('thinking');
   response.classList.add('show');
   response.classList.remove('error');
@@ -1041,7 +1041,7 @@ async function sendMessage(prompt, options = {}) {
     renderAnswer(d.output || '(No response text)');
     $('#coreEngine').textContent = (d.provider || '').toUpperCase();
     $('#sessionStatus').textContent = 'STANDBY';
-    sub.textContent = 'READY';
+    sub.textContent = 'Ready';
     const hasQuestion = showFollowupOptions(d.output, requestId),
       question = pendingFollowup;
     await finishResponseStream(d.output);
@@ -1106,6 +1106,11 @@ jobsPanel.innerHTML = '<summary>Tasks</summary><div id="jobItems"></div>';
 $('#form').after(jobsPanel);
 function renderJobs(items) {
   jobList = items;
+  // The corner Beacon lights orange while any reply or task runs, as the taskbar icon does.
+  document.body.classList.toggle(
+    'atlas-working',
+    items.some((job) => job.status === 'running'),
+  );
   scheduleWorkspaceSync();
   if (document.activeElement?.dataset.jobDirection) return;
   const box = $('#jobItems');
@@ -1341,7 +1346,7 @@ stopButton.textContent = 'Stop speaking';
 stopButton.title = 'Stop speech (Escape)';
 stopButton.onclick = () => {
   stopSpeaking();
-  sub.textContent = 'SPEECH STOPPED';
+  sub.textContent = 'Speech stopped';
 };
 $('#form').after(stopButton);
 document.addEventListener('keydown', (e) => {

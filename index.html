@@ -695,7 +695,6 @@
       body {
         background: radial-gradient(ellipse at 50% 33%, #14212b 0, #0b1118 48%, #080d12 100%);
         font-family:
-          Inter,
           Segoe UI,
           system-ui,
           sans-serif;
@@ -715,8 +714,7 @@
       }
       .brand {
         font:
-          600 12px Inter,
-          Segoe UI,
+          600 12px Segoe UI,
           sans-serif;
         letter-spacing: 0.16em;
       }
@@ -733,8 +731,7 @@
       .topright {
         gap: 16px;
         font:
-          10px Inter,
-          Segoe UI,
+          10px Segoe UI,
           sans-serif;
         letter-spacing: 0.08em;
       }
@@ -784,8 +781,7 @@
       .corehead {
         align-items: center;
         font:
-          10px Inter,
-          Segoe UI,
+          10px Segoe UI,
           sans-serif;
         letter-spacing: 0.04em;
       }
@@ -835,8 +831,7 @@
       }
       .sub {
         font:
-          12px Inter,
-          Segoe UI,
+          12px Segoe UI,
           sans-serif;
         letter-spacing: 0;
         color: #87969e;
@@ -876,8 +871,7 @@
       .inputrow input {
         padding: 16px 18px;
         font:
-          14px Inter,
-          Segoe UI,
+          14px Segoe UI,
           sans-serif;
       }
       .inputrow input::placeholder {
@@ -934,8 +928,7 @@
         text-overflow: ellipsis;
         color: #a6b4ba;
         font:
-          11px Inter,
-          Segoe UI,
+          11px Segoe UI,
           sans-serif;
       }
       .quiet-button {
@@ -945,8 +938,7 @@
         color: #b9c8cd;
         padding: 8px 11px;
         font:
-          11px Inter,
-          Segoe UI,
+          11px Segoe UI,
           sans-serif;
         cursor: pointer;
       }
@@ -964,8 +956,7 @@
       }
       .response pre {
         font:
-          13px/1.7 Inter,
-          Segoe UI,
+          13px/1.7 Segoe UI,
           sans-serif;
         color: #d4e0e4;
       }
@@ -977,8 +968,7 @@
         margin: 16px auto 0;
         color: #687780;
         font:
-          9px Inter,
-          Segoe UI,
+          9px Segoe UI,
           sans-serif;
         letter-spacing: 0.07em;
       }
@@ -991,8 +981,7 @@
         border-color: #334a55;
         padding: 11px 15px;
         font:
-          12px Inter,
-          Segoe UI,
+          12px Segoe UI,
           sans-serif;
         box-shadow: 0 10px 35px #0008;
       }
@@ -1168,8 +1157,7 @@
         background: #0a1117;
         color: #e0e8ea;
         font:
-          12px Inter,
-          Segoe UI,
+          12px Segoe UI,
           sans-serif;
         outline: none;
       }
@@ -1230,8 +1218,7 @@
         background: none;
         color: #7d929a;
         font:
-          10px Inter,
-          Segoe UI,
+          10px Segoe UI,
           sans-serif;
         cursor: pointer;
       }
@@ -1312,8 +1299,7 @@
         color: #d8f5f7;
         padding: 10px 15px;
         font:
-          12px Inter,
-          Segoe UI,
+          12px Segoe UI,
           sans-serif;
         cursor: pointer;
       }
@@ -1454,8 +1440,7 @@
         background: #080e13;
         color: var(--white);
         font:
-          12px Inter,
-          Segoe UI,
+          12px Segoe UI,
           sans-serif;
         margin-bottom: 10px;
       }
@@ -1490,8 +1475,7 @@
         margin-top: 5px;
         color: #82949c;
         font:
-          10px Inter,
-          Segoe UI,
+          10px Segoe UI,
           sans-serif;
       }
       .history-preview {
@@ -1623,8 +1607,7 @@
         background: #10202a;
         color: #dcebee;
         font:
-          12px Inter,
-          Segoe UI,
+          12px Segoe UI,
           sans-serif;
         cursor: pointer;
       }
@@ -1700,8 +1683,7 @@
         color: #8da1a9;
         text-align: left;
         font:
-          12px Inter,
-          Segoe UI,
+          12px Segoe UI,
           system-ui,
           sans-serif;
         cursor: pointer;
@@ -2018,8 +2000,7 @@
       }
       .answer {
         font:
-          14px/1.8 Inter,
-          Segoe UI,
+          14px/1.8 Segoe UI,
           sans-serif;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
@@ -2628,8 +2609,7 @@
         outline: 0;
         padding: 16px 18px;
         font:
-          14px/22px Inter,
-          Segoe UI,
+          14px/22px Segoe UI,
           sans-serif;
         resize: none;
         min-height: 54px;
@@ -2644,14 +2624,296 @@
         flex-shrink: 0;
       }
     </style>
+    <style id="roomierLayout">
+      /* Fill the window; conversations keep a readable column inside it. */
+      body > .app {
+        max-width: none;
+      }
+      body .assistant-turn,
+      body .colab-message,
+      body .core .user-turn,
+      body .core .answer {
+        font-size: 15px;
+        line-height: 1.7;
+      }
+      body .assistant-chat-item span,
+      body .colab-chat-item span {
+        font-size: 13px;
+      }
+      body :is(.assistant-chats, .colab-chats) > .chat-list-toggle {
+        width: auto;
+        margin: 0;
+        align-self: flex-end;
+        flex-shrink: 0;
+        padding: 2px 9px;
+        font-size: 15px;
+        line-height: 1.2;
+      }
+      @media (max-width: 750px) {
+        .chat-list-toggle {
+          display: none;
+        }
+      }
+      @media (min-width: 751px) {
+        body.chat-lists-hidden .assistant-workspace,
+        body.chat-lists-hidden .colab-workspace {
+          grid-template-columns: 46px minmax(0, 1fr);
+        }
+        body.chat-lists-hidden :is(.assistant-chats, .colab-chats) {
+          padding: 14px 6px;
+        }
+        body.chat-lists-hidden :is(.assistant-chats, .colab-chats) > :not(.chat-list-toggle) {
+          display: none;
+        }
+        /* Assistant controls: the message box, then one toolbar row. Attachments stay above the box. */
+        body .assistant-workspace .core > .composer {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px 14px;
+        }
+        body .assistant-workspace .composer > .cmd {
+          order: -1;
+          flex: 1 0 100%;
+        }
+        body .assistant-workspace .composer > .attachment-bar {
+          display: contents;
+        }
+        body .assistant-workspace .composer > .attachment-bar > :not(.attachment-toolbar) {
+          order: -2;
+          flex: 1 0 100%;
+        }
+        body .assistant-workspace .composer > .voice-bar {
+          order: 1;
+          min-height: 0;
+          padding: 0;
+        }
+        body .assistant-workspace .composer > .attachment-bar > .attachment-toolbar {
+          order: 2;
+          margin: 0;
+        }
+        body .assistant-workspace .composer .assistant-effort-button {
+          margin-left: 0;
+        }
+        body .assistant-workspace .composer > :is(.screen-control-bar, .shell-control-bar) {
+          order: 3;
+          padding: 0;
+        }
+        body .assistant-workspace .composer > .workspace-bar {
+          order: 4;
+          flex: 0 1 auto;
+          min-width: 0;
+          margin-left: auto;
+          gap: 10px;
+          padding: 0;
+          border: 0;
+        }
+        /* In a saved chat the greeting and its status sit beside the title instead of on their own row. */
+        body.has-conversation .assistant-workspace > .core {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+          column-gap: 16px;
+        }
+        body.has-conversation .assistant-workspace > .core > * {
+          grid-column: 1 / -1;
+        }
+        body.has-conversation .assistant-workspace > .core > .corehead {
+          grid-row: 1;
+        }
+        body.has-conversation .assistant-workspace > .core > .assistant-chat-heading {
+          grid-row: 2;
+          grid-column: 1;
+        }
+        body.has-conversation .assistant-workspace > .core > .presence {
+          grid-row: 2;
+          grid-column: 2;
+          margin: 0;
+        }
+        body.has-conversation .assistant-workspace .presence-copy {
+          min-width: 0;
+          max-width: 320px;
+        }
+        body.has-conversation .assistant-workspace .presence-copy > * {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        body.has-conversation .assistant-workspace > .core > .assistant-chat-find {
+          grid-row: 3;
+        }
+        body.has-conversation .assistant-workspace > .core > .response {
+          grid-row: 4;
+        }
+        body.has-conversation .assistant-workspace > .core > .composer {
+          grid-row: 5;
+          max-height: 46vh;
+        }
+      }
+      @media (min-width: 1001px) {
+        body .assistant-workspace > .core {
+          padding-inline: max(20px, calc((100% - 1100px) / 2));
+        }
+        body .colab-workspace > .colab-chat-main {
+          padding-inline: max(22px, calc((100% - 1100px) / 2));
+        }
+      }
+    </style>
+    <style id="quieterChrome">
+      /* One typeface, four text sizes (12 / 14 / 15 / 20), sentence-case labels, flat controls, teal kept for
+         status, the active item and sending. */
+      body button,
+      body input,
+      body select,
+      body textarea {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+      :root .quiet-button,
+      :root .assistant-chat-find button,
+      :root .assistant-turn-actions button,
+      :root .screen-control-bar button,
+      :root .workspace-bar .quiet-button {
+        font-size: 12px;
+      }
+      :root .assistant-chats > :is(input, select),
+      :root .assistant-chat-find input {
+        font-size: 14px;
+      }
+      :root .assistant-chat-item span {
+        font-size: 14px;
+      }
+      :root :is(.assistant-chat-item small, .voice-hint, .attachment-project, .screen-control-bar, #folder) {
+        font-size: 12px;
+        letter-spacing: 0;
+      }
+      body .app > .foot,
+      body #connection.live {
+        display: none;
+      }
+      /* Status words are set in capitals by the app; shown here in sentence case. */
+      :root .corehead,
+      :root .corehead > * {
+        font-size: 12px;
+        letter-spacing: 0;
+      }
+      :root .corehead :is(#coreEngine, #wakeIndicator, #sessionStatus) {
+        display: inline-block;
+        text-transform: lowercase;
+      }
+      :root .corehead :is(#coreEngine, #wakeIndicator, #sessionStatus)::first-letter {
+        text-transform: uppercase;
+      }
+      :root .corehead #coreEngine,
+      :root .corehead #wakeIndicator {
+        color: #9fb3ba;
+      }
+      :root .status-dot {
+        box-shadow: none;
+      }
+      :root .assistant-chat-heading h1 {
+        font-size: 20px;
+      }
+      :root .assistant-workspace .core .presence-copy .hello {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+      :root .assistant-workspace .core .presence-copy #sub {
+        font-size: 12px;
+        letter-spacing: 0;
+        color: #9fb3ba;
+      }
+      :root :is(.assistant-turn > strong, .assistant-live-label) {
+        font-size: 12px;
+        color: #9fb3ba;
+      }
+      /* Flat surfaces: no gradient or glow on the panel, the greeting's orb becomes a status dot. */
+      :root .assistant-workspace > .core {
+        background: none;
+        box-shadow: none;
+      }
+      :root .has-conversation .assistant-workspace .core :is(.orbwrap, .orb) {
+        width: 10px;
+        height: 10px;
+        background: none;
+        box-shadow: none;
+      }
+      :root .has-conversation .assistant-workspace .orb :is(.ring, .ticks),
+      :root .has-conversation .assistant-workspace .orb::before,
+      :root .has-conversation .assistant-workspace .orb::after {
+        display: none;
+      }
+      :root .has-conversation .assistant-workspace .orbcore {
+        position: static;
+        width: 10px;
+        height: 10px;
+        margin: 0;
+        border: 0;
+        background: #83d8e4;
+        box-shadow: none;
+      }
+      /* Controls are outlines; only Send keeps a teal fill. */
+      :root :is(.icon-button, #mic, .attachment-add, .assistant-effort-button) {
+        background: transparent;
+        box-shadow: none;
+      }
+      :root #mic {
+        border: 1px solid #36505a;
+      }
+      :root .attachment-add {
+        font-size: 20px;
+      }
+      :root .nav-item[aria-current='page'],
+      :root .nav-item.active,
+      :root .assistant-chat-item[aria-current='true'],
+      :root .colab-chat-item[aria-current='true'] {
+        background: #16232a;
+        border-color: transparent;
+        color: #e7eef0;
+      }
+      :root .assistant-turn.user,
+      :root .core .user-turn,
+      :root .colab-message.user {
+        background: #18252b;
+      }
+    </style>
+    <style id="beaconMark">
+      /* The Beacon in the corner: white at rest, its centre bar orange while anything runs. */
+      :root .sigil {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      :root .sigil::after {
+        content: none;
+      }
+      .sigil img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .sigil img.working,
+      .atlas-working .sigil img:not(.working) {
+        visibility: hidden;
+      }
+      .atlas-working .sigil img.working {
+        visibility: visible;
+      }
+    </style>
   </head>
   <body>
     <div class="grid"></div>
     <main class="app">
       <header class="top">
         <div class="brand">
-          <div class="sigil"></div>
-          <div>ATLAS <span class="brand-sub">PERSONAL AI</span></div>
+          <div class="sigil">
+            <img src="/assets/beacon.png" alt="" /><img class="working" src="/assets/beacon-working.png" alt="" />
+          </div>
+          <div>ATLAS</div>
         </div>
         <div class="topright">
           <span class="live" id="connection">READY</span
@@ -2686,7 +2948,7 @@
               <div class="orbcore"></div>
             </div>
           </div>
-          <h1 class="hello" id="greeting">Ready when you are.</h1>
+          <p class="hello" id="greeting">Ready when you are.</p>
           <div class="sub" id="sub">Speak or type a message to begin</div>
           <button class="mic" id="mic" aria-label="Start voice input" title="Start voice input">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
