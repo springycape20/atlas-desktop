@@ -43,7 +43,8 @@ function createColabJobs({
         graph: job.graph,
       });
   }
-  async function start(event, input) {
+  // queued marks a job the task queue started; only runQueued sets it, never the window's request.
+  async function start(event, input, { queued = false } = {}) {
     if (!trusted(event)) throw Error('Untrusted app window.');
     const previous = input?.resumeJobId ? jobs.get(input.resumeJobId) : null;
     if (input?.resumeJobId && (!previous?.collaboration || !previous.request || previous.status === 'running'))
@@ -150,6 +151,9 @@ function createColabJobs({
         projectFolder: folder,
         conversationId: request.chatId,
         status: 'running',
+        // Queue-started Colab jobs run in their own worktrees, so they don't block the queue's other
+        // parallel items the way a task you started yourself does. Set here so no tick sees them unmarked.
+        ...(queued ? { queued: true } : {}),
         statusText: 'Preparing workspace',
         startedAt: Date.now(),
         events: [],
@@ -393,16 +397,11 @@ function createColabJobs({
   // A Colab task started by the task queue: always isolated, and it doesn't hold the queue the way a
   // task you started yourself does. Returns what the queue records for the item.
   async function runQueued(event, row) {
-    const result = await start(event, {
-      task: row.prompt,
-      cwd: row.cwd,
-      profileId: row.profileId,
-      roles: row.roles,
-      isolated: true,
-    });
-    // Queue-started Colab jobs run in their own worktrees, so they don't block the queue's
-    // other parallel items the way a task you started yourself does.
-    if (jobs.get(result.id)) jobs.get(result.id).queued = true;
+    const result = await start(
+      event,
+      { task: row.prompt, cwd: row.cwd, profileId: row.profileId, roles: row.roles, isolated: true },
+      { queued: true },
+    );
     await jobs.get(result.id).promise;
     const job = jobs.get(result.id);
     return {

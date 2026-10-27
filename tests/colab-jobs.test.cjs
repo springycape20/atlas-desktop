@@ -295,3 +295,19 @@ test('the queue waits for a task you started yourself and pauses when a queued t
   assert.equal(after.paused, true);
   assert.match(after.items[0].error, /A provider reported blocked work/);
 });
+
+test('a queued Colab task belongs to the queue from the moment it exists, so it never holds the queue', async (t) => {
+  const h = await colabHarness(t, { git: true });
+  // Records each job as it is registered: a running job not yet marked queued would stop the queue
+  // starting its other items until the next tick.
+  const registered = [],
+    set = h.activeJobs.set;
+  h.activeJobs.set = function (id, job) {
+    registered.push(job.queued === true);
+    return set.call(this, id, job);
+  };
+  await h.call('task-queue', { action: 'add', task: { prompt: task('a.txt'), cwd: h.project, provider: 'colab' } });
+  await h.call('task-queue', { action: 'start', pauseBetween: false, concurrency: 2 });
+  await until(async () => (await h.call('task-queue', {})).items[0].status === 'completed', 'the queued task');
+  assert.deepEqual(registered, [true]);
+});
