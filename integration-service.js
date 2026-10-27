@@ -15,6 +15,12 @@ const windowsPreset = {
 const textResult = (value) => ({
   content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
 });
+// The activity text for a PowerShell call: its folder, the command and its output, trimmed because task
+// activity is saved with the task.
+function commandLog(cwd, command, output) {
+  const text = (cwd ? 'In ' + cwd + '\n' : '') + '> ' + String(command || '') + (output ? '\n\n' + output : '');
+  return text.length > 4000 ? text.slice(0, 4000) + '\n… (trimmed)' : text;
+}
 const tools = [
   {
     name: 'integrations_list',
@@ -670,7 +676,6 @@ function createIntegrationService({
       shellGrant = await permissions.grantShell(owner);
       choice = 'Allow once';
     }
-    const approvedBy = shellGrant ? { approvedBy: 'chat' } : {};
     if (!['Allow once', remember].includes(choice)) {
       if (choice === 'Deny' && assessment?.paths.length)
         await permissions.denyFiles(assessment.denialPaths || assessment.paths);
@@ -703,14 +708,19 @@ function createIntegrationService({
       throw Error('Another integration action is running. Wait for its result before trying again.');
     callBusy = true;
     const id = randomUUID();
-    activity(binding.job, {
-      id,
-      kind: 'activity',
-      text: 'Tool: ' + args.id + ' / ' + args.tool,
-      status: 'running',
-      provider: binding.provider,
-      ...approvedBy,
-    });
+    // Windows PowerShell is logged as a command with what ran and its output; other tools log one line.
+    const step = (status, output = '') =>
+      entry.builtinWindows && args.tool === 'PowerShell'
+        ? {
+            id,
+            kind: 'command',
+            text: commandLog(binding.job.cwd, args.arguments?.command, output),
+            status,
+            provider: binding.provider,
+            approvedBy: shellGrant ? 'chat' : choice === remember ? 'screen' : 'once',
+          }
+        : { id, kind: 'activity', text: 'Tool: ' + args.id + ' / ' + args.tool, status, provider: binding.provider };
+    activity(binding.job, step('running'));
     let temporary,
       lease,
       completed = false;
@@ -817,14 +827,16 @@ function createIntegrationService({
       completed = true;
       actionSignal.throwIfAborted();
       check();
-      activity(binding.job, {
-        id,
-        kind: 'activity',
-        text: 'Tool: ' + args.id + ' / ' + args.tool,
-        status: result.isError ? 'failed' : 'completed',
-        provider: binding.provider,
-        ...approvedBy,
-      });
+      activity(
+        binding.job,
+        step(
+          result.isError ? 'failed' : 'completed',
+          (result.content || [])
+            .filter((part) => part.type === 'text')
+            .map((part) => part.text)
+            .join('\n'),
+        ),
+      );
       return result;
     } catch (error) {
       if (entry.builtinWindows && (actionSignal.aborted || lease?.connection?.isOpen?.() === false))
@@ -842,14 +854,7 @@ function createIntegrationService({
         await closeDesktop(owner, lease);
       if (callSignal.aborted && !(entry.builtinWindows && choice === 'Allow once') && !retainedControl)
         await stop(args.id);
-      activity(binding.job, {
-        id,
-        kind: 'activity',
-        text: 'Tool: ' + args.id + ' / ' + args.tool,
-        status: 'failed',
-        provider: binding.provider,
-        ...approvedBy,
-      });
+      activity(binding.job, step('failed', error.message));
       throw error;
     } finally {
       try {

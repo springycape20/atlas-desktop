@@ -1007,8 +1007,8 @@ test('Allow on a non-desktop tool remembers the exact request without a screen g
 });
 
 // Windows control with a fake PowerShell tool. beforeAction runs before each connection after the first,
-// which is the one that runs a command.
-async function shellFixture(t, { beforeAction } = {}) {
+// which is the one that runs a command; respond(command) gives the tool's result.
+async function shellFixture(t, { beforeAction, respond = () => ({ content: [] }) } = {}) {
   const executed = [];
   let connections = 0;
   const f = await fixture(t, {
@@ -1016,10 +1016,10 @@ async function shellFixture(t, { beforeAction } = {}) {
     connect: async () => {
       if (++connections > 1) await beforeAction?.();
       return {
-        tools: [{ name: 'PowerShell', inputSchema: { type: 'object' } }],
+        tools: ['PowerShell', 'Screenshot'].map((name) => ({ name, inputSchema: { type: 'object' } })),
         call: async (_name, args) => {
           executed.push(args.command);
-          return { content: [] };
+          return respond(args.command);
         },
         close: async () => {},
       };
@@ -1115,6 +1115,38 @@ test('revoking PowerShell for a chat stops a command waiting to run and asks aga
   f.approvals.answer(f.approvals.list()[0].id, 'Deny');
   assert((await again).isError);
   await assert.rejects(f.service.revokeShell(undefined), /Invalid chat permission/);
+});
+
+test('PowerShell calls are logged as commands with how they were approved and their trimmed output', async (t) => {
+  const f = await shellFixture(t, {
+    respond: (command = '') => {
+      if (command.endsWith('npm run broken')) throw Error('npm exited with 1');
+      return { content: [{ type: 'text', text: command.endsWith('npm run noisy') ? 'x'.repeat(5000) : 'built' }] };
+    },
+  });
+  const last = () => f.events.filter((event) => event.kind === 'command').at(-1);
+  await f.service.grantShell('colab:one');
+  assert(!(await f.shell('npm run build')).isError);
+  assert.equal(last().status, 'completed');
+  assert.equal(last().approvedBy, 'chat');
+  assert.equal(last().text, 'In ' + f.directory + '\n> npm run build\n\nbuilt');
+  assert(!(await f.shell('npm run noisy')).isError);
+  assert(last().text.length < 4100 && last().text.endsWith('… (trimmed)'));
+  assert((await f.shell('npm run broken')).isError);
+  assert.equal(last().status, 'failed');
+  assert.match(last().text, /> npm run broken\n\n.*npm exited with 1/);
+  await f.service.revokeShell('colab:one');
+  const once = f.shell('npm run build');
+  f.approvals.answer((await f.waitApproval()).id, 'Allow once');
+  assert(!(await once).isError);
+  assert.equal(last().approvedBy, 'once');
+  const screen = f.call('integrations_call', { id: 'windows', tool: 'Screenshot' });
+  f.approvals.answer((await f.waitApproval()).id, 'Allow once');
+  assert(!(await screen).isError);
+  assert.deepEqual(
+    f.events.filter((event) => event.text === 'Tool: windows / Screenshot').map((event) => event.kind),
+    ['activity', 'activity'],
+  );
 });
 
 test('PowerShell grants survive a restart and end when Windows control is disabled', async (t) => {
