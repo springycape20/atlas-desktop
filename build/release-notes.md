@@ -1,10 +1,6 @@
-ATLAS 0.8.1 gives conversations more of the window, quiets the screen around them, and gives ATLAS its own icon.
+ATLAS 0.8.2 gives ATLAS its full-colour Beacon icon.
 
-- **Conversations use the whole window.** ATLAS now fills wide screens instead of stopping at 1500px, with chats in a readable column. Messages are larger and easier to read.
-- **Hide the chat list.** The **‹** button at the top of the saved-chat list hides it in both Assistant and Colab, and **›** brings it back. ATLAS remembers your choice.
-- **More room above the message box.** The Assistant's mic, attachments, Effort, computer control and working folder now share one row under the message box, and the greeting sits beside the chat title.
-- **A calmer screen.** Status reads in plain words ("Auto router · Wake word off · Ready"), everything uses one typeface, and buttons are flat outlines. Teal is kept for status and Send.
-- **The ATLAS Beacon.** ATLAS has its own icon on the taskbar, desktop, Start menu and in the app, replacing Electron's. While a reply or task runs, the Beacon lights orange, and it goes back to white when the work is done.
-- **Menu icons** for Assistant and Colab.
+- **New app icon.** ATLAS.exe, the desktop and Start menu shortcuts, the installer and the window now show the full-colour Beacon logo, with a thin light outline so it stands out on dark taskbars too. Windows may keep showing the old icon on existing shortcuts for a short while until its icon cache refreshes.
+- **Correction to 0.8.1.** The 0.8.1 notes said the taskbar icon lights orange while ATLAS works. Windows doesn't allow that for an installed app, so the taskbar icon now stays the same. The Beacon in the app's top-left corner still lights orange while a reply or task runs.
 
 Install over your existing version to preserve conversations and settings. Packaged installations can use **Settings > App updates > Check for updates**, then download and restart to install. Windows x64. Close older ATLAS instances before updating. Computer control uses the separate Windows-MCP integration, not another chat application's private runtime.
