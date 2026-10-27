@@ -1111,14 +1111,6 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
 }
 
 const jobsRunning = () => [...activeJobs.values()].some((job) => job.status === 'running');
-// The taskbar Beacon lights orange while any Assistant reply or Colab task runs.
-let iconWorking = false;
-function showWorkingIcon() {
-  const working = jobsRunning();
-  if (working === iconWorking) return;
-  iconWorking = working;
-  mainWindow.setIcon(path.join(__dirname, 'assets', working ? 'app-icon-working.png' : 'app-icon.png'));
-}
 
 let jobsEmitTimer,
   sentJobs = new Map();
@@ -1128,7 +1120,6 @@ function emitJobs() {
   jobsEmitTimer = setTimeout(() => {
     jobsEmitTimer = null;
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    showWorkingIcon();
     const next = new Map(),
       upsert = [];
     for (const job of jobSnapshots({ graphs: false })) {
@@ -1931,7 +1922,6 @@ async function createWindow() {
   const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   const width = Math.min(1440, area.width),
     height = Math.min(920, area.height);
-  iconWorking = false;
   mainWindow = new BrowserWindow({
     icon: path.join(__dirname, 'assets', 'app-icon.png'),
     width,

@@ -1106,7 +1106,7 @@ jobsPanel.innerHTML = '<summary>Tasks</summary><div id="jobItems"></div>';
 $('#form').after(jobsPanel);
 function renderJobs(items) {
   jobList = items;
-  // The corner Beacon lights orange while any reply or task runs, as the taskbar icon does.
+  // The corner Beacon lights orange while any reply or task runs.
   document.body.classList.toggle(
     'atlas-working',
     items.some((job) => job.status === 'running'),
