@@ -54,6 +54,9 @@ function registerProductivityIpc({
     if (request.action === 'desktop-permissions') return integrations.desktopPermissions();
     if (request.action === 'grant-desktop') return integrations.grantDesktop(request.owner);
     if (request.action === 'revoke-desktop') return integrations.revokeDesktop(request.owner);
+    if (request.action === 'shell-permissions') return integrations.shellPermissions();
+    if (request.action === 'grant-shell') return integrations.grantShell(request.owner);
+    if (request.action === 'revoke-shell') return integrations.revokeShell(request.owner);
     if (request.action === 'save') return integrations.save(request.integration);
     if (request.action === 'enable') return integrations.enable(request.id, request.enabled);
     if (request.action === 'remove') return integrations.remove(request.id);
