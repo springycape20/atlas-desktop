@@ -3,7 +3,7 @@
 (function (root) {
   const style = document.createElement('style');
   style.textContent =
-    '.check-offer{margin-top:12px;padding:12px 14px;border:1px solid #6b5a33;border-radius:10px;background:#1d1a12;color:#e8dcc0;font:12px/1.6 Inter,Segoe UI,sans-serif}.check-offer p{margin:0 0 8px;white-space:normal}.check-offer label{display:flex;align-items:center;gap:8px;font-family:Consolas,monospace;margin:2px 0}.check-offer input{width:auto}.check-offer small{display:block;color:#bba987;margin:8px 0}.check-offer-actions{display:flex;flex-wrap:wrap;gap:8px}';
+    '.check-offer{margin-top:12px;padding:12px 14px;border:1px solid #6b5a33;border-radius:10px;background:#1d1a12;color:#e8dcc0;font:12px/1.6 Segoe UI,sans-serif}.check-offer p{margin:0 0 8px;white-space:normal}.check-offer label{display:flex;align-items:center;gap:8px;font-family:Consolas,monospace;margin:2px 0}.check-offer input{width:auto}.check-offer small{display:block;color:#bba987;margin:8px 0}.check-offer-actions{display:flex;flex-wrap:wrap;gap:8px}';
   document.head.append(style);
   function button(text, primary) {
     const element = document.createElement('button');
