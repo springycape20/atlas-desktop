@@ -1,6 +1,6 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
