@@ -364,24 +364,22 @@ const risks = [
 async function riskyPowerShell(command, cwd, { denied = [], env = process.env } = {}) {
   if (typeof command !== 'string' || !command.trim()) return 'Use a concrete PowerShell command.';
   for (const [patterns, reason] of risks) if (patterns.some((pattern) => pattern.test(command))) return reason;
-  const text = command.toLowerCase(),
+  // PowerShell accepts C:/path as well as C:\path; compare both sides with backslashes.
+  const slashes = (value) => value.toLowerCase().replaceAll('/', '\\'),
+    text = slashes(command),
     system = [env.SystemRoot, env.windir, env.ProgramFiles, env['ProgramFiles(x86)']].filter(Boolean);
   if (
     /\b[a-z]:[\\/](?:windows|program files)(?:[\\/\s'"]|$)|\$env:(?:windir|systemroot|programfiles)|%(?:windir|systemroot|programfiles)/i.test(
       command,
     ) ||
-    system.some((folder) => text.includes(folder.toLowerCase()))
+    system.some((folder) => text.includes(slashes(folder)))
   )
     return 'This command touches Windows system or program files.';
   const { canonical, canonicalDenials, inside } = require('./desktop-action-policy'),
     root = cwd ? await canonical(cwd).catch(() => path.resolve(cwd)) : '';
   for (const file of await canonicalDenials(denied)) {
     const relative = root && inside(root, file) ? path.relative(root, file) : '';
-    if (
-      (root && inside(file, root)) ||
-      text.includes(file.toLowerCase()) ||
-      (relative && text.includes(relative.toLowerCase()))
-    )
+    if ((root && inside(file, root)) || text.includes(slashes(file)) || (relative && text.includes(slashes(relative))))
       return 'This command uses a file or folder you denied before.';
   }
   return '';

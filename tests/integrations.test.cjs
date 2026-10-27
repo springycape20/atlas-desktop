@@ -1149,6 +1149,19 @@ test('PowerShell calls are logged as commands with how they were approved and th
   );
 });
 
+test('Allow for this chat answered after Windows control changed grants nothing and runs nothing', async (t) => {
+  const f = await shellFixture(t);
+  const run = f.shell('npm test');
+  const request = await f.waitApproval();
+  await f.service.save(require('../integration-service').windowsPreset);
+  f.approvals.answer(request.id, 'Allow for this chat');
+  const result = await run;
+  assert(result.isError);
+  assert.match(JSON.stringify(result.content), /Computer-control settings changed/);
+  assert.deepEqual(await f.service.shellPermissions(), []);
+  assert.equal(f.executed.length, 0);
+});
+
 test('PowerShell grants survive a restart and end when Windows control is disabled', async (t) => {
   const f = await shellFixture(t);
   await f.service.grantShell('colab:one');

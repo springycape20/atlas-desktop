@@ -629,6 +629,7 @@ function createIntegrationService({
         : '',
       shellOffer = shellCall && !shellRisk,
       allowChat = 'Allow for this chat';
+    const generation = permissionGeneration;
     let shellGrant = shellOffer ? await permissions.shellGrant(owner) : null;
     const ownerGrant = entry.builtinWindows && owner ? await permissions.get(owner) : null;
     let grant = eligible ? ownerGrant : null;
@@ -674,6 +675,11 @@ function createIntegrationService({
             });
     if (choice === allowChat) {
       shellGrant = await permissions.grantShell(owner);
+      // Windows control changed while the card was open: that change ended every chat's PowerShell grant.
+      if (closed || generation !== permissionGeneration) {
+        await permissions.revokeShellIf(owner, shellGrant.id);
+        throw Error('Computer-control settings changed. Please try again.');
+      }
       choice = 'Allow once';
     }
     if (!['Allow once', remember].includes(choice)) {

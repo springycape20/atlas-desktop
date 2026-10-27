@@ -172,6 +172,9 @@ test('previously denied files and folders still ask in an allowed chat, by full 
   const secret = path.join(f.project, 'secret.txt');
   assert.match(await risky(f, 'node read.js ' + secret, [secret]), /denied/);
   assert.match(await risky(f, 'node read.js secret.txt', [secret]), /denied/);
+  const key = path.join(f.project, 'keys', 'id.txt');
+  assert.match(await risky(f, 'node read.js keys/id.txt', [key]), /denied/);
+  assert.match(await risky(f, 'node read.js ' + key.replaceAll('\\', '/'), [key]), /denied/);
   assert.match(await risky(f, 'npm test', [f.project]), /denied/);
   assert.equal(await risky(f, 'node read.js app.txt', [secret]), '');
 });
