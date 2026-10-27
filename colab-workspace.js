@@ -295,13 +295,24 @@
   const assistantButton = document.createElement('button'),
     colabButton = document.createElement('button'),
     divider = document.createElement('div');
-  for (const [button, label, workspace] of [
-    [assistantButton, 'Assistant', 'assistant'],
-    [colabButton, 'Colab', 'colab'],
+  for (const [button, label, workspace, icon] of [
+    // A speech bubble with a sound wave: typed or spoken.
+    [
+      assistantButton,
+      'Assistant',
+      'assistant',
+      'M5 4.5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-4.5 3.5v-3.5H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2ZM8.5 10v2M12 8v6M15.5 10v2',
+    ],
+    // Two overlapping rings: Codex and Claude on one task.
+    [colabButton, 'Colab', 'colab', 'M3 12a6 6 0 1 0 12 0a6 6 0 1 0-12 0M9 12a6 6 0 1 0 12 0a6 6 0 1 0-12 0'],
   ]) {
     button.type = 'button';
     button.className = 'nav-item';
-    button.textContent = label;
+    button.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="' +
+      icon +
+      '"/></svg><span></span>';
+    button.querySelector('span').textContent = label;
     button.dataset.chatWorkspace = workspace;
     button.onclick = () => select(workspace);
   }

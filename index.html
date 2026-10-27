@@ -2877,13 +2877,42 @@
         background: #18252b;
       }
     </style>
+    <style id="beaconMark">
+      /* The Beacon in the corner: white at rest, its centre bar orange while anything runs. */
+      :root .sigil {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      :root .sigil::after {
+        content: none;
+      }
+      .sigil img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .sigil img.working,
+      .atlas-working .sigil img:not(.working) {
+        visibility: hidden;
+      }
+      .atlas-working .sigil img.working {
+        visibility: visible;
+      }
+    </style>
   </head>
   <body>
     <div class="grid"></div>
     <main class="app">
       <header class="top">
         <div class="brand">
-          <div class="sigil"></div>
+          <div class="sigil">
+            <img src="/assets/beacon.png" alt="" /><img class="working" src="/assets/beacon-working.png" alt="" />
+          </div>
           <div>ATLAS</div>
         </div>
         <div class="topright">

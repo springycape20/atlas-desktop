@@ -173,6 +173,21 @@ test('the real app protocol serves every renderer script while blocking private 
     assert.match(response.headers.get('Content-Type'), /javascript/);
     new vm.Script(await response.text());
   }
-  for (const url of ['atlas://app/main.js', 'atlas://app/settings.json', 'atlas://other/index.html'])
+  for (const image of html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/g)) {
+    const response = await handler({ url: 'atlas://app' + image[1] }, fs.readFile, path, root);
+    assert.equal(response.status, 200, image[1] + ' must be served');
+    assert.equal(response.headers.get('Content-Type'), 'image/png');
+    assert.deepEqual(
+      [...new Uint8Array(await response.arrayBuffer()).slice(1, 4)],
+      [80, 78, 71],
+      image[1] + ' is a PNG',
+    );
+  }
+  for (const url of [
+    'atlas://app/main.js',
+    'atlas://app/settings.json',
+    'atlas://other/index.html',
+    'atlas://app/assets/app-icon.png',
+  ])
     assert.equal((await handler({ url }, fs.readFile, path, root)).status, 404, url);
 });

@@ -127,6 +127,15 @@ app.whenReady().then(async () => {
   if(document.body.classList.contains('chat-lists-hidden')||chats.clientWidth<150||localStorage.getItem('atlas.chatListsHidden')!=='0')throw Error('Showing the chat list again failed');
   const input=document.querySelector('#form').getBoundingClientRect(),mic=document.querySelector('#mic').getBoundingClientRect(),effort=document.querySelector('.assistant-effort-button').getBoundingClientRect();
   if(mic.top<input.bottom||Math.abs(mic.top-effort.top)>12)throw Error('Mic and Effort should share one row under the message box');
+  const [idle,working]=document.querySelectorAll('.sigil img');
+  if(!idle?.complete||!idle.naturalWidth||!working?.naturalWidth)throw Error('The Beacon logo did not load');
+  const visible=()=>[idle,working].map(img=>getComputedStyle(img).visibility);
+  if(visible().join()!=='visible,hidden')throw Error('The Beacon should be white at rest');
+  const jobs=jobList;renderJobs([...jobs,{id:'beacon-check',status:'running',events:[]}]);
+  if(visible().join()!=='hidden,visible')throw Error('The Beacon should turn orange while a job runs');
+  renderJobs(jobs);
+  if(visible().join()!=='visible,hidden')throw Error('The Beacon should turn white when work ends');
+  for(const name of ['assistant','colab'])if(!document.querySelector('[data-chat-workspace="'+name+'"] svg path'))throw Error(name+' menu icon missing');
  })()`);
     fs.writeFileSync(path.join(temp, 'assistant-chat.png'), (await win.webContents.capturePage()).toPNG());
     await win.webContents.executeJavaScript(
@@ -149,7 +158,7 @@ app.whenReady().then(async () => {
       'PASS: Settings import destination prompt, cancellation, batch Colab import, independent Assistant import, 122 complete messages, persistence, deduplication and storage failure.',
     );
     console.log(
-      'PASS: Assistant timeline/sidebar, image previews, streaming follow-ups, preserved controls, scroll/search, native-name import paging/workspaces, new chat, Colab switching, hiding the chat lists, one control row and three viewport sizes.',
+      'PASS: Assistant timeline/sidebar, image previews, streaming follow-ups, preserved controls, scroll/search, native-name import paging/workspaces, new chat, Colab switching, hiding the chat lists, one control row, the Beacon and menu icons and three viewport sizes.',
     );
     console.log('Preview: ' + path.join(temp, 'assistant-chat.png'));
   } catch (error) {
