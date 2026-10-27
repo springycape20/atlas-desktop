@@ -259,8 +259,9 @@ const colabJobs = require('./colab-jobs').createColabJobs({
   persist: persistJobs,
   flush: () => assistantService.flush(),
   providerHealth: () => providerHealth,
-  findCodexExecutable,
-  findClaudeExecutable,
+  // Looked up on each call: tests replace these after start-up.
+  findCodexExecutable: () => findCodexExecutable(),
+  findClaudeExecutable: () => findClaudeExecutable(),
   canResumeSession: (provider, id) => provider !== 'codex' || Boolean(codexConnection?.hasInternalSession?.(id)),
   modelIdPattern,
   workspace,
