@@ -298,6 +298,31 @@ test('productivity endpoints reject untrusted renderers before running commands 
   await service.close();
 });
 
+test('the window cannot allow PowerShell for a chat without the approval card', async (t) => {
+  const { root } = await fixture(t),
+    handlers = new Map(),
+    granted = [],
+    service = registerProductivityIpc({
+      ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
+      app: { getPath: () => root },
+      window: () => null,
+      trusted: () => true,
+      workspace: () => ({}),
+      jobs: () => [],
+      approvals: createApprovalManager(),
+      findCodex: () => null,
+      findClaude: () => null,
+      codex: async () => ({}),
+      history: async () => [],
+      run: async () => {},
+      canRun: () => false,
+      integrations: { grantShell: async (owner) => granted.push(owner), list: async () => [] },
+    });
+  await handlers.get('atlas:integrations')({}, { action: 'grant-shell', owner: 'colab:one' });
+  assert.deepEqual(granted, []);
+  await service.close();
+});
+
 test('only trusted ATLAS gateway wrapper tools skip redundant Claude approvals', async () => {
   for (const trustedAtlasTools of [false, true]) {
     const writes = [],

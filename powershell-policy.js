@@ -1,3 +1,4 @@
+const path = require('node:path');
 const quote = (value) => "'" + String(value).replace(/'/g, "''") + "'";
 // This intentionally accepts a small, literal subset of PowerShell. Anything
 // dynamic is sent to approval instead of guessing what it might execute.
@@ -315,4 +316,72 @@ async function assessPowerShell(args, cwd, { denied = [], env = process.env, ass
     return { auto: false, arguments: args, paths: [...new Set(paths)], reason: error.message };
   }
 }
-module.exports = { parse, assessPowerShell, scopeCommand };
+// A command name where PowerShell or cmd would run it: at the start or after a separator, not inside
+// another word, option or file name (so Format-Table, -Format and del.js don't count as format or del).
+const commandNamed = (names) => new RegExp('(?:^|[\\s;|&({])(?:' + names + ')(?:\\.exe|\\.com)?(?=$|[\\s;|&)}])', 'i');
+const risks = [
+  [
+    [/\b(?:remove-item|clear-content|clear-item|clear-recyclebin)\b/i, commandNamed('rm|ri|rd|rmdir|del|erase')],
+    'This command deletes files or data.',
+  ],
+  [
+    [
+      /\b(?:HKLM|HKCU|HKCR|HKU|HKCC)(?::|\\)|\bHKEY_[A-Z_]+|\bRegistry::/i,
+      /\b(?:set|new|remove|rename|clear|copy|move)-itemproperty\b/i,
+      commandNamed('reg'),
+    ],
+    'This command changes the Windows registry.',
+  ],
+  [
+    [
+      /-verb\s+['"]?runas\b/i,
+      /\b(?:set-executionpolicy|set-acl|(?:add|set|remove)-mppreference)\b/i,
+      commandNamed('icacls|takeown|bcdedit|runas|sudo'),
+      /(?:^|[\s;|&({])sc(?:\.exe)?\s+(?:config|delete|create|stop|failure|sdset)\b/i,
+    ],
+    'This command runs as administrator or changes Windows security settings.',
+  ],
+  [
+    [
+      /\b(?:format-volume|clear-disk|initialize-disk|remove-partition|stop-computer|restart-computer)\b/i,
+      commandNamed('diskpart|format|shutdown|cipher|vssadmin|wevtutil'),
+    ],
+    'This command changes disks or shuts down or restarts the PC.',
+  ],
+  [
+    [
+      /\b(?:invoke-expression|frombase64string)\b/i,
+      /\[scriptblock\]::create/i,
+      commandNamed('iex'),
+      /\s-e(?:c|nc\w*)?\s+['"]?[A-Za-z0-9+/=]{12,}/i,
+    ],
+    'This command runs hidden or encoded code that ATLAS cannot read.',
+  ],
+];
+// For a chat that allows PowerShell: the reason a command must still ask, or '' when it may run. It scans the
+// whole text, so a mention inside a string also asks; that only means asking more often. Programs the command
+// starts (node, npm, python) are not inspected: what they do is what allowing the chat permits.
+async function riskyPowerShell(command, cwd, { denied = [], env = process.env } = {}) {
+  if (typeof command !== 'string' || !command.trim()) return 'Use a concrete PowerShell command.';
+  for (const [patterns, reason] of risks) if (patterns.some((pattern) => pattern.test(command))) return reason;
+  // PowerShell accepts C:/path as well as C:\path; compare both sides with backslashes.
+  const slashes = (value) => value.toLowerCase().replaceAll('/', '\\'),
+    text = slashes(command),
+    system = [env.SystemRoot, env.windir, env.ProgramFiles, env['ProgramFiles(x86)']].filter(Boolean);
+  if (
+    /\b[a-z]:[\\/](?:windows|program files)(?:[\\/\s'"]|$)|\$env:(?:windir|systemroot|programfiles)|%(?:windir|systemroot|programfiles)/i.test(
+      command,
+    ) ||
+    system.some((folder) => text.includes(slashes(folder)))
+  )
+    return 'This command touches Windows system or program files.';
+  const { canonical, canonicalDenials, inside } = require('./desktop-action-policy'),
+    root = cwd ? await canonical(cwd).catch(() => path.resolve(cwd)) : '';
+  for (const file of await canonicalDenials(denied)) {
+    const relative = root && inside(root, file) ? path.relative(root, file) : '';
+    if ((root && inside(file, root)) || text.includes(slashes(file)) || (relative && text.includes(slashes(relative))))
+      return 'This command uses a file or folder you denied before.';
+  }
+  return '';
+}
+module.exports = { parse, assessPowerShell, scopeCommand, riskyPowerShell };

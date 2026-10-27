@@ -435,7 +435,11 @@
     if (Array.isArray(job.events)) {
       const steps = new Map();
       for (const event of job.events.slice(-100)) {
-        const text = String(event.text || '').slice(0, event.kind === 'reasoning' ? 2000 : 800);
+        // Commands keep their output (main trims it to 4,000 characters); other steps stay short.
+        const text = String(event.text || '').slice(
+          0,
+          event.kind === 'command' ? 4100 : event.kind === 'reasoning' ? 2000 : 800,
+        );
         if (!text) continue;
         const key = event.id ? event.provider + ':' + event.id : event.kind + ':' + text;
         steps.set(key, {
@@ -446,12 +450,16 @@
           id: event.id || key,
           at: Number(event.at) || job.startedAt || 0,
           ...(Number.isInteger(event.exitCode) ? { exitCode: event.exitCode } : {}),
+          ...(['chat', 'screen', 'once'].includes(event.approvedBy) ? { approvedBy: event.approvedBy } : {}),
         });
       }
       run.events = [...steps.values()].slice(-60);
     }
     chat.activityRuns = chat.activityRuns.slice(-6);
   }
+  // How a Windows PowerShell command was allowed to run.
+  const approvalLabel = (by) =>
+    ({ chat: 'approved for this chat', screen: 'allowed by screen control', once: 'approved once' })[by] || '';
   function activityView(run) {
     const details = document.createElement('details');
     details.className = 'colab-work';
@@ -507,6 +515,7 @@
           event.status === 'running' ? 'Running command' : event.status === 'failed' ? 'Command failed' : 'Ran command',
           event.provider?.toUpperCase(),
           event.exitCode !== undefined ? 'exit ' + event.exitCode : '',
+          approvalLabel(event.approvedBy),
         ]
           .filter(Boolean)
           .join(' · ');

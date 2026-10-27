@@ -1193,6 +1193,9 @@ function renderJobs(items) {
               (e.kind === 'reasoning'
                 ? (e.provider === 'claude' ? 'Claude thinking' : 'Codex reasoning') + ' summary (model-reported)'
                 : e.kind) +
+              ({ chat: ' (approved for this chat)', screen: ' (allowed by screen control)', once: ' (approved once)' }[
+                e.approvedBy
+              ] || '') +
               ' · ' +
               e.text,
           )

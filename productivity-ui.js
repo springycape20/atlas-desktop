@@ -730,7 +730,8 @@
     button('Cancel', () => open('Checkpoints'));
     status.textContent = 'A recovery snapshot is created before restoring. Unrelated files are left in place.';
   }
-  let screenPermissions = [];
+  let screenPermissions = [],
+    shellPermissions = [];
   const screenBars = {};
   for (const [kind, selector] of [
     ['colab', '#colabForm'],
@@ -746,10 +747,32 @@
       message = el('span');
     revoke.type = 'button';
     bar.append(label, revoke, message);
+    // Shown only while the chat allows PowerShell; granting happens on an approval card, where it is explained.
+    const shell = el('div', undefined, 'shell-control-bar'),
+      shellRevoke = el('button', 'Revoke', 'quiet-button'),
+      shellMessage = el('span');
+    shell.dataset.workspace = kind;
+    shell.hidden = true;
+    shellRevoke.type = 'button';
+    shellRevoke.title =
+      'Ask again before PowerShell runs in this chat. A command already running is stopped with Stop.';
+    shell.append(el('span', 'PowerShell allowed for this chat'), shellRevoke, shellMessage);
     const holder = kind === 'colab' ? document.querySelector('.colab-run-details-body') : null;
-    if (holder) holder.append(bar);
-    else composer.before(bar);
-    screenBars[kind] = { bar, label, revoke, message };
+    if (holder) holder.append(bar, shell);
+    else composer.before(bar, shell);
+    screenBars[kind] = { bar, label, revoke, message, shell };
+    shellRevoke.onclick = async () => {
+      shellRevoke.disabled = true;
+      try {
+        shellPermissions = await api.integrations({ action: 'revoke-shell', owner: shell.dataset.owner });
+        shellMessage.textContent = '';
+        renderScreenPermissions();
+      } catch (error) {
+        shellMessage.textContent = error.message;
+      } finally {
+        shellRevoke.disabled = false;
+      }
+    };
     revoke.onclick = async () => {
       revoke.disabled = true;
       const owner = bar.dataset.owner,
@@ -766,7 +789,7 @@
   }
   const screenStyle = el('style');
   screenStyle.textContent =
-    '.screen-control-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:0 0 auto;color:#9fd3bd;font:11px Segoe UI,sans-serif;padding:6px 0}.screen-control-bar[hidden]{display:none}.screen-control-bar button{padding:4px 8px;font-size:10px}';
+    ':is(.screen-control-bar,.shell-control-bar){display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:0 0 auto;color:#9fd3bd;font:11px Segoe UI,sans-serif;padding:6px 0}:is(.screen-control-bar,.shell-control-bar)[hidden]{display:none}:is(.screen-control-bar,.shell-control-bar) button{padding:4px 8px;font-size:10px}';
   document.head.append(screenStyle);
   function renderScreenPermissions() {
     const selected = { colab: window.atlasColab?.graphHistory?.().chatId, assistant: conversationId };
@@ -775,21 +798,35 @@
       const allowed = screenPermissions.some((row) => row.owner === owner);
       item.bar.hidden = !owner;
       item.bar.dataset.owner = owner;
+      item.shell.hidden = !owner || !shellPermissions.some((row) => row.owner === owner);
+      item.shell.dataset.owner = owner;
       item.label.textContent = allowed ? 'Screen control allowed for this chat' : 'Computer control: ask first';
       item.revoke.textContent = allowed ? 'Revoke' : 'Allow for this chat';
       if (kind === 'colab') {
         const summary = document.querySelector('.colab-run-details>summary');
         if (summary)
-          summary.textContent = allowed ? 'Run details · control allowed' : 'Run details · control asks first';
+          summary.textContent =
+            (allowed ? 'Run details · control allowed' : 'Run details · control asks first') +
+            (item.shell.hidden ? '' : ' · PowerShell allowed');
       }
       item.revoke.title = allowed
         ? 'Revoke saved computer control'
         : 'Remember desktop, app launches, clipboard and ordinary file operations for this chat. System-file edits, denied files and opaque commands still ask. Applies to both Codex and Claude until revoked.';
     }
   }
+  // The permissions event fires on every change to saved permissions, PowerShell grants included.
+  const refreshShell = () =>
+    api
+      .integrations({ action: 'shell-permissions' })
+      .then((value) => {
+        shellPermissions = Array.isArray(value) ? value : [];
+        renderScreenPermissions();
+      })
+      .catch(() => {});
   api.onDesktopPermissions?.((value) => {
     screenPermissions = Array.isArray(value) ? value : [];
     renderScreenPermissions();
+    void refreshShell();
   });
   void api
     .integrations({ action: 'desktop-permissions' })
@@ -798,6 +835,7 @@
       renderScreenPermissions();
     })
     .catch(() => {});
+  void refreshShell();
   window.addEventListener('atlas-colab-chat-change', renderScreenPermissions);
   window.addEventListener('atlas-assistant-task', renderScreenPermissions);
   const inlineCards = new Map(),

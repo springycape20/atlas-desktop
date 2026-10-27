@@ -1005,3 +1005,181 @@ test('Allow on a non-desktop tool remembers the exact request without a screen g
   assert((await changed).isError);
   assert.equal(calls, 2);
 });
+
+// Windows control with a fake PowerShell tool. beforeAction runs before each connection after the first,
+// which is the one that runs a command; respond(command) gives the tool's result.
+async function shellFixture(t, { beforeAction, respond = () => ({ content: [] }) } = {}) {
+  const executed = [];
+  let connections = 0;
+  const f = await fixture(t, {
+    platform: 'win32',
+    connect: async () => {
+      if (++connections > 1) await beforeAction?.();
+      return {
+        tools: ['PowerShell', 'Screenshot'].map((name) => ({ name, inputSchema: { type: 'object' } })),
+        call: async (_name, args) => {
+          executed.push(args.command);
+          return respond(args.command);
+        },
+        close: async () => {},
+      };
+    },
+  });
+  f.job.cwd = f.directory;
+  await fs.mkdir(path.join(f.directory, 'tools', 'uv'), { recursive: true });
+  await fs.writeFile(path.join(f.directory, 'tools', 'uv', 'uvx.exe'), '');
+  await f.service.save(require('../integration-service').windowsPreset);
+  const shell = (command) => f.call('integrations_call', { id: 'windows', tool: 'PowerShell', arguments: { command } });
+  return { ...f, executed, shell };
+}
+const chatChoices = ['Allow for this chat', 'Allow once', 'Deny'];
+
+test('Allow for this chat runs later non-routine PowerShell in that chat without asking', async (t) => {
+  const f = await shellFixture(t);
+  const first = f.shell('npm test'),
+    request = await f.waitApproval();
+  assert.deepEqual(request.choices, chatChoices);
+  assert.match(request.permissionScope, /without asking[\s\S]*still ask/);
+  f.approvals.answer(request.id, 'Allow for this chat');
+  assert(!(await first).isError);
+  assert(!(await f.shell('node build.js')).isError);
+  assert.equal(f.approvals.list().length, 0);
+  assert.equal(f.executed.length, 2);
+  assert(f.executed[1].includes('Set-Location -LiteralPath'), 'still runs in the task folder');
+  assert(f.executed[1].endsWith('node build.js'));
+  assert.deepEqual(
+    (await f.service.shellPermissions()).map((row) => row.owner),
+    ['colab:one'],
+  );
+  assert(f.events.some((event) => event.approvedBy === 'chat' && event.status === 'completed'));
+  await assert.rejects(f.service.grantShell('invalid'));
+});
+
+test('a chat that allows PowerShell still asks before deleting, and says why', async (t) => {
+  const f = await shellFixture(t);
+  await f.service.grantShell('colab:one');
+  const remove = f.shell('Remove-Item dist -Recurse'),
+    request = await f.waitApproval();
+  assert.deepEqual(request.choices, ['Allow', 'Allow once', 'Deny']);
+  assert.match(request.details, /Asks even in a chat that allows PowerShell: This command deletes files/);
+  f.approvals.answer(request.id, 'Deny');
+  assert((await remove).isError);
+  assert.equal(f.executed.length, 0);
+});
+
+test('PowerShell allowed in one chat still asks in other chats and the other workspace', async (t) => {
+  const f = await shellFixture(t);
+  await f.service.grantShell('colab:one');
+  for (const owner of ['colab:two', 'assistant:one']) {
+    const other = await f.service.bind({
+        provider: 'claude',
+        owner,
+        job: { id: owner, cwd: f.directory },
+        signal: f.controller.signal,
+      }),
+      client = new Client({ name: owner, version: '1' });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(other.config.url), { requestInit: { headers: other.config.headers } }),
+    );
+    const run = client.callTool({
+        name: 'integrations_call',
+        arguments: { id: 'windows', tool: 'PowerShell', arguments: { command: 'npm test' } },
+      }),
+      request = await f.waitApproval();
+    assert.deepEqual(request.choices, chatChoices, owner);
+    f.approvals.answer(request.id, 'Deny');
+    assert((await run).isError);
+    other.release();
+    await client.close();
+  }
+  assert.equal(f.executed.length, 0);
+});
+
+test('revoking PowerShell for a chat stops a command waiting to run and asks again', async (t) => {
+  let open;
+  const gate = new Promise((resolve) => {
+    open = resolve;
+  });
+  const f = await shellFixture(t, { beforeAction: () => gate });
+  await f.service.grantShell('colab:one');
+  const waiting = f.shell('npm test');
+  for (let i = 0; i < 100 && !f.events.some((event) => event.status === 'running'); i++) await tick();
+  await f.service.revokeShell('colab:one');
+  open();
+  const result = await waiting;
+  assert(result.isError);
+  assert.match(JSON.stringify(result.content), /PowerShell permission for this chat was revoked/);
+  assert.equal(f.executed.length, 0);
+  const again = f.shell('npm test');
+  assert.deepEqual((await f.waitApproval()).choices, chatChoices);
+  f.approvals.answer(f.approvals.list()[0].id, 'Deny');
+  assert((await again).isError);
+  await assert.rejects(f.service.revokeShell(undefined), /Invalid chat permission/);
+});
+
+test('PowerShell calls are logged as commands with how they were approved and their trimmed output', async (t) => {
+  const f = await shellFixture(t, {
+    respond: (command = '') => {
+      if (command.endsWith('npm run broken')) throw Error('npm exited with 1');
+      return { content: [{ type: 'text', text: command.endsWith('npm run noisy') ? 'x'.repeat(5000) : 'built' }] };
+    },
+  });
+  const last = () => f.events.filter((event) => event.kind === 'command').at(-1);
+  await f.service.grantShell('colab:one');
+  assert(!(await f.shell('npm run build')).isError);
+  assert.equal(last().status, 'completed');
+  assert.equal(last().approvedBy, 'chat');
+  assert.equal(last().text, 'In ' + f.directory + '\n> npm run build\n\nbuilt');
+  assert(!(await f.shell('npm run noisy')).isError);
+  assert(last().text.length < 4100 && last().text.endsWith('… (trimmed)'));
+  assert((await f.shell('npm run broken')).isError);
+  assert.equal(last().status, 'failed');
+  assert.match(last().text, /> npm run broken\n\n.*npm exited with 1/);
+  await f.service.revokeShell('colab:one');
+  const once = f.shell('npm run build');
+  f.approvals.answer((await f.waitApproval()).id, 'Allow once');
+  assert(!(await once).isError);
+  assert.equal(last().approvedBy, 'once');
+  const screen = f.call('integrations_call', { id: 'windows', tool: 'Screenshot' });
+  f.approvals.answer((await f.waitApproval()).id, 'Allow once');
+  assert(!(await screen).isError);
+  assert.deepEqual(
+    f.events.filter((event) => event.text === 'Tool: windows / Screenshot').map((event) => event.kind),
+    ['activity', 'activity'],
+  );
+});
+
+test('Allow for this chat answered after Windows control changed grants nothing and runs nothing', async (t) => {
+  const f = await shellFixture(t);
+  const run = f.shell('npm test');
+  const request = await f.waitApproval();
+  await f.service.save(require('../integration-service').windowsPreset);
+  f.approvals.answer(request.id, 'Allow for this chat');
+  const result = await run;
+  assert(result.isError);
+  assert.match(JSON.stringify(result.content), /Computer-control settings changed/);
+  assert.deepEqual(await f.service.shellPermissions(), []);
+  assert.equal(f.executed.length, 0);
+});
+
+test('PowerShell grants survive a restart and end when Windows control is disabled', async (t) => {
+  const f = await shellFixture(t);
+  await f.service.grantShell('colab:one');
+  await f.service.close();
+  const restored = createIntegrationService({
+    directory: f.directory,
+    platform: 'win32',
+    approvals: f.approvals,
+    connect: async () => ({ tools: [], call: async () => ({ content: [] }), close: async () => {} }),
+  });
+  try {
+    assert.deepEqual(
+      (await restored.shellPermissions()).map((row) => row.owner),
+      ['colab:one'],
+    );
+    await restored.enable('windows', false);
+    assert.deepEqual(await restored.shellPermissions(), []);
+  } finally {
+    await restored.close();
+  }
+});

@@ -15,6 +15,12 @@ const windowsPreset = {
 const textResult = (value) => ({
   content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
 });
+// The activity text for a PowerShell call: its folder, the command and its output, trimmed because task
+// activity is saved with the task.
+function commandLog(cwd, command, output) {
+  const text = (cwd ? 'In ' + cwd + '\n' : '') + '> ' + String(command || '') + (output ? '\n\n' + output : '');
+  return text.length > 4000 ? text.slice(0, 4000) + '\n… (trimmed)' : text;
+}
 const tools = [
   {
     name: 'integrations_list',
@@ -262,6 +268,8 @@ function createIntegrationService({
   async function revokeDesktop(owner) {
     permissionGeneration++;
     await permissions.revoke(owner);
+    // Revoking every chat (disabling, changing or removing Windows control) also ends PowerShell grants.
+    if (owner === undefined) await permissions.revokeShell();
     await Promise.allSettled(
       [...desktopSessions.keys()]
         .filter((key) => owner === undefined || key === owner)
@@ -611,39 +619,69 @@ function createIntegrationService({
           )
         : null,
       eligible = entry.builtinWindows && owner && assessment.auto;
+    // Non-routine PowerShell in a saved chat: a chat that allows PowerShell runs it without asking unless
+    // riskyPowerShell names a reason, which the approval then shows.
+    const shellCall = entry.builtinWindows && args.tool === 'PowerShell' && owner && !assessment.auto,
+      shellRisk = shellCall
+        ? await require('./powershell-policy').riskyPowerShell(args.arguments?.command, binding.job.cwd, {
+            denied: await permissions.deniedFiles(),
+          })
+        : '',
+      shellOffer = shellCall && !shellRisk,
+      allowChat = 'Allow for this chat';
+    const generation = permissionGeneration;
+    let shellGrant = shellOffer ? await permissions.shellGrant(owner) : null;
     const ownerGrant = entry.builtinWindows && owner ? await permissions.get(owner) : null;
     let grant = eligible ? ownerGrant : null;
     const remember = 'Allow',
       previousGrant = grant;
     let choice = grant
       ? remember
-      : activeBatchOnce && batchToken && batchToken === activeBatch
+      : shellGrant
         ? 'Allow once'
-        : await approvals.ask({
-            remember: !eligible,
-            desktopOwner: eligible ? owner : undefined,
-            jobId: binding.job.id,
-            provider: binding.provider,
-            title: 'Allow ' + args.id + ' / ' + args.tool + '?',
-            details:
-              JSON.stringify(
-                entry.builtinWindows && args.tool !== 'PowerShell' ? assessment.arguments : args.arguments || {},
-                null,
-                2,
-              ) +
-              (entry.builtinWindows && args.tool === 'PowerShell' && binding.job.cwd
-                ? '\n\nWorking folder: ' + binding.job.cwd
-                : '') +
-              (assessment?.reason ? '\n\n' + assessment.reason : '') +
-              (entry.builtinWindows
-                ? '\n\nAllow once runs this action while the PC is active. Pause mouse/keyboard use while it acts.'
-                : '') +
-              (eligible
-                ? '\n\nAllow remembers permission for screenshots, screen inspection, mouse/keyboard, window/app launches, clipboard, ordinary file operations and routine PowerShell commands in this chat, including follow-up tasks and app restarts. It can act while you are active. System-file changes, previously denied files and commands with unverifiable targets still ask separately. Screen/input control can interact with visible applications and terminals; it only authorizes tasks you ask for. Revoke using Screen control in the chat.'
-                : ''),
-            choices: ['Allow', 'Allow once', 'Deny'],
-            signal: callSignal,
-          });
+        : activeBatchOnce && batchToken && batchToken === activeBatch
+          ? 'Allow once'
+          : await approvals.ask({
+              remember: !eligible && !shellOffer,
+              desktopOwner: eligible ? owner : undefined,
+              ...(shellOffer
+                ? {
+                    permissionScope:
+                      'Allow for this chat runs PowerShell in this chat without asking, including programs it starts such as node, npm or python, which ATLAS cannot inspect. Deleting files, registry, administrator, disk, system-file, hidden-code and denied-file commands still ask. Revoke it in the chat.',
+                  }
+                : {}),
+              jobId: binding.job.id,
+              provider: binding.provider,
+              title: 'Allow ' + args.id + ' / ' + args.tool + '?',
+              details:
+                JSON.stringify(
+                  entry.builtinWindows && args.tool !== 'PowerShell' ? assessment.arguments : args.arguments || {},
+                  null,
+                  2,
+                ) +
+                (entry.builtinWindows && args.tool === 'PowerShell' && binding.job.cwd
+                  ? '\n\nWorking folder: ' + binding.job.cwd
+                  : '') +
+                (assessment?.reason ? '\n\n' + assessment.reason : '') +
+                (shellRisk ? '\n\nAsks even in a chat that allows PowerShell: ' + shellRisk : '') +
+                (entry.builtinWindows
+                  ? '\n\nAllow once runs this action while the PC is active. Pause mouse/keyboard use while it acts.'
+                  : '') +
+                (eligible
+                  ? '\n\nAllow remembers permission for screenshots, screen inspection, mouse/keyboard, window/app launches, clipboard, ordinary file operations and routine PowerShell commands in this chat, including follow-up tasks and app restarts. It can act while you are active. System-file changes, previously denied files and commands with unverifiable targets still ask separately. Screen/input control can interact with visible applications and terminals; it only authorizes tasks you ask for. Revoke using Screen control in the chat.'
+                  : ''),
+              choices: shellOffer ? [allowChat, 'Allow once', 'Deny'] : ['Allow', 'Allow once', 'Deny'],
+              signal: callSignal,
+            });
+    if (choice === allowChat) {
+      shellGrant = await permissions.grantShell(owner);
+      // Windows control changed while the card was open: that change ended every chat's PowerShell grant.
+      if (closed || generation !== permissionGeneration) {
+        await permissions.revokeShellIf(owner, shellGrant.id);
+        throw Error('Computer-control settings changed. Please try again.');
+      }
+      choice = 'Allow once';
+    }
     if (!['Allow once', remember].includes(choice)) {
       if (choice === 'Deny' && assessment?.paths.length)
         await permissions.denyFiles(assessment.denialPaths || assessment.paths);
@@ -676,13 +714,19 @@ function createIntegrationService({
       throw Error('Another integration action is running. Wait for its result before trying again.');
     callBusy = true;
     const id = randomUUID();
-    activity(binding.job, {
-      id,
-      kind: 'activity',
-      text: 'Tool: ' + args.id + ' / ' + args.tool,
-      status: 'running',
-      provider: binding.provider,
-    });
+    // Windows PowerShell is logged as a command with what ran and its output; other tools log one line.
+    const step = (status, output = '') =>
+      entry.builtinWindows && args.tool === 'PowerShell'
+        ? {
+            id,
+            kind: 'command',
+            text: commandLog(binding.job.cwd, args.arguments?.command, output),
+            status,
+            provider: binding.provider,
+            approvedBy: shellGrant ? 'chat' : choice === remember ? 'screen' : 'once',
+          }
+        : { id, kind: 'activity', text: 'Tool: ' + args.id + ' / ' + args.tool, status, provider: binding.provider };
+    activity(binding.job, step('running'));
     let temporary,
       lease,
       completed = false;
@@ -782,17 +826,23 @@ function createIntegrationService({
           cursorPosition,
           signal: actionSignal,
         });
+      // Revoking the chat's PowerShell permission while this call waited stops it before it runs.
+      if (shellGrant && (await permissions.shellGrant(owner))?.id !== shellGrant.id)
+        throw Error('PowerShell permission for this chat was revoked.');
       const result = await connection.call(args.tool, toolArguments, actionSignal);
       completed = true;
       actionSignal.throwIfAborted();
       check();
-      activity(binding.job, {
-        id,
-        kind: 'activity',
-        text: 'Tool: ' + args.id + ' / ' + args.tool,
-        status: result.isError ? 'failed' : 'completed',
-        provider: binding.provider,
-      });
+      activity(
+        binding.job,
+        step(
+          result.isError ? 'failed' : 'completed',
+          (result.content || [])
+            .filter((part) => part.type === 'text')
+            .map((part) => part.text)
+            .join('\n'),
+        ),
+      );
       return result;
     } catch (error) {
       if (entry.builtinWindows && (actionSignal.aborted || lease?.connection?.isOpen?.() === false))
@@ -810,13 +860,7 @@ function createIntegrationService({
         await closeDesktop(owner, lease);
       if (callSignal.aborted && !(entry.builtinWindows && choice === 'Allow once') && !retainedControl)
         await stop(args.id);
-      activity(binding.job, {
-        id,
-        kind: 'activity',
-        text: 'Tool: ' + args.id + ' / ' + args.tool,
-        status: 'failed',
-        provider: binding.provider,
-      });
+      activity(binding.job, step('failed', error.message));
       throw error;
     } finally {
       try {
@@ -949,6 +993,16 @@ function createIntegrationService({
     deniedFiles: () => permissions.deniedFiles(),
     grantDesktop,
     revokeDesktop,
+    shellPermissions: () => permissions.shellGrants(),
+    grantShell: async (owner) => {
+      await permissions.grantShell(owner);
+      return permissions.shellGrants();
+    },
+    revokeShell: async (owner) => {
+      if (!validOwner(owner)) throw Error('Invalid chat permission.');
+      await permissions.revokeShell(owner);
+      return permissions.shellGrants();
+    },
     list,
     save,
     remove,
