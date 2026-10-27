@@ -203,71 +203,6 @@ async function finishTask(job) {
       job.changesError = 'Checkpoint could not be finalized: ' + error.message;
     }
 }
-async function checkTask(job) {
-  const project = job.projectSnapshot || (await workspace().profile(job.request?.profileId));
-  job.verification =
-    job.collaboration && job.result?.outcome && job.result.outcome !== 'completed'
-      ? { status: 'not-checked', results: [], reason: 'Colab needs attention before completion checks can run.' }
-      : job.collaboration && ['plan', 'compare'].includes(job.request?.mode)
-        ? { status: 'not-checked', results: [], reason: 'Automatic commands are disabled for read-only Colab modes.' }
-        : job.runVerification
-          ? await job.runVerification()
-          : await require('./project-tools').completionChecks(project, job.cwd, {
-              signal: job.signal,
-              progress: (text) => {
-                job.statusText = text;
-                job.events.push({ kind: 'command', text, at: Date.now() });
-                emitJobs();
-              },
-            });
-  job.events.push({
-    kind: 'progress',
-    text:
-      'Completion checks: ' +
-      job.verification.status +
-      (job.verification.reason ? ' · ' + job.verification.reason : ''),
-    at: Date.now(),
-  });
-  job.events = job.events.slice(-100);
-  await badgeTask(job);
-  if (job.verificationBadge?.level === 'unverified') job.checkOffer = await offerChecks(job);
-  if (job.result && typeof job.result === 'object') job.result.checkOffer = job.checkOffer || null;
-  emitJobs();
-}
-// What ATLAS verified about a finished task, for its badge and status line.
-async function badgeTask(job) {
-  // The badge only matters for work that changed files; read-only Colab modes never get one.
-  const changedFiles =
-    job.collaboration && ['plan', 'compare'].includes(job.request?.mode)
-      ? 0
-      : job.changeId
-        ? ((
-            await changes()
-              .report(job.changeId, true)
-              .catch(() => null)
-          )?.files?.length ?? null)
-        : null;
-  job.verificationBadge = require('./verification-badge').verificationBadge({
-    verification: job.verification,
-    result: job.collaboration ? job.result : null,
-    changedFiles,
-  });
-  if (job.result && typeof job.result === 'object') {
-    job.result.verification = job.verification;
-    job.result.verificationBadge = job.verificationBadge;
-  }
-}
-// Once per project folder, an unverified task offers the checks Project setup detects there
-// (or the folder profile's own commands when automatic checks are off).
-async function offerChecks(job) {
-  const folder = job.projectFolder || job.cwd;
-  try {
-    const detected = (await require('./project-tools').detectProject(folder)).checks;
-    return await workspace().checkOffer(folder, detected, job.request?.profileId || '');
-  } catch {
-    return null;
-  }
-}
 let workspaceService;
 let projectContextService;
 function projectContext() {
@@ -283,6 +218,14 @@ let codexConnection, claudeConnections, providerHealth;
 const { AsyncLocalStorage } = require('node:async_hooks');
 const jobContext = new AsyncLocalStorage();
 const activeJobs = new Map();
+const taskChecks = require('./task-checks').createTaskChecks({
+  workspace,
+  changes,
+  jobs: activeJobs,
+  emit: emitJobs,
+  persist: persistJobs,
+  tools: require('./project-tools'),
+});
 const appOrigin = 'atlas://app';
 
 function isTrustedSender(event) {
@@ -1469,7 +1412,7 @@ async function startCollaboration(event, input) {
       });
       if (job.stopped || controller.signal.aborted) throw Error('Collaboration stopped.');
       job.result = { ...result, workspaceId: job.workspaceId };
-      await checkTask(job);
+      await taskChecks.check(job);
       if (job.stopped || controller.signal.aborted) throw Error('Task stopped.');
       job.status = result.outcome;
       job.statusText =
@@ -1640,40 +1583,7 @@ function setupIpc() {
   // offered checks on a finished task. Only commands recorded with the offer can run.
   ipcMain.handle('atlas:check-offer', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
-    if (request.action !== 'run') {
-      const result = await workspace().answerCheckOffer(request);
-      // Other finished tasks from the same folder stop showing the answered offer.
-      for (const job of activeJobs.values())
-        if (
-          job.checkOffer &&
-          path.resolve(job.checkOffer.cwd).toLowerCase() === path.resolve(request.cwd).toLowerCase()
-        )
-          job.checkOffer = { ...job.checkOffer, answered: request.answer === 'enable' ? 'enabled' : 'declined' };
-      await persistJobs();
-      emitJobs();
-      return result;
-    }
-    const job = activeJobs.get(request.jobId);
-    if (!job || job.status === 'running') throw Error('This task is not available to check now.');
-    const allowed = await workspace().offeredChecks(job.projectFolder || job.cwd),
-      commands = allowed.filter((command) => Array.isArray(request.commands) && request.commands.includes(command));
-    if (!commands.length) throw Error('Choose at least one of the offered checks.');
-    job.verification = await require('./project-tools').completionChecks(
-      { autoCheck: true, checkCommands: commands.join('\n') },
-      job.cwd,
-      {
-        progress: (text) => {
-          job.events.push({ kind: 'command', text, at: Date.now() });
-          emitJobs();
-        },
-      },
-    );
-    await badgeTask(job);
-    if (job.status === 'completed')
-      job.statusText = require('./verification-badge').completeStatus(job.verificationBadge);
-    await persistJobs();
-    emitJobs();
-    return { verification: job.verificationBadge, status: job.verification.status };
+    return request.action === 'run' ? taskChecks.runOffered(request) : taskChecks.answerOffer(request);
   });
   ipcMain.handle('atlas:model-catalog', async (event, provider) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -2068,7 +1978,7 @@ function setupIpc() {
         const result = await handleChat(event, { ...data, conversationId: job.conversationId });
         if (controller.signal.aborted) throw Error('Task stopped.');
         job.result = result;
-        await checkTask(job);
+        await taskChecks.check(job);
         if (job.stopped || controller.signal.aborted) throw Error('Task stopped.');
         job.status = 'completed';
         job.statusText = require('./verification-badge').completeStatus(job.verificationBadge);
