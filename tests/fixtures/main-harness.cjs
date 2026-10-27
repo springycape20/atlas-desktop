@@ -14,7 +14,6 @@ async function mainHarness(t, options = {}) {
   const dir = await temporary(t),
     events = new Map(),
     updates = [],
-    icons = [],
     handlers = new Map();
   const paths = { appData: path.join(dir, 'Roaming'), userData: path.join(dir, 'Roaming', 'ATLAS') };
   let finished;
@@ -53,20 +52,19 @@ async function mainHarness(t, options = {}) {
     structuredClone,
     __dirname: root,
     require: (name) => (name === 'electron' ? electron : options.modules?.[name] || localRequire(name)),
-    icons,
     updates,
   });
   const code = await fs.readFile(path.join(root, 'main.js'), 'utf8');
   vm.runInContext(
     code +
       `
-    mainWindow = { isDestroyed: () => false, setIcon: (icon) => icons.push(icon), webContents: { send: (_event, patch) => updates.push(patch) } };
+    mainWindow = { isDestroyed: () => false, webContents: { send: (_event, patch) => updates.push(patch) } };
     assistantService = require('./assistant-service').createService({ directory: app.getPath('userData'), notify() {} });
     providerHealth = new (require('./provider-health').ProviderHealth)(path.join(app.getPath('userData'),'provider-health.json'));
     globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, readAppSettings, setupIpc, allowColab:()=>{findClaudeExecutable=()=>process.env.CODEX_EXECUTABLE;mainWindow.webContents.isDestroyed=()=>false;}, sender: mainWindow.webContents };
   `,
     context,
   );
-  return { ...context.harness, updates, icons, events, quit, dir, paths, handlers };
+  return { ...context.harness, updates, events, quit, dir, paths, handlers };
 }
 module.exports = { mainHarness };
