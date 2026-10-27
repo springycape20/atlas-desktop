@@ -2644,6 +2644,141 @@
         flex-shrink: 0;
       }
     </style>
+    <style id="roomierLayout">
+      /* Fill the window; conversations keep a readable column inside it. */
+      body > .app {
+        max-width: none;
+      }
+      body .assistant-turn,
+      body .colab-message,
+      body .core .user-turn,
+      body .core .answer {
+        font-size: 15px;
+        line-height: 1.7;
+      }
+      body .assistant-chat-item span,
+      body .colab-chat-item span {
+        font-size: 13px;
+      }
+      body :is(.assistant-chats, .colab-chats) > .chat-list-toggle {
+        width: auto;
+        margin: 0;
+        align-self: flex-end;
+        flex-shrink: 0;
+        padding: 2px 9px;
+        font-size: 15px;
+        line-height: 1.2;
+      }
+      @media (max-width: 750px) {
+        .chat-list-toggle {
+          display: none;
+        }
+      }
+      @media (min-width: 751px) {
+        body.chat-lists-hidden .assistant-workspace,
+        body.chat-lists-hidden .colab-workspace {
+          grid-template-columns: 46px minmax(0, 1fr);
+        }
+        body.chat-lists-hidden :is(.assistant-chats, .colab-chats) {
+          padding: 14px 6px;
+        }
+        body.chat-lists-hidden :is(.assistant-chats, .colab-chats) > :not(.chat-list-toggle) {
+          display: none;
+        }
+        /* Assistant controls: the message box, then one toolbar row. Attachments stay above the box. */
+        body .assistant-workspace .core > .composer {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px 14px;
+        }
+        body .assistant-workspace .composer > .cmd {
+          order: -1;
+          flex: 1 0 100%;
+        }
+        body .assistant-workspace .composer > .attachment-bar {
+          display: contents;
+        }
+        body .assistant-workspace .composer > .attachment-bar > :not(.attachment-toolbar) {
+          order: -2;
+          flex: 1 0 100%;
+        }
+        body .assistant-workspace .composer > .voice-bar {
+          order: 1;
+          min-height: 0;
+          padding: 0;
+        }
+        body .assistant-workspace .composer > .attachment-bar > .attachment-toolbar {
+          order: 2;
+          margin: 0;
+        }
+        body .assistant-workspace .composer .assistant-effort-button {
+          margin-left: 0;
+        }
+        body .assistant-workspace .composer > :is(.screen-control-bar, .shell-control-bar) {
+          order: 3;
+          padding: 0;
+        }
+        body .assistant-workspace .composer > .workspace-bar {
+          order: 4;
+          flex: 0 1 auto;
+          min-width: 0;
+          margin-left: auto;
+          gap: 10px;
+          padding: 0;
+          border: 0;
+        }
+        /* In a saved chat the greeting and its status sit beside the title instead of on their own row. */
+        body.has-conversation .assistant-workspace > .core {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+          column-gap: 16px;
+        }
+        body.has-conversation .assistant-workspace > .core > * {
+          grid-column: 1 / -1;
+        }
+        body.has-conversation .assistant-workspace > .core > .corehead {
+          grid-row: 1;
+        }
+        body.has-conversation .assistant-workspace > .core > .assistant-chat-heading {
+          grid-row: 2;
+          grid-column: 1;
+        }
+        body.has-conversation .assistant-workspace > .core > .presence {
+          grid-row: 2;
+          grid-column: 2;
+          margin: 0;
+        }
+        body.has-conversation .assistant-workspace .presence-copy {
+          min-width: 0;
+          max-width: 320px;
+        }
+        body.has-conversation .assistant-workspace .presence-copy > * {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        body.has-conversation .assistant-workspace > .core > .assistant-chat-find {
+          grid-row: 3;
+        }
+        body.has-conversation .assistant-workspace > .core > .response {
+          grid-row: 4;
+        }
+        body.has-conversation .assistant-workspace > .core > .composer {
+          grid-row: 5;
+          max-height: 46vh;
+        }
+      }
+      @media (min-width: 1001px) {
+        body .assistant-workspace > .core {
+          padding-inline: max(20px, calc((100% - 1100px) / 2));
+        }
+        body .colab-workspace > .colab-chat-main {
+          padding-inline: max(22px, calc((100% - 1100px) / 2));
+        }
+      }
+    </style>
   </head>
   <body>
     <div class="grid"></div>

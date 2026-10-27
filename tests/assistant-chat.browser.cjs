@@ -117,6 +117,17 @@ app.whenReady().then(async () => {
     }
     win.setContentSize(1280, 800);
     await new Promise((resolve) => setTimeout(resolve, 150));
+    await win.webContents.executeJavaScript(`(async()=>{
+  const toggles=document.querySelectorAll('.chat-list-toggle'),chats=document.querySelector('.assistant-chats'),width=()=>document.querySelector('.assistant-workspace>.core').clientWidth,before=width();
+  if(toggles.length!==2||!document.querySelector('.colab-chats>.chat-list-toggle'))throw Error('Assistant and Colab need a list toggle');
+  toggles[0].click();await new Promise(r=>setTimeout(r,60));
+  if(!document.body.classList.contains('chat-lists-hidden')||chats.clientWidth>50||width()<before+100||localStorage.getItem('atlas.chatListsHidden')!=='1'||toggles[1].getAttribute('aria-expanded')!=='false')throw Error('Hiding the chat list did not widen the chat and persist');
+  if(document.querySelector('.assistant-chat-list').offsetParent)throw Error('Hidden chat list still shows chats');
+  toggles[0].click();await new Promise(r=>setTimeout(r,60));
+  if(document.body.classList.contains('chat-lists-hidden')||chats.clientWidth<150||localStorage.getItem('atlas.chatListsHidden')!=='0')throw Error('Showing the chat list again failed');
+  const input=document.querySelector('#form').getBoundingClientRect(),mic=document.querySelector('#mic').getBoundingClientRect(),effort=document.querySelector('.assistant-effort-button').getBoundingClientRect();
+  if(mic.top<input.bottom||Math.abs(mic.top-effort.top)>12)throw Error('Mic and Effort should share one row under the message box');
+ })()`);
     fs.writeFileSync(path.join(temp, 'assistant-chat.png'), (await win.webContents.capturePage()).toPNG());
     await win.webContents.executeJavaScript(
       `(async()=>{atlasAssistant.newChat();if(document.querySelectorAll('.assistant-past .assistant-turn').length||conversationId)throw Error('New chat retained old conversation');await atlasAssistant.open('${first}');if(document.querySelectorAll('.assistant-past .assistant-turn').length!==44)throw Error('Saved follow-ups missing');await atlasColab.ready;atlasColab.selectChat(atlasColab.current().id);if(!document.querySelector('.assistant-workspace').hidden)throw Error('Assistant did not hide for Colab');atlasColab.selectAssistant();if(document.querySelector('.assistant-workspace').hidden)throw Error('Assistant did not return');})()`,
@@ -138,7 +149,7 @@ app.whenReady().then(async () => {
       'PASS: Settings import destination prompt, cancellation, batch Colab import, independent Assistant import, 122 complete messages, persistence, deduplication and storage failure.',
     );
     console.log(
-      'PASS: Assistant timeline/sidebar, image previews, streaming follow-ups, preserved controls, scroll/search, native-name import paging/workspaces, new chat, Colab switching and three viewport sizes.',
+      'PASS: Assistant timeline/sidebar, image previews, streaming follow-ups, preserved controls, scroll/search, native-name import paging/workspaces, new chat, Colab switching, hiding the chat lists, one control row and three viewport sizes.',
     );
     console.log('Preview: ' + path.join(temp, 'assistant-chat.png'));
   } catch (error) {
