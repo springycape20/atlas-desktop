@@ -14,6 +14,10 @@ At startup ATLAS checks GitHub for updates and asks installed providers for avai
 
 ## What stays locally
 
+In the next-release Project tools, source excerpts are indexed in a bounded in-memory worker cache and are added to provider requests only when enabled for the chat. A basic file-name map can be saved locally. Context exclusions affect ATLAS additions and do not change provider filesystem permissions. Custom workflow templates and batch/task records stay in the current ATLAS data folder; they can contain task text and command names. Parallel batches make multiple provider requests and share subtask work in the combined review.
+
+Optional local-model text chat sends selected text to a user-configured loopback API and never automatically falls back to a cloud provider. That local server may have its own cloud routing, logs and retention; choose an installed local model for offline inference. Optional ElevenLabs speech and GitHub update checks remain separate. ATLAS does not bundle or download additional language models for this feature.
+
 Saved chats, memories, reminders, settings, permissions, copied attachments and task records are principally under `%LOCALAPPDATA%\ATLAS`. Colab history uses Chromium IndexedDB. Some migration copies may remain under `%APPDATA%\atlas-local-desktop`. Project worktrees and Git recovery snapshots can be stored in or alongside your projects. Provider CLIs keep their own history separately.
 
 Conversation and attachment stores are not encrypted by ATLAS. Windows account permissions and any device encryption protect them to their respective limits. Local malware or another process running as you may access them. Saved ElevenLabs keys use Windows-backed encryption; that is not protection from all software running under your account.

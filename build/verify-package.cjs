@@ -8,7 +8,18 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     archive = path.join(resources, 'app.asar');
   const pkg = JSON.parse(asar.extractFile(archive, 'package.json'));
   assert.equal(pkg.version, require('../package.json').version);
-  for (const file of ['local-data.js', 'uv-runtime.js']) assert(asar.extractFile(archive, file).length);
+  for (const file of [
+    'local-data.js',
+    'uv-runtime.js',
+    'local-model.js',
+    'project-knowledge.js',
+    'knowledge-worker.cjs',
+    'knowledge-client.js',
+    'workflow-templates.js',
+    'parallel-batches.js',
+    'task-recovery.js',
+  ])
+    assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {
     assert(
       !/(?:^|[/\\])(?:\.handover|\.setup-cache|\.aws|\.codex|\.agents|\.git|\.env(?:\.[^/\\]+)?)(?:[/\\]|$)/i.test(

@@ -28,7 +28,7 @@ const allowed = (name) =>
   !/[\x00-\x1f\x7f]/.test(name) &&
   !path.isAbsolute(name) &&
   !path.win32.isAbsolute(name) &&
-  !name.split(/[\\/]/).some((part) => part === '..' || skipped.has(part)) &&
+  !name.split(/[\\/]/).some((part) => part === '..' || skipped.has(part.toLowerCase())) &&
   !/(?:^|\/)(?:\.env(?:\..*)?|auth\.json|credentials[^/]*\.json|\.npmrc|\.netrc|\.git-credentials|id_rsa[^/]*|secrets\.[^/]*)$|\.(?:pem|key|pfx|p12|token)$/i.test(
     name,
   );

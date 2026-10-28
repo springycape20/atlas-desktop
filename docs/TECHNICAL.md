@@ -2,6 +2,8 @@
 
 Detailed behaviour, limits and design notes. For installation and an overview, see the [README](../README.md).
 
+The next-release [project tools guide](PROJECT-TOOLS.md) covers project excerpts, context selection, performance measurements, task recovery, reusable workflows, parallel batches and local-model text chat.
+
 ## Feature reference
 
 - Persistent Codex app-server connection, streamed replies, and ongoing conversations.
@@ -19,7 +21,7 @@ GitHub shares the application source. It **does not sync conversations, settings
 
 Credentials, downloaded models, dependencies, personal shortcuts, and runtime data are excluded from Git. Setup creates an **ATLAS.lnk** shortcut for each checkout. ElevenLabs is optional and needs your own key; no shared key is included.
 
-Check Settings before use: wake-word listening and automatic follow-up listening are enabled by the current defaults. They can be turned off. Permission bypass is disabled by default; enabling it gives the provider broader computer access. With bypass off, Codex uses the selected sandbox and does not automatically grant approval requests. Interactive requests that ATLAS cannot handle must be completed through the provider app.
+Check Settings before use: wake-word listening and automatic follow-up listening are off by default and require opt-in. Permission bypass is disabled by default; enabling it gives the provider broader computer access. With bypass off, Codex uses the selected sandbox and does not automatically grant approval requests. Interactive requests that ATLAS cannot handle must be completed through the provider app.
 
 Reminders require ATLAS to be running. Cancelling a task does not undo changes it already made. Task routing is based on local rules rather than a guarantee that one provider is best.
 

@@ -7,12 +7,14 @@ const { createKnowledgeIndex, formatKnowledge } = require('../project-knowledge'
 test('knowledge search refreshes changed and removed code, references symbols and excludes credentials', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-knowledge-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
-  let names = ['engine.js', '.env', '.handover/notes.md', 'large.js'];
+  let names = ['engine.js', '.env', '.handover/notes.md', '.AWS/config.txt', 'large.js'];
   await fs.writeFile(
     path.join(root, 'engine.js'),
     "const store = require('./store');\nfunction transcribeAudio() { return 'voice'; }\n",
   );
   await fs.writeFile(path.join(root, '.env'), 'voice=SECRET');
+  await fs.mkdir(path.join(root, '.AWS'));
+  await fs.writeFile(path.join(root, '.AWS', 'config.txt'), 'voice PRIVATE_CLOUD_CONFIGURATION');
   await fs.writeFile(path.join(root, 'large.js'), 'voice'.repeat(30000));
   const index = createKnowledgeIndex({ listFiles: async () => names });
   let result = await index.search(root, 'transcribeAudio voice');

@@ -75,8 +75,29 @@ app.whenReady().then(async () => {
     await win.webContents.executeJavaScript(
       `if(document.querySelector('#powerDialog').getBoundingClientRect().right>innerWidth+1)throw Error('Dialog overflow');`,
     );
-    console.log('PASS: Context exclusions, preview, performance and narrow dialog. Screenshots: ' + shots);
+    win.setContentSize(1280, 800);
+    await win.webContents.executeJavaScript(
+      `(async()=>{atlas.localModel=async()=>['fixture:8b'];atlas.saveSettings=async next=>{powerCalls.push({action:'save-local-settings',settings:next});return next;};await atlasPower.show('Local models');document.querySelector('#localModelName').value='fixture:8b';document.querySelector('#localModelEnabled').checked=true;})()`,
+    );
+    await new Promise((r) => setTimeout(r, 150));
+    fs.writeFileSync(path.join(shots, 'local-models.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `(async()=>{[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Save local model settings').click();await new Promise(r=>setTimeout(r,30));if(!powerCalls.some(r=>r.action==='save-local-settings'&&r.settings.localModelEnabled))throw Error('Local settings not saved');if(!document.querySelector('.local-model-state').textContent.includes('fixture:8b'))throw Error('Local mode indicator missing');})()`,
+    );
+    win.setContentSize(390, 844);
+    await new Promise((r) => setTimeout(r, 100));
+    await win.webContents.executeJavaScript(
+      `(()=>{const dialog=document.querySelector('#powerDialog').getBoundingClientRect(),footer=document.querySelector('#powerDialog footer').getBoundingClientRect();if(footer.bottom>dialog.bottom+1||dialog.right>innerWidth+1)throw Error('Narrow dialog footer overflow');})()`,
+    );
     clearTimeout(timeout);
+    const inspection = await win.webContents.executeJavaScript(
+      `(()=>{const live=document.querySelector('#powerDialog'),copy=live.cloneNode(true);[...live.querySelectorAll('input')].forEach((input,index)=>{const target=copy.querySelectorAll('input')[index];target.setAttribute('value',input.value);if(input.checked)target.setAttribute('checked','');else target.removeAttribute('checked');});const styles=[...document.querySelectorAll('style')].map(item=>item.outerHTML).join('');return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>ATLAS captured demo dialog</title>'+styles+'<style>body{margin:0;background:#0c0d0f}.power-dialog{display:block;position:relative;margin:24px auto;inset:auto}</style></head><body><main>'+copy.outerHTML.replace('<dialog','<section').replace('</dialog>','</section>')+'</main></body></html>';})()`,
+    );
+    fs.writeFileSync(path.join(shots, 'inspect.html'), inspection);
+    console.log(
+      'PASS: Context, performance, recovery previews, workflow drafts, paused batches and local-model settings. Screenshots: ' +
+        shots,
+    );
     app.exit(0);
   } catch (error) {
     console.error(error);

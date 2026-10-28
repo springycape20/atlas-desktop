@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('atlas', {
   performance: () => ipcRenderer.invoke('atlas:performance'),
   contextPreview: (request) => ipcRenderer.invoke('atlas:context-preview', request),
   workflows: (request) => ipcRenderer.invoke('atlas:workflows', request),
+  localModel: (request) => ipcRenderer.invoke('atlas:local-model', request),
   searchWork: (request) => ipcRenderer.invoke('atlas:search-work', request),
   taskOpen: (id) => ipcRenderer.invoke('atlas:task-open', { id }),
   onDesktopPermissions: (callback) => {

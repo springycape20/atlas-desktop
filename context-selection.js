@@ -1,4 +1,5 @@
 function selection(input = {}) {
+  if (!input || typeof input !== 'object') input = {};
   return {
     instructions: input.instructions !== false,
     memories: input.memories !== false,

@@ -291,6 +291,9 @@ const colabJobs = require('./colab-jobs').createColabJobs({
 function defaultSettings() {
   return {
     routeMode: 'auto',
+    localModelEnabled: false,
+    localModelBaseUrl: 'http://127.0.0.1:11434/v1',
+    localModel: '',
     permissionBypass: false,
     codexSandbox: 'workspace-write',
     codexModel: '',
@@ -317,6 +320,10 @@ function defaultSettings() {
 }
 function sanitizeSettings(value) {
   const defaults = defaultSettings();
+  let localModelBaseUrl = defaults.localModelBaseUrl;
+  try {
+    localModelBaseUrl = require('./local-model').localBase(value?.localModelBaseUrl || localModelBaseUrl);
+  } catch {}
   const cleanModels = (input) =>
     [
       ...new Set(
@@ -326,6 +333,9 @@ function sanitizeSettings(value) {
   const cleanModel = (input) => (typeof input === 'string' && modelIdPattern.test(input) ? input : '');
   return {
     routeMode: ['auto', 'codex', 'claude'].includes(value?.routeMode) ? value.routeMode : defaults.routeMode,
+    localModelEnabled: value?.localModelEnabled === true,
+    localModelBaseUrl,
+    localModel: cleanModel(value?.localModel),
     permissionBypass: value?.permissionBypass === true,
     codexSandbox: ['read-only', 'workspace-write'].includes(value?.codexSandbox)
       ? value.codexSandbox
@@ -790,6 +800,19 @@ async function runProviderTurn(provider, prompt, cwd, settings, previousSessionI
   // onActivity lets one Colab pass capture its own activity (such as reasoning summaries) for its report.
   const { stageSignal, onActivity = () => {}, ...providerSettings } = settings;
   settings = providerSettings;
+  if (provider === 'local') {
+    const job = jobContext.getStore();
+    const signals = [job?.signal, stageSignal].filter(Boolean);
+    if (settings.timeoutSeconds) signals.push(AbortSignal.timeout(settings.timeoutSeconds * 1000));
+    reportProviderProgress('local', 'Local model · text chat');
+    return require('./local-model').runLocalModel({
+      base: settings.localModelBaseUrl,
+      model: settings.localModel,
+      prompt,
+      signal: signals.length ? AbortSignal.any(signals) : undefined,
+      onText,
+    });
+  }
   if (provider === 'claude') {
     const executable = findClaudeExecutable();
     if (!executable) throw new Error('Claude Code was not found. Install it from Settings.');
@@ -1232,6 +1255,12 @@ function setupIpc() {
     workflowService ||= require('./workflow-templates').createWorkflowTemplates(app.getPath('userData'));
     return workflowService.action(request);
   });
+  ipcMain.handle('atlas:local-model', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const local = require('./local-model');
+    if (request.action !== 'models') throw Error('Unknown local model action.');
+    return local.listModels(request.base);
+  });
   // Answers to the once-per-project offer to turn on completion checks, or a one-off run of the
   // offered checks on a finished task. Only commands recorded with the offer can run.
   ipcMain.handle('atlas:check-offer', async (event, request = {}) => {
@@ -1490,6 +1519,8 @@ function setupIpc() {
 
   ipcMain.handle('atlas:save-settings', async (event, data) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
+    if (Object.hasOwn(data || {}, 'localModelBaseUrl')) require('./local-model').localBase(data.localModelBaseUrl);
+    if (data?.localModelEnabled) require('./local-model').modelId(data.localModel);
     const previous = await readAppSettings();
     const saved = await writeAppSettings(data);
     if (process.platform === 'win32' && previous.launchAtStartup !== saved.launchAtStartup) {
@@ -1657,10 +1688,19 @@ function setupIpc() {
         const result = await handleChat(event, { ...data, conversationId: job.conversationId });
         if (controller.signal.aborted) throw Error('Task stopped.');
         job.result = result;
-        await taskChecks.check(job);
+        if (result.provider === 'local') {
+          job.verification = {
+            status: 'not-checked',
+            results: [],
+            reason: 'Local text chat has no editing or command tools.',
+          };
+        } else await taskChecks.check(job);
         if (job.stopped || controller.signal.aborted) throw Error('Task stopped.');
         job.status = 'completed';
-        job.statusText = require('./verification-badge').completeStatus(job.verificationBadge);
+        job.statusText =
+          result.provider === 'local'
+            ? 'Complete · local text chat'
+            : require('./verification-badge').completeStatus(job.verificationBadge);
         return result;
       } catch (error) {
         job.status = job.stopped || 'failed';
@@ -1765,8 +1805,14 @@ async function handleChat(event, data) {
     route.provider = settings.routeMode;
     route.reason = 'settings preference';
   }
+  if (settings.localModelEnabled) {
+    if (resumeJob?.provider && resumeJob.provider !== 'local')
+      throw Error('Turn local model mode off before resuming a provider task.');
+    route.provider = 'local';
+    route.reason = 'local model preference';
+  }
   const preferredProvider = route.provider;
-  const availableProvider = providerHealth.choose(route.provider);
+  const availableProvider = route.provider === 'local' ? 'local' : providerHealth.choose(route.provider);
   if (availableProvider && availableProvider !== route.provider) {
     route.provider = availableProvider;
     route.reason = 'temporarily avoiding ' + preferredProvider + ' usage limit';
@@ -1839,7 +1885,7 @@ async function handleChat(event, data) {
     throw Error(
       'Both providers are temporarily cooling down after usage limits. Open Settings → Provider availability to retry, or wait until the displayed retry time.',
     );
-  await beginChanges(jobContext.getStore(), activeJobs.get(data.resumeJobId));
+  if (route.provider !== 'local') await beginChanges(jobContext.getStore(), activeJobs.get(data.resumeJobId));
   reportProviderProgress(route.provider, `Selected ${route.provider} · ${route.reason}`);
   try {
     const result = await runProvider(
@@ -1865,7 +1911,7 @@ async function handleChat(event, data) {
       providerSessionId: conversation.sessions[route.provider] || '',
     };
   } catch (error) {
-    if (!isUsageLimitError(error)) {
+    if (route.provider === 'local' || !isUsageLimitError(error)) {
       conversation.turns.push({
         role: 'assistant',
         content: `Request failed: ${error.message}`,
@@ -1953,6 +1999,7 @@ async function createWindow() {
         '/recovery-ui.js',
         '/workflow-ui.js',
         '/parallel-ui.js',
+        '/local-model-ui.js',
         '/code-syntax.js',
         '/syntax-worker.js',
         '/syntax-highlight.js',
