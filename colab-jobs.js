@@ -231,6 +231,22 @@ function createColabJobs({
           await persist();
         }
         await beginChanges(job, previous);
+        if (job.workspaceId && !previous && !['plan', 'compare'].includes(request.mode)) {
+          job.environment = await require('./environment-recipe').runRecipe({
+            profile: project,
+            cwd: job.cwd,
+            signal: job.signal,
+            ask: (details) => approvals.ask({ ...details, jobId: job.id, provider: 'ATLAS', signal: job.signal }),
+            runner: (...args) => require('./project-tools').runCheck(...args),
+            progress: (command) => {
+              job.statusText = 'Environment setup: ' + command;
+              job.events.push({ kind: 'command', text: job.statusText, at: Date.now() });
+              emit();
+            },
+          });
+          if (job.environment.status === 'failed')
+            throw Error('Project environment setup failed. Inspect its output before retrying.');
+        }
         const settings = await readSettings();
         if (project)
           Object.assign(settings, {

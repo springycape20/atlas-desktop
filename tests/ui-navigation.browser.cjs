@@ -47,6 +47,14 @@ app.whenReady().then(async () => {
     );
     const out = path.join(root, '.handover', 'ui-navigation');
     fs.mkdirSync(out, { recursive: true });
+    await win.webContents.executeJavaScript(
+      `window.__originalProjects=atlas.projects;atlas.projects=async()=>[{id:'fixture',name:'Demo project',cwd:'C:/Projects/Demo',environmentTools:'Node.js and npm',environmentCommands:'npm ci',environmentPrompt:true}];atlasPower.show('Project environments')`,
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(out, 'project-environments.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `atlas.projects=__originalProjects;atlasPower.close();new Promise(r=>setTimeout(r,30))`,
+    );
     await win.webContents.executeJavaScript(`atlasUi.open('tasks','Plan a task')`);
     await new Promise((r) => setTimeout(r, 120));
     await win.webContents.executeJavaScript(

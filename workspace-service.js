@@ -94,12 +94,16 @@ function createWorkspaceService(directory, options = {}) {
         const name = trim(p.name, 100).trim();
         if (!name) throw Error('Give the project a name.');
         const id = p.id && s.profiles.some((row) => row.id === p.id) ? p.id : randomUUID();
+        const previous = s.profiles.find((row) => row.id === id);
         const model = (v) => (/^[A-Za-z0-9._:/-]{1,100}$/.test(v || '') ? v : '');
         const profile = {
           id,
           name,
           cwd: folder,
           instructions: trim(p.instructions, 12000),
+          environmentTools: trim(p.environmentTools ?? previous?.environmentTools, 2000),
+          environmentCommands: trim(p.environmentCommands ?? previous?.environmentCommands, 4000),
+          environmentPrompt: (p.environmentPrompt ?? previous?.environmentPrompt) === true,
           commands: trim(p.commands, 4000),
           checkCommands: trim(p.checkCommands, 4000),
           autoCheck: p.autoCheck === true,

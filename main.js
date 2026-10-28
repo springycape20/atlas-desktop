@@ -1040,6 +1040,7 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       graph,
       graphRunId,
       recoveryNote,
+      environment,
     } = job;
     return {
       id,
@@ -1071,6 +1072,7 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       sessions,
       graphRunId,
       recoveryNote,
+      environment,
       ...(graphs ? { graph } : {}),
       ...(persist ? { preparedProposals } : {}),
       budget: budget
@@ -2027,6 +2029,7 @@ async function createWindow() {
         '/model-routing-ui.js',
         '/hardware-ui.js',
         '/planning-ui.js',
+        '/environment-ui.js',
         '/appearance.js',
         '/appearance-ui.js',
         '/command-menu.js',
