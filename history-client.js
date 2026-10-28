@@ -1,12 +1,14 @@
 const { Worker } = require('node:worker_threads');
 const path = require('node:path');
 class HistoryClient {
-  constructor(workerData) {
+  constructor(workerData, { idleMs = 120000 } = {}) {
     this.workerData = workerData;
     this.pending = new Map();
     this.counter = 0;
+    this.idleMs = idleMs;
   }
   request(method, args) {
+    clearTimeout(this.idle);
     if (!this.worker) {
       const worker = new Worker(path.join(__dirname, 'history-worker.cjs'), { workerData: this.workerData });
       this.worker = worker;
@@ -26,6 +28,7 @@ class HistoryClient {
         clearTimeout(p.timer);
         this.pending.delete(result.id);
         result.error ? p.reject(Error(result.error)) : p.resolve(result.value);
+        if (!this.pending.size) this.idle = setTimeout(() => this.close(), this.idleMs).unref();
       });
       worker.on('error', fail);
       worker.on('exit', () => fail(Error('History worker stopped.')));
@@ -39,6 +42,7 @@ class HistoryClient {
     });
   }
   close() {
+    clearTimeout(this.idle);
     if (this.worker) this.fail(Error('ATLAS closed.'));
   }
 }

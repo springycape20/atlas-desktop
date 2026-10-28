@@ -47,7 +47,19 @@ function createKnowledgeIndex({ listFiles } = {}) {
           const text = await fs.readFile(file, 'utf8');
           if (text.includes('\0')) continue;
           row = { mtime: stat.mtimeMs, ctime: stat.ctimeMs, size: stat.size, lines: text.split(/\r?\n/) };
+          row.bytes = stat.size * 2 + row.lines.length * 16;
           cache.set(name, row);
+          let retained = [...roots.values()].reduce(
+            (sum, entries) => sum + [...entries.values()].reduce((n, item) => n + item.bytes, 0),
+            0,
+          );
+          for (const entries of roots.values()) {
+            for (const [key, item] of entries) {
+              if (retained <= 32 * 1048576) break;
+              entries.delete(key);
+              retained -= item.bytes;
+            }
+          }
           refreshed++;
         }
         let best = -1,

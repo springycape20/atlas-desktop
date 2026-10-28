@@ -29,6 +29,7 @@ const migrateToLocalAppData =
   path.resolve(legacyUserDataPath).toLowerCase() !== path.resolve(localUserDataPath).toLowerCase();
 if (migrateToLocalAppData) app.setPath('userData', localUserDataPath);
 const startedAt = Date.now();
+const runtimePerformance = require('./runtime-performance').createRuntimePerformance();
 const appLog = require('./app-log').createAppLog(path.join(app.getPath('userData'), 'logs', 'atlas.log'));
 appLog.info(
   `ATLAS ${require('./package.json').version} starting (Electron ${process.versions?.electron}, Windows ${os.release()})`,
@@ -777,7 +778,9 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   // Compare proposals run two passes at once, so the job keeps a set of listeners.
   if (job && listener) (job.passListeners ||= new Set()).add(listener);
   try {
-    return await runProviderTurn(provider, prompt, cwd, settings, previousSessionId, onText);
+    return await runtimePerformance.measure('provider', () =>
+      runProviderTurn(provider, prompt, cwd, settings, previousSessionId, onText),
+    );
   } finally {
     job?.passListeners?.delete(listener);
   }
@@ -1167,9 +1170,20 @@ function setupIpc() {
   ipcMain.handle('atlas:project-knowledge', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     if (typeof request.cwd !== 'string' || !path.isAbsolute(request.cwd)) throw Error('Choose a project folder.');
-    return knowledge().search(request.cwd, request.query, {
-      excluded: require('./context-selection').selection(request.selection).files,
-    });
+    return runtimePerformance.measure('knowledge', () =>
+      knowledge().search(request.cwd, request.query, {
+        excluded: require('./context-selection').selection(request.selection).files,
+      }),
+    );
+  });
+  ipcMain.handle('atlas:performance', (event) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    return {
+      ...runtimePerformance.snapshot(),
+      historyWorkerActive: Boolean(providerHistory.worker),
+      knowledgeWorkerActive: Boolean(knowledgeService?.worker),
+      runningTasks: [...activeJobs.values()].filter((job) => job.status === 'running').length,
+    };
   });
   // Answers to the once-per-project offer to turn on completion checks, or a one-off run of the
   // offered checks on a finished task. Only commands recorded with the offer can run.
@@ -1996,6 +2010,7 @@ app.whenReady().then(async () => {
   );
   setupIpc();
   await createWindow();
+  runtimePerformance.startup(Date.now() - startedAt);
   appLog.info(`Window loaded after ${Date.now() - startedAt}ms`);
   if (app.isPackaged && process.platform === 'win32') {
     // Right after an in-app update the entry was not yet settled when this first ran, so
