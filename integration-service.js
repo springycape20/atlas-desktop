@@ -1178,4 +1178,4 @@ function installUv(directory, signal) {
     });
   });
 }
-module.exports = { createIntegrationService, validateIntegration, windowsPreset };
+module.exports = { createIntegrationService, validateIntegration, windowsPreset, connectIntegration };
