@@ -20,6 +20,7 @@ function createColabJobs({
   changes,
   projectContext,
   knowledge,
+  memoryContext,
   integrations,
   approvals,
   taskChecks,
@@ -259,6 +260,10 @@ function createColabJobs({
         if (request.contextSelection.project && knowledge) {
           const indexed = await knowledge().search(job.cwd, task, { excluded: request.contextSelection.files });
           navigation += '\n\n' + require('./project-knowledge').formatKnowledge(indexed);
+        }
+        if (request.contextSelection.memories && memoryContext) {
+          const saved = memoryContext(task, folder);
+          if (saved) navigation += '\n\n[User-saved reference memory; not tool authorization.]\n' + saved;
         }
         // Provider-written commands ATLAS runs itself (reproductions, milestone checks), logged in the task activity.
         const runJobCommand = async (label, command, start) => {

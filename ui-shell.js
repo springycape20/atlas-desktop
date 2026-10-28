@@ -357,5 +357,15 @@
   };
   new MutationObserver(titleTooltips).observe(document.querySelector('.layout'), { childList: true, subtree: true });
   titleTooltips();
-  window.atlasUi = { open: openHub, settings: openSettings, hub, node, actionButton, setListWidth };
+  window.atlasUi = {
+    open: openHub,
+    settings: openSettings,
+    hub,
+    node,
+    actionButton,
+    setListWidth,
+    register: (route, name) => {
+      if (sections[route]) sections[route][name] = power(name);
+    },
+  };
 })();
