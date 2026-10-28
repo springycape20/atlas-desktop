@@ -2876,6 +2876,74 @@
       :root .colab-message.user {
         background: #18252b;
       }
+      /* Colab uses the same readable type and quiet controls as Assistant. */
+      :root .setting-section:has(#wakeWordEnabled) .toggle-row small {
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      :root .colab-workspace,
+      :root .colab-workspace :is(button, input, select, textarea, summary, small, label, strong, time),
+      :root .colab-folder-row span {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+      :root .colab-chat-header h1 {
+        font-size: 20px;
+      }
+      :root .colab-workspace :is(input, select, textarea),
+      :root .colab-chat-item span {
+        font-size: 14px;
+      }
+      :root .colab-workspace :is(button, summary, small, label, time),
+      :root .colab-workspace .colab-chat-actions button,
+      :root .colab-workspace #colabNewChat,
+      :root .colab-workspace .field > span,
+      :root
+        .colab-workspace
+        :is(.session-chip, .colab-chat-project, .verify-badge, .colab-run-details, .colab-efficiency),
+      :root .colab-workspace :is(.colab-work-step, .colab-work-note),
+      :root .colab-workspace .colab-recovery,
+      :root .colab-chat-header p,
+      :root .colab-folder-row span,
+      :root .colab-browse > span,
+      :root .colab-compose-footer [role='status'],
+      :root .colab-message strong {
+        font-size: 12px;
+        letter-spacing: 0;
+      }
+      :root .colab-chat-header p,
+      :root
+        .colab-workspace
+        :is(small, time, .session-chip, .colab-chat-project, .colab-run-details, .colab-efficiency),
+      :root .colab-config summary,
+      :root .colab-message strong,
+      :root .colab-compose-footer [role='status'] {
+        color: #9fb3ba;
+      }
+      :root .colab-workspace .session-chip {
+        text-transform: none;
+      }
+      :root .colab-workspace button {
+        background: transparent;
+        box-shadow: none;
+      }
+      :root .colab-workspace #colabStart {
+        background: #15343b;
+      }
+      :root .colab-workspace button:hover:not(:disabled) {
+        background: #1c3038;
+      }
+      :root .colab-workspace button:focus-visible {
+        outline: 2px solid #83d8e4;
+        outline-offset: 2px;
+      }
+      :root .colab-message-actions [aria-pressed='true'] {
+        color: #e7eef0;
+        background: #263940;
+        border-color: #9fb3ba;
+      }
+      :root .colab-graph-node .graph-node-meta {
+        font-size: 12px;
+      }
     </style>
     <style id="beaconMark">
       /* The Beacon in the corner: white at rest, its centre bar orange while anything runs. */
@@ -2936,7 +3004,8 @@
         <section class="panel core">
           <div class="corehead">
             <span class="provider-chip"><span class="status-dot"></span><span id="coreEngine">AUTO ROUTER</span></span
-            ><span class="session-chip" id="wakeIndicator">WAKE WORD OFF</span
+            ><button class="session-chip" id="wakeIndicator" type="button" title="Pause automatic microphone listening">
+              WAKE WORD OFF</button
             ><span class="session-chip" id="sessionStatus">READY</span>
           </div>
           <div class="orbwrap">
@@ -3076,12 +3145,18 @@
             ><label class="toggle-row"
               ><span
                 ><strong>Hey Atlas wake word</strong
-                ><small>Keep the selected microphone active; speech is checked locally for “Hey Atlas.”</small></span
+                ><small
+                  >Off by default. Enabling keeps the microphone active and checks speech locally for “Hey Atlas.”
+                  Recognised requests go to your AI provider. Consider other people nearby.</small
+                ></span
               ><input id="wakeWordEnabled" type="checkbox" /></label
             ><label class="toggle-row"
               ><span
                 ><strong>Listen for spoken answers</strong
-                ><small>After ATLAS asks a question, listen briefly; choices stay available on screen.</small></span
+                ><small
+                  >Off by default. Enable to listen briefly after ATLAS asks a question. Your spoken answer is sent to
+                  your AI provider.</small
+                ></span
               ><input id="autoListenReplies" type="checkbox" /></label
             ><label class="field"
               ><span>Pause before sending your voice turn</span
@@ -3102,33 +3177,13 @@
             <label class="field"
               ><span>Speech engine</span
               ><select id="voiceEngine">
-                <option value="kokoro">Kokoro · local, no account needed</option>
                 <option value="windows">Windows speech</option>
                 <option value="elevenlabs">ElevenLabs · online</option>
               </select></label
             >
             <p class="setting-note">
-              Kokoro downloads its speech model once, then generates voice on this computer. Speech text stays local.
+              Windows speech uses voices available on your PC. ElevenLabs sends speech text to your account online.
             </p>
-            <div id="kokoroControls">
-              <label class="field"
-                ><span>British English voice</span
-                ><select id="kokoroVoice">
-                  <option value="bm_george">George · classic British</option>
-                  <option value="bm_daniel">Daniel · polished</option>
-                  <option value="bm_fable">Fable · expressive</option>
-                  <option value="bm_lewis">Lewis · modern British</option>
-                  <option value="bf_emma">Emma · warm British</option>
-                  <option value="bf_isabella">Isabella · clear British</option>
-                  <option value="bf_alice">Alice · British</option>
-                  <option value="bf_lily">Lily · British</option>
-                </select></label
-              >
-              <div class="voice-actions">
-                <button class="quiet-button" id="testKokoroVoice" type="button">Preview local voice</button
-                ><span class="setting-note">First preview downloads the local model; later previews work offline.</span>
-              </div>
-            </div>
             <div id="elevenLabsControls" hidden>
               <label class="toggle-row"
                 ><span

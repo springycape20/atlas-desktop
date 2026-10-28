@@ -16,11 +16,13 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-    # SignPath signing turns on once the SIGNPATH_ORGANIZATION_ID repository variable and the
-    # SIGNPATH_API_TOKEN secret exist (see docs/SIGNING.md). Until then releases stay unsigned.
+    # Signing remains optional following the owner's recorded unsigned-release decision.
+    # Public tags require a matching technical dependency review; when signing is enabled,
+    # the actual publisher and signatures are mandatory (see docs/PATCH-RELEASE-REVIEW.md).
     env:
       SIGNING: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
       ATLAS_REQUIRE_SIGNATURE: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' && '1' || '' }}
+      UPDATER_PUBLISHER: ${{ vars.SIGNPATH_UPDATER_PUBLISHER }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,7 +31,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Require documented release decision and dependency review for public tags
+        run: node build/release-policy.cjs
       - run: npm ci
+      - name: Check production dependency advisories
+        run: npm audit --omit=dev --audit-level=high
       - run: npm test
       - name: Verify Colab history and browsing in Electron
         run: npm run test:colab-ui

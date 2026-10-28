@@ -51,3 +51,50 @@ test('logging never throws when the log cannot be written', () => {
   const log = createAppLog(path.join(os.tmpdir(), 'atlas-missing-\0', 'atlas.log'));
   assert.doesNotThrow(() => log.error('still running'));
 });
+
+test('diagnostic logs redact labelled credentials, bearer tokens and private keys', async (t) => {
+  const file = path.join(await folder(t), 'atlas.log');
+  const log = createAppLog(file);
+  for (const message of [
+    'Authorization: Bearer test-access-value',
+    'Authorization: Basic example-basic-value',
+    'Proxy-Authorization: Digest example-digest-value',
+    'api_key=example-key-value',
+    JSON.stringify({ accessToken: 'example-oauth-value', password: 'example-password-value' }),
+    JSON.stringify({ password: 'private phrase with spaces and "quotes"' }),
+    '-----BEGIN PRIVATE KEY-----\nexample-private-value\n-----END PRIVATE KEY-----',
+  ])
+    log.error(message);
+  const text = await fs.readFile(file, 'utf8');
+  for (const secret of [
+    'test-access-value',
+    'example-basic-value',
+    'example-digest-value',
+    'example-key-value',
+    'example-oauth-value',
+    'example-password-value',
+    'example-private-value',
+  ])
+    assert(!text.includes(secret), secret);
+  assert.match(text, /\[REDACTED\]/);
+  assert(!text.includes('private phrase') && !text.includes('spaces and'));
+});
+
+test('malformed quoted credentials cannot stall synchronous diagnostic redaction', () => {
+  require('node:child_process').execFileSync(
+    process.execPath,
+    [
+      '-e',
+      `
+    const assert=require('node:assert/strict');
+    const {redactDiagnostic}=require('./app-log');
+    for(const tail of ['',String.fromCharCode(92)]) {
+      const input='password: "'+(String.fromCharCode(92)+'a').repeat(20000)+tail;
+      const output=redactDiagnostic(input);
+      assert(output.length<100 && output.includes('[REDACTED]'));
+    }
+  `,
+    ],
+    { cwd: path.resolve(__dirname, '..'), timeout: 5000 },
+  );
+});

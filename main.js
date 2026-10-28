@@ -62,6 +62,7 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow;
 const ownsInstance = require('./startup-lifecycle').singleInstance(app, () => mainWindow);
+if (ownsInstance) require('./local-data').applyPendingReset(app.getPath('userData'), legacyUserDataPath);
 if (ownsInstance) require('./startup-lifecycle').configureChromiumCache(app);
 const taskNotifications = require('./task-notifications').createTaskNotifications({
   Notification,
@@ -294,8 +295,7 @@ function defaultSettings() {
     speakResponses: true,
     showReasoning: false,
     launchAtStartup: false,
-    voiceEngine: 'kokoro',
-    kokoroVoice: 'bm_george',
+    voiceEngine: 'windows',
     timeoutSeconds: 0,
     timeoutPolicyVersion: 1,
     elevenLabsEnabled: false,
@@ -303,8 +303,9 @@ function defaultSettings() {
     elevenLabsModel: 'eleven_multilingual_v2',
     elevenLabsSpeed: 0.92,
     recognitionMode: 'fast',
-    wakeWordEnabled: true,
-    autoListenReplies: true,
+    microphoneConsentVersion: 1,
+    wakeWordEnabled: false,
+    autoListenReplies: false,
   };
 }
 function sanitizeSettings(value) {
@@ -332,21 +333,7 @@ function sanitizeSettings(value) {
     showReasoning: value?.showReasoning === true,
     launchAtStartup: value?.launchAtStartup === true,
     speechDetail: value?.speechDetail === 'full' ? 'full' : 'brief',
-    voiceEngine: ['kokoro', 'windows', 'elevenlabs'].includes(value?.voiceEngine)
-      ? value.voiceEngine
-      : defaults.voiceEngine,
-    kokoroVoice: [
-      'bm_george',
-      'bm_daniel',
-      'bm_fable',
-      'bm_lewis',
-      'bf_emma',
-      'bf_isabella',
-      'bf_alice',
-      'bf_lily',
-    ].includes(value?.kokoroVoice)
-      ? value.kokoroVoice
-      : defaults.kokoroVoice,
+    voiceEngine: ['windows', 'elevenlabs'].includes(value?.voiceEngine) ? value.voiceEngine : defaults.voiceEngine,
     timeoutSeconds:
       value?.timeoutPolicyVersion === 1 && [0, 60, 120, 180, 300].includes(value?.timeoutSeconds)
         ? value.timeoutSeconds
@@ -367,67 +354,15 @@ function sanitizeSettings(value) {
     recognitionMode: ['enhanced', 'fast'].includes(value?.recognitionMode)
       ? value.recognitionMode
       : defaults.recognitionMode,
-    wakeWordEnabled: value?.wakeWordEnabled !== false,
-    autoListenReplies: value?.autoListenReplies !== false,
+    microphoneConsentVersion: 1,
+    wakeWordEnabled: value?.microphoneConsentVersion === 1 && value?.wakeWordEnabled === true,
+    autoListenReplies: value?.microphoneConsentVersion === 1 && value?.autoListenReplies === true,
   };
 }
 
 const whisperService = new (require('./whisper-service').WhisperService)(
   path.join(appResourcesPath, 'speech', 'whisper', 'Release', 'whisper-server.exe'),
 );
-let voiceWorker = null,
-  voiceRequestCounter = 0;
-const voiceRequests = new Map();
-function ensureVoiceWorker() {
-  if (voiceWorker) return voiceWorker;
-  const { Worker } = require('node:worker_threads');
-  const worker = new Worker(path.join(__dirname, 'voice-worker.cjs'), {
-    workerData: { userData: app.getPath('userData') },
-  });
-  voiceWorker = worker;
-  worker.on('message', (result) => {
-    const entry = voiceRequests.get(result.id);
-    if (!entry) return;
-    voiceRequests.delete(result.id);
-    clearTimeout(entry.timer);
-    result.error ? entry.reject(Error(result.error)) : entry.resolve(result.audio);
-  });
-  function failed(error) {
-    if (voiceWorker === worker) voiceWorker = null;
-    for (const [id, entry] of voiceRequests) {
-      if (entry.worker === worker) {
-        clearTimeout(entry.timer);
-        entry.reject(error);
-        voiceRequests.delete(id);
-      }
-    }
-  }
-  worker.on('error', failed);
-  worker.on('exit', (code) => failed(Error('Local voice worker stopped (' + code + ').')));
-  return worker;
-}
-function kokoroSpeak(text, voice) {
-  const worker = ensureVoiceWorker(),
-    id = ++voiceRequestCounter;
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      voiceRequests.delete(id);
-      reject(Error('Local speech generation timed out.'));
-      void worker.terminate();
-    }, 90000);
-    voiceRequests.set(id, { resolve, reject, timer, worker });
-    worker.postMessage({ id, text, voice });
-  });
-}
-function cancelVoiceRequests() {
-  const ids = [...voiceRequests.keys()];
-  for (const entry of voiceRequests.values()) {
-    clearTimeout(entry.timer);
-    entry.reject(Error('Speech cancelled.'));
-  }
-  voiceRequests.clear();
-  if (voiceWorker && ids.length) voiceWorker.postMessage({ type: 'cancel', ids });
-}
 let quitting = false;
 app.on('before-quit', (event) => {
   if (!ownsInstance) return;
@@ -447,7 +382,6 @@ app.on('before-quit', (event) => {
   codexConnection?.close();
   claudeConnections?.close();
   providerHistory.close();
-  cancelVoiceRequests();
   clearTimeout(jobsEmitTimer);
   if (integrationService) finishing.push(integrationService.close());
   void (async () => {
@@ -470,7 +404,6 @@ app.on('before-quit', (event) => {
     persistJobs();
     const results = await Promise.allSettled([
       whisperService.close(),
-      voiceWorker?.terminate(),
       historyWriteQueue,
       assistantService?.flush(),
       providerHealth?.flush(),
@@ -1267,6 +1200,48 @@ function setupIpc() {
     if (!isTrustedSender(event)) throw Error('Untrusted app window');
     shell.showItemInFolder(appLog.file);
   });
+  ipcMain.handle('atlas:export-diagnostics', async (event) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export redacted diagnostic log',
+      defaultPath: 'atlas-diagnostics.txt',
+    });
+    if (result.canceled || !result.filePath) return { cancelled: true };
+    const text = await readFile(appLog.file, 'utf8').catch(() => 'No diagnostic log is available.');
+    await writeFile(result.filePath, require('./app-log').redactDiagnostic(text), 'utf8');
+    return { exported: true };
+  });
+  ipcMain.handle('atlas:show-notices', (event) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const file = path.join(
+      app.isPackaged ? process.resourcesPath : path.join(__dirname, 'dist'),
+      'compliance',
+      'THIRD-PARTY-NOTICES.txt',
+    );
+    if (!existsSync(file))
+      throw Error('The notices bundle is missing. Source checkouts can run npm run build:compliance.');
+    shell.showItemInFolder(file);
+  });
+  ipcMain.handle('atlas:reset-local-data', async (event) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (jobsRunning()) throw Error('Finish or stop running tasks before deleting ATLAS data.');
+    const choice = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Delete local ATLAS data?',
+      message: 'Delete saved ATLAS chats, attachments, memories, settings, permissions and logs, then restart?',
+      detail:
+        'This cannot be undone. Downloaded tool runtimes are kept. Your project files, Git recovery snapshots, exports, legacy folders and provider histories are not deleted. Export anything you need first.',
+      buttons: ['Cancel', 'Delete data and restart'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (choice.response !== 1) return { cancelled: true };
+    if (jobsRunning()) throw Error('A task started; stop it before deleting data.');
+    require('./local-data').requestReset(app.getPath('userData'));
+    app.relaunch();
+    app.quit();
+    return { restarting: true };
+  });
   ipcMain.handle('atlas:open-link', async (event, value) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window');
     const url = new URL(value);
@@ -1508,28 +1483,6 @@ function setupIpc() {
       },
     );
     return Buffer.from(await response.arrayBuffer()).toString('base64');
-  });
-  ipcMain.handle('atlas:cancel-speech', (event) => {
-    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
-    cancelVoiceRequests();
-  });
-  ipcMain.handle('atlas:kokoro-speak', async (event, request) => {
-    if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
-    const text = typeof request?.text === 'string' ? request.text.trim().slice(0, 1100) : '';
-    const voice = [
-      'bm_george',
-      'bm_daniel',
-      'bm_fable',
-      'bm_lewis',
-      'bf_emma',
-      'bf_isabella',
-      'bf_alice',
-      'bf_lily',
-    ].includes(request?.voice)
-      ? request.voice
-      : 'bm_george';
-    if (!text) throw new Error('There is no text to speak.');
-    return kokoroSpeak(text, voice);
   });
   ipcMain.handle('atlas:home', (event) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');

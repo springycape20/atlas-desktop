@@ -647,7 +647,7 @@ function createIntegrationService({
               ...(shellOffer
                 ? {
                     permissionScope:
-                      'Allow for this chat runs PowerShell in this chat without asking, including programs it starts such as node, npm or python, which ATLAS cannot inspect. Deleting files, registry, administrator, disk, system-file, hidden-code and denied-file commands still ask. Revoke it in the chat.',
+                      'Allow for this chat remembers literal PowerShell commands. Recognised risky commands, dynamic syntax, nested shells and inline programs ask again. Programs and project scripts can still change or delete files; this permission is not a sandbox. Revoke it in the chat.',
                   }
                 : {}),
               jobId: binding.job.id,
@@ -1110,11 +1110,7 @@ async function connectIntegration(row, { directory, signal, preserveLaunchedApps
 }
 
 function installUv(directory, signal) {
-  const quote = (value) => "'" + value.replace(/'/g, "''") + "'";
-  const script =
-    "$ErrorActionPreference='Stop'; $env:UV_INSTALL_DIR=" +
-    quote(directory) +
-    "; $env:UV_NO_MODIFY_PATH='1'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; try { Invoke-RestMethod 'https://astral.sh/uv/install.ps1' | Invoke-Expression; if (!$?) { exit 1 } } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }";
+  const script = require('./uv-runtime').installScript(directory);
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(Error('ATLAS is closing.'));
@@ -1178,4 +1174,4 @@ function installUv(directory, signal) {
     });
   });
 }
-module.exports = { createIntegrationService, validateIntegration, windowsPreset };
+module.exports = { createIntegrationService, validateIntegration, windowsPreset, connectIntegration };

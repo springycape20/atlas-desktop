@@ -3,6 +3,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const asar = require('@electron/asar');
 const { version } = require('../package.json');
+require('./verify-package.cjs')
+  .verifyPackage()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 const archive = path.join(__dirname, '..', 'dist', 'win-unpacked', 'resources', 'app.asar');
 const packaged = JSON.parse(asar.extractFile(archive, 'package.json').toString());
 for (const file of [
@@ -51,21 +57,6 @@ for (const file of [
 ])
   assert.ok(asar.extractFile(archive, file).length > 0, `Missing syntax highlighting runtime: ${file}`);
 assert.equal(packaged.version, version);
-// Only the Windows x64 speech runtime ships; other platforms' binaries are excluded.
-const onnx = path.join(
-  path.dirname(archive),
-  'app.asar.unpacked',
-  'node_modules',
-  'onnxruntime-node',
-  'bin',
-  'napi-v3',
-);
-assert.ok(
-  fs.statSync(path.join(onnx, 'win32', 'x64', 'onnxruntime_binding.node')).size > 0,
-  'Missing Windows x64 speech runtime',
-);
-for (const other of ['darwin', 'linux', path.join('win32', 'arm64')])
-  assert.ok(!fs.existsSync(path.join(onnx, other)), `Unneeded speech runtime packaged: ${other}`);
 if (process.env.GITHUB_REF_TYPE === 'tag') assert.equal(process.env.GITHUB_REF_NAME, `v${version}`);
 for (const file of [
   'model-catalog.js',
@@ -114,6 +105,24 @@ assert.ok(
 const updateConfig = require('js-yaml').load(
   fs.readFileSync(path.join(path.dirname(archive), 'app-update.yml'), 'utf8'),
 );
+if (process.env.GITHUB_REF_TYPE === 'tag') {
+  require('./release-policy.cjs').assertPublicRelease({
+    version,
+    review: JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'legal', 'release-review.json'))),
+    lockHash: require('node:crypto')
+      .createHash('sha256')
+      .update(fs.readFileSync(path.join(__dirname, '..', 'package-lock.json')))
+      .digest('hex'),
+    lock: JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package-lock.json'))),
+  });
+  if (process.env.SIGNING === 'true') {
+    assert.equal(process.env.ATLAS_REQUIRE_SIGNATURE, '1', 'Signed releases must verify signatures');
+    const publishers = Array.isArray(updateConfig.publisherName)
+      ? updateConfig.publisherName
+      : [updateConfig.publisherName];
+    assert.ok(publishers.includes(process.env.UPDATER_PUBLISHER), 'Updater must pin the verified signing publisher');
+  }
+}
 assert.equal(updateConfig.provider, 'github');
 assert.equal(updateConfig.owner, 'springycape20');
 assert.equal(updateConfig.repo, 'atlas-desktop');
@@ -130,6 +139,8 @@ getCurrentFuseWire(path.join(__dirname, '..', 'dist', 'win-unpacked', 'ATLAS.exe
   .then((wire) => {
     for (const fuse of ['RunAsNode', 'EnableNodeOptionsEnvironmentVariable', 'EnableNodeCliInspectArguments'])
       assert.equal(String.fromCharCode(wire[FuseV1Options[fuse]]), '0', `${fuse} must be disabled in ATLAS.exe`);
+    for (const fuse of ['EnableEmbeddedAsarIntegrityValidation', 'OnlyLoadAppFromAsar'])
+      assert.equal(String.fromCharCode(wire[FuseV1Options[fuse]]), '1', `${fuse} must be enabled in ATLAS.exe`);
     console.log('Verified ATLAS.exe fuses: run-as-Node, NODE_OPTIONS and --inspect are disabled.');
   })
   .catch((error) => {

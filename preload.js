@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld('atlas', {
   attachmentPreview: (id) => ipcRenderer.invoke('atlas:attachment-preview', { id }),
   diagnostics: () => ipcRenderer.invoke('atlas:diagnostics'),
   showLog: () => ipcRenderer.invoke('atlas:show-log'),
+  exportDiagnostics: () => ipcRenderer.invoke('atlas:export-diagnostics'),
+  resetLocalData: () => ipcRenderer.invoke('atlas:reset-local-data'),
+  showNotices: () => ipcRenderer.invoke('atlas:show-notices'),
   changes: (request) => ipcRenderer.invoke('atlas:changes', request),
   reviewChanges: (request) => ipcRenderer.invoke('atlas:review-changes', request),
   chatMetadata: (request) => ipcRenderer.invoke('atlas:chat-metadata', request),
@@ -98,13 +101,6 @@ contextBridge.exposeInMainWorld('atlas', {
   clearElevenLabsKey: () => ipcRenderer.invoke('atlas:elevenlabs-clear-key'),
   getElevenLabsVoices: () => ipcRenderer.invoke('atlas:elevenlabs-voices'),
   elevenLabsSpeak: (request) => ipcRenderer.invoke('atlas:elevenlabs-speak', request),
-  cancelSpeech: () => ipcRenderer.invoke('atlas:cancel-speech'),
-  kokoroSpeak: (request) => ipcRenderer.invoke('atlas:kokoro-speak', request),
-  onVoiceProgress: (callback) => {
-    const listener = (_event, message) => callback(message);
-    ipcRenderer.on('atlas:voice-progress', listener);
-    return () => ipcRenderer.removeListener('atlas:voice-progress', listener);
-  },
   pickFolder: () => ipcRenderer.invoke('atlas:pick-folder'),
   transcribe: (wav) => ipcRenderer.invoke('atlas:transcribe', wav),
   onProviderProgress: (callback) => {

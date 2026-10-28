@@ -31,9 +31,11 @@ async function mainHarness(t, options = {}) {
       },
       setAppUserModelId() {},
       quit: () => finished(),
+      relaunch: () => options.onRelaunch?.(),
     },
     ipcMain: { handle: (name, fn) => handlers.set(name, fn) },
     protocol: { registerSchemesAsPrivileged() {} },
+    dialog: options.dialog || {},
   };
   const fakeProcess = {
     platform: 'win32',

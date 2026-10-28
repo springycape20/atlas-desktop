@@ -1,0 +1,3 @@
+# These files are verified byte for byte by the release checks.
+package-lock.json text eol=lf
+legal/licenses/** -text

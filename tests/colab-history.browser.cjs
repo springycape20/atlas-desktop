@@ -104,6 +104,15 @@ app.whenReady().then(async () => {
           bounds.outerWidth <= width + 1,
         JSON.stringify(bounds),
       );
+      const tinyText = await win.webContents.executeJavaScript(`(()=>{
+        const panel=document.querySelector('.colab-workspace');
+        return [...panel.querySelectorAll('*')].filter(element=>
+          element.getClientRects().length && [...element.childNodes].some(node=>node.nodeType===3&&node.textContent.trim()) &&
+          parseFloat(getComputedStyle(element).fontSize)<11
+        ).map(element=>({text:element.textContent.slice(0,60),size:getComputedStyle(element).fontSize}));
+      })()`);
+      assert.deepEqual(tinyText, [], 'Colab text must remain readable at ' + width + 'px: ' + JSON.stringify(tinyText));
+      fs.writeFileSync(path.join(temp, 'colab-' + width + '.png'), (await win.webContents.capturePage()).toPNG());
     }
     win.setContentSize(1280, 800);
     await new Promise((resolve) => setTimeout(resolve, 100));

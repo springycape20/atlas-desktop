@@ -1034,12 +1034,101 @@ async function shellFixture(t, { beforeAction, respond = () => ({ content: [] })
 }
 const chatChoices = ['Allow for this chat', 'Allow once', 'Deny'];
 
+for (const choice of ['Allow once', 'Screen control', 'Allow for this chat'])
+  test(
+    `Stop terminates a real PowerShell child with ${choice}`,
+    { skip: process.platform !== 'win32', timeout: 45000 },
+    async (t) => {
+      const connections = [],
+        pids = [];
+      t.after(async () => {
+        for (const pid of pids) {
+          try {
+            process.kill(pid);
+          } catch {}
+          for (let i = 0; i < 100; i++) {
+            try {
+              process.kill(pid, 0);
+            } catch {
+              break;
+            }
+            await tick();
+          }
+        }
+      });
+      const f = await fixture(t, {
+        connect: async (_spec, options) => {
+          const connection = await require('../integration-service').connectIntegration(
+            {
+              command: process.execPath,
+              args: [path.join(__dirname, 'fixtures', 'powershell-server.cjs')],
+            },
+            options,
+          );
+          connections.push(connection);
+          return connection;
+        },
+      });
+      f.job.cwd = f.directory;
+      await fs.mkdir(path.join(f.directory, 'tools', 'uv'), { recursive: true });
+      await fs.writeFile(path.join(f.directory, 'tools', 'uv', 'uvx.exe'), '');
+      await f.service.save(require('../integration-service').windowsPreset);
+      let appPid;
+      if (choice === 'Screen control') {
+        const warm = f.call('integrations_call', { id: 'windows', tool: 'ControlStatus' });
+        f.approvals.answer((await f.waitApproval()).id, 'Allow');
+        assert(!(await warm).isError);
+        assert.equal((await f.service.desktopPermissions()).length, 1);
+        const launched = await connections.at(-1).call('App', {}, f.controller.signal);
+        appPid = Number(launched.content[0].text);
+        pids.push(appPid);
+      }
+      if (choice === 'Allow for this chat') await f.service.grantShell('colab:one');
+      const marker = path.join(f.directory, 'shell.pid');
+      const request = f.call('integrations_call', {
+        id: 'windows',
+        tool: 'PowerShell',
+        arguments: {
+          command: `[IO.File]::WriteAllText('${marker.replace(/'/g, "''")}',[string]$PID); Start-Sleep -Seconds 60`,
+        },
+      });
+      const approval = await f.waitApproval();
+      f.approvals.answer(approval.id, 'Allow once');
+      let shellPid;
+      for (let i = 0; i < 500; i++) {
+        try {
+          shellPid = Number(await fs.readFile(marker, 'utf8'));
+          if (shellPid) break;
+        } catch {}
+        await tick();
+      }
+      assert(shellPid, 'PowerShell must start before Stop');
+      pids.push(shellPid);
+      assert.doesNotThrow(() => process.kill(shellPid, 0), 'The shell must be alive when Stop is pressed');
+      f.controller.abort();
+      const result = await request;
+      assert(result.isError, 'Stopped call must fail');
+      for (let i = 0; i < 200; i++) {
+        try {
+          process.kill(shellPid, 0);
+        } catch {
+          shellPid = null;
+          break;
+        }
+        await tick();
+      }
+      assert.equal(shellPid, null, 'Stop must terminate the PowerShell process');
+      if (appPid)
+        assert.doesNotThrow(() => process.kill(appPid, 0), 'Stop must preserve the earlier completed app launch');
+    },
+  );
+
 test('Allow for this chat runs later non-routine PowerShell in that chat without asking', async (t) => {
   const f = await shellFixture(t);
   const first = f.shell('npm test'),
     request = await f.waitApproval();
   assert.deepEqual(request.choices, chatChoices);
-  assert.match(request.permissionScope, /without asking[\s\S]*still ask/);
+  assert.match(request.permissionScope, /not a sandbox/);
   f.approvals.answer(request.id, 'Allow for this chat');
   assert(!(await first).isError);
   assert(!(await f.shell('node build.js')).isError);

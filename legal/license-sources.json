@@ -1,0 +1,18 @@
+[
+  {
+    "file": "whisper.cpp-MIT.txt",
+    "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.8.7/LICENSE",
+    "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+  },
+  {
+    "file": "Whisper-model-card.md",
+    "url": "https://huggingface.co/ggerganov/whisper.cpp/raw/5359861c739e955e79d9a303bcbc70fb988958b1/README.md",
+    "sha256": "21fd967098804f33fc84e803fb0e5ab7666d71801f4027cf28a65e7af09c1758"
+  },
+  {
+    "file": "lazy-val-MIT-notice.txt",
+    "url": "https://github.com/develar/lazy-val/blob/b69ad4119f1b19bdab13c61ee2fcc88d46b89071/package.json",
+    "sha256": "4687896e83a5c994c893ec822b1a297a3ca639bcca74f65e535090b2fc1a384f",
+    "kind": "Supplemental notice derived from package metadata and standard MIT text; not an upstream licence-file download"
+  }
+]

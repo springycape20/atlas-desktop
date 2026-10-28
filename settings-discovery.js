@@ -15,6 +15,47 @@
   refresh.type = 'button';
   refresh.className = 'quiet-button';
   section.querySelector('p').after(refresh, status);
+  const dataSection = [...document.querySelectorAll('#settingsDialog .setting-section')].find(
+    (node) => node.querySelector('h3')?.textContent === 'Tools and data',
+  );
+  const logExport = make('button', 'Export redacted diagnostic log');
+  const resetData = make('button', 'Delete local ATLAS data…');
+  const notices = make('button', 'Third-party notices');
+  const dataActions = make('div');
+  dataActions.className = 'workspace-actions';
+  dataSection.append(dataActions);
+  for (const button of [logExport, resetData, notices]) {
+    button.type = 'button';
+    button.className = 'quiet-button';
+    dataActions.append(button);
+  }
+  const dataNote = make(
+    'p',
+    'Review diagnostics before sharing: redaction cannot detect every private detail. Deletion restarts ATLAS and keeps downloaded models and runtimes; project files, exports, Git recovery snapshots, legacy folders and provider histories remain.',
+  );
+  dataNote.className = 'setting-note';
+  dataSection.append(dataNote);
+  notices.onclick = async () => {
+    try {
+      await api.showNotices();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  logExport.onclick = async () => {
+    try {
+      await api.exportDiagnostics();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+  resetData.onclick = async () => {
+    try {
+      await api.resetLocalData();
+    } catch (error) {
+      toast(error.message);
+    }
+  };
   for (const custom of section.querySelectorAll('.add-model')) {
     const details = make('details'),
       summary = make('summary', 'Advanced: custom model ID');
