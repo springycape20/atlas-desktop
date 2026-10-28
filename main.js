@@ -1228,6 +1228,10 @@ function setupIpc() {
     taskPlanService ||= require('./task-plans').createTaskPlans(app.getPath('userData'));
     return taskPlanService.action(request);
   });
+  ipcMain.handle('atlas:task-progress', (event) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    return require('./task-progress').progress(jobSnapshots(), approvals.list());
+  });
   ipcMain.handle('atlas:context-preview', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     if (typeof request.cwd !== 'string' || !path.isAbsolute(request.cwd)) throw Error('Choose a project folder.');
@@ -2031,6 +2035,7 @@ async function createWindow() {
         '/planning-ui.js',
         '/environment-ui.js',
         '/review-center-ui.js',
+        '/progress-ui.js',
         '/appearance.js',
         '/appearance-ui.js',
         '/command-menu.js',

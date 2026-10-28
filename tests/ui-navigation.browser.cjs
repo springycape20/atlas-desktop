@@ -48,6 +48,15 @@ app.whenReady().then(async () => {
     const out = path.join(root, '.handover', 'ui-navigation');
     fs.mkdirSync(out, { recursive: true });
     await win.webContents.executeJavaScript(
+      `atlas.taskProgress=async()=>[{id:'fixture',title:'Implement keyboard search',status:'running',stage:'Waiting for review',elapsedMs:65000,estimate:{lowMs:30000,highMs:90000,samples:8},waiting:['Run project tests?'],stages:4,finishedStages:2,checks:[]}];atlasUi.open('tasks','Progress')`,
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    await win.webContents.executeJavaScript(
+      `if(!atlasUi.hub.textContent.includes('Waiting for your decision')||!atlasUi.hub.textContent.includes('8 historical samples'))throw Error('Progress evidence missing')`,
+    );
+    fs.writeFileSync(path.join(out, 'task-progress.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(`atlasUi.hub.close();new Promise(r=>setTimeout(r,30))`);
+    await win.webContents.executeJavaScript(
       `window.__reviewJobs=atlas.jobs;window.__reviewChanges=atlas.changes;atlas.jobs=async()=>[{id:'review-demo',prompt:'Improve keyboard navigation',status:'completed',cwd:'C:/Projects/Demo',changeId:'fixture',verification:{status:'passed',results:[{command:'npm test',status:'passed',output:'Fixture checks passed'}]}}];atlas.changes=async()=>({files:[{path:'ui-shell.js'}],added:12,removed:3});atlasUi.open('tasks','Review centre')`,
     );
     await new Promise((r) => setTimeout(r, 100));
