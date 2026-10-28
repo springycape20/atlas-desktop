@@ -1,6 +1,16 @@
 # Project tools (next release)
 
-Open **Project tools** in the left navigation. **Context** buttons beside both composers open the same tools for the current chat. These changes are on the development branch and are not part of the published 0.8.3 installer.
+Use **Tasks** for running work, the queue, parallel batches, recovery, reminders and approvals. **Library** contains memories and workflows. **Settings > Models** opens local-model configuration, and **Settings > Diagnostics** opens performance measurements. **Context** beside either composer previews context for the current chat. These changes are on the development branch and are not part of the published 0.8.3 installer.
+
+## Navigation and readability
+
+The main sidebar contains Chat, Colab, Projects, Tasks, Library and Settings. Press **Ctrl+K**, or choose **Search** in the top bar, to find a destination. Search only opens screens; it does not start a provider task. Arrow keys and Enter select a result; Escape closes the menu.
+
+Choose **Settings > Appearance** for Dark, Light or High contrast, text sizes of 100%, 115% or 130%, and Comfortable or Compact spacing. Changes preview immediately. Choose **Save settings** to persist them; closing without saving restores the previous appearance. These preferences stay on this computer.
+
+Drag the divider beside a conversation list to resize it, or focus the divider and use the arrow keys. Home/End choose the smallest/largest width; double-click resets it. Long conversation titles wrap to two lines, with the full title in a tooltip. Narrow windows stack the list above the conversation.
+
+Both composers group Attach, Context and Send together. Chat also has Voice and project/effort Options; Colab has Workflow. Colab's More menu contains Rename, Pin and Export. **Workflow graph** opens a readable stage summary first; choose **Full graph** for the detailed dependency view and zoom controls.
 
 ## Project knowledge and context
 

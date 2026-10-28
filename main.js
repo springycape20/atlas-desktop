@@ -290,6 +290,7 @@ const colabJobs = require('./colab-jobs').createColabJobs({
 });
 function defaultSettings() {
   return {
+    ...require('./appearance').defaults,
     routeMode: 'auto',
     localModelEnabled: false,
     localModelBaseUrl: 'http://127.0.0.1:11434/v1',
@@ -332,6 +333,7 @@ function sanitizeSettings(value) {
     ].slice(0, 30);
   const cleanModel = (input) => (typeof input === 'string' && modelIdPattern.test(input) ? input : '');
   return {
+    ...require('./appearance').clean(value),
     routeMode: ['auto', 'codex', 'claude'].includes(value?.routeMode) ? value.routeMode : defaults.routeMode,
     localModelEnabled: value?.localModelEnabled === true,
     localModelBaseUrl,
@@ -2001,6 +2003,9 @@ async function createWindow() {
         '/parallel-ui.js',
         '/local-model-ui.js',
         '/ui-shell.js',
+        '/appearance.js',
+        '/appearance-ui.js',
+        '/command-menu.js',
         '/ui-shell.css',
         '/code-syntax.js',
         '/syntax-worker.js',

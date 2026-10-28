@@ -719,6 +719,7 @@ $('#settingsSave').addEventListener('click', async () => {
   }
   const next = {
     ...settings,
+    ...window.atlasAppearanceUi?.read(),
     speechDetail: $('#speechDetail').value,
     routeMode: $('#routeMode').value,
     timeoutSeconds: Number($('#requestTimeout').value),
@@ -745,6 +746,7 @@ $('#settingsSave').addEventListener('click', async () => {
   $('#settingsSave').disabled = true;
   try {
     settings = await window.atlas.saveSettings(next);
+    window.atlasAppearanceUi?.saved(settings);
     hydrateSettings(settings);
     if (settings.wakeWordEnabled) startWakeListener();
     else stopWakeListener();

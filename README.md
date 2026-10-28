@@ -50,6 +50,8 @@ Also in Colab:
 
 The source branch adds local project indexing, context controls, runtime measurements, a task recovery view, reusable Colab workflows, parallel batches with combined integration checks, and optional local-model text chat. These features are intended for the next release; the published 0.8.3 installer does not include them. See the [project tools guide](docs/PROJECT-TOOLS.md) for usage and limits.
 
+The development UI also groups tools under Tasks, Library and Settings, adds Ctrl+K navigation search, resizable conversation lists and readable task summaries, and offers theme, text-size and spacing preferences in Settings > Appearance.
+
 ## Install
 
 1. Download **ATLAS-Setup-*version*.exe** from the [latest release](https://github.com/springycape20/atlas-desktop/releases/latest) (about 440 MB, Windows 10/11 x64) and run it.

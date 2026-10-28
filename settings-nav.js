@@ -10,6 +10,7 @@
   const ORDER = [
     'Provider accounts',
     'Models',
+    'Appearance',
     'Assistant',
     'Voice',
     'Microphone',
@@ -22,6 +23,7 @@
   const HINTS = {
     'Provider accounts': 'Sign-in and connection checks',
     Models: 'Codex and Claude models',
+    Appearance: 'Theme, text size and spacing',
     Assistant: 'Routing, timeouts and replies',
     Voice: 'Speech engine and voice',
     Microphone: 'Input, wake word and listening',

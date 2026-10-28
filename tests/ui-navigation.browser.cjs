@@ -9,7 +9,7 @@ app.setPath('userData', path.join(temp, 'data'));
 protocol.registerSchemesAsPrivileged([
   { scheme: 'atlas', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
-const mock = `window.atlas=new Proxy({getSettings:async()=>({speakResponses:false,wakeWordEnabled:false}),home:async()=>'C:/Projects/Demo',latestConversation:async()=>null,jobs:async()=>[],providerAuthStatus:async()=>({}),discoverModels:async()=>({}),chatMetadata:async()=>({}),taskQueue:async()=>({items:[],paused:true,concurrency:1}),workflows:async()=>[],saveSettings:async value=>value},{get:(t,k)=>t[k]||(String(k).startsWith('on')?()=>()=>{}:async()=>[])});`;
+const mock = `window.__uiErrors=[];window.addEventListener('error',e=>__uiErrors.push(e.message));window.__saved={speakResponses:false,wakeWordEnabled:false};window.atlas=new Proxy({getSettings:async()=>structuredClone(__saved),home:async()=>'C:/Projects/Demo',latestConversation:async()=>null,jobs:async()=>[],providerAuthStatus:async()=>({}),discoverModels:async()=>({}),chatMetadata:async()=>({}),taskQueue:async()=>({items:[],paused:true,concurrency:1}),workflows:async()=>[],saveSettings:async value=>(__saved=structuredClone(value))},{get:(t,k)=>t[k]||(String(k).startsWith('on')?()=>()=>{}:async()=>[])});`;
 const timeout = setTimeout(() => {
   console.error('Navigation UI timed out');
   app.exit(1);
@@ -50,8 +50,80 @@ app.whenReady().then(async () => {
     await win.webContents.executeJavaScript(`atlasUi.open('tasks','Parallel')`);
     await new Promise((r) => setTimeout(r, 200));
     fs.writeFileSync(path.join(out, 'tasks.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(`(async()=>{
+      const wait=()=>new Promise(r=>setTimeout(r,40));
+      atlasUi.hub.close();await wait();
+      document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));
+      if(!atlasCommandMenu.dialog.open)throw Error('Ctrl+K did not open search');
+      const search=atlasCommandMenu.dialog.querySelector('input');
+      search.value='appearance';search.dispatchEvent(new Event('input'));
+      if(atlasCommandMenu.dialog.querySelectorAll('.command-results button').length!==1)throw Error('Command filtering failed');
+      search.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await wait();
+      if(!document.querySelector('#settingsDialog').open||atlasSettings.current()!=='Appearance')throw Error('Search did not navigate');
+      const choose=(id,value)=>{const field=document.getElementById(id);field.value=value;field.dispatchEvent(new Event('change',{bubbles:true}));};
+      choose('uiTheme','light');choose('uiTextScale','1.3');
+      if(document.documentElement.dataset.uiTheme!=='light')throw Error('Theme preview failed');
+      atlasCommandMenu.open();search.value='models';search.dispatchEvent(new Event('input'));search.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await wait();
+      if(document.getElementById('uiTheme').value!=='light')throw Error('Navigation lost unsaved changes');
+      document.querySelector('#settingsDialog').close();await wait();
+      if(document.documentElement.dataset.uiTheme!=='dark')throw Error('Discarded preview persisted');
+      await atlasUi.settings('Appearance');await wait();choose('uiTheme','contrast');choose('uiTextScale','1.15');choose('uiDensity','compact');
+      document.getElementById('settingsSave').click();await wait();
+      if(__saved.uiTheme!=='contrast'||__saved.uiTextScale!==1.15)throw Error('Appearance not included in save');
+      await atlasUi.settings('Appearance');await wait();
+      if(document.getElementById('uiTheme').value!=='contrast')throw Error('Saved appearance lost on reopen');
+      if(__uiErrors.length)throw Error(__uiErrors.join('; '));
+    })()`);
+    for (const theme of ['light', 'contrast', 'dark']) {
+      await win.webContents.executeJavaScript(
+        `document.getElementById('uiTheme').value='${theme}';document.getElementById('uiTextScale').value='1.3';document.getElementById('uiTextScale').dispatchEvent(new Event('change',{bubbles:true}));`,
+      );
+      for (const width of [1280, 768, 640]) {
+        win.setSize(width, 800);
+        await new Promise((r) => setTimeout(r, 80));
+        const overflow = await win.webContents.executeJavaScript(
+          `document.documentElement.scrollWidth>innerWidth||document.getElementById('settingsDialog').scrollWidth>document.getElementById('settingsDialog').clientWidth+2`,
+        );
+        if (overflow) throw Error('Appearance overflows: ' + theme + ' ' + width);
+        fs.writeFileSync(
+          path.join(out, 'appearance-' + theme + '-' + width + '.png'),
+          (await win.webContents.capturePage()).toPNG(),
+        );
+      }
+    }
+    win.setSize(1280, 800);
+    await win.webContents.executeJavaScript(
+      `document.getElementById('uiTheme').value='light';document.getElementById('uiTheme').dispatchEvent(new Event('change',{bubbles:true}));`,
+    );
+    const inspection = await win.webContents.executeJavaScript(`(()=>{
+      const live=document.getElementById('settingsDialog'), copy=live.cloneNode(true);
+      const h2=copy.querySelector('h2'), h1=document.createElement('h1');h1.textContent=h2.textContent;h1.style.cssText='font-size:23px;margin:0';h2.replaceWith(h1);
+      [...live.querySelectorAll('select')].forEach((field,index)=>{[...copy.querySelectorAll('select')[index].options].forEach(option=>option.toggleAttribute('selected',option.value===field.value));});
+      copy.querySelectorAll('.setting-section[hidden]').forEach(section=>section.remove());
+      const styles=[...document.querySelectorAll('style')].map(item=>item.outerHTML).join('');
+      return '<!doctype html><html data-ui-theme="light" data-ui-density="comfortable" style="--atlas-text-scale:1.3"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>ATLAS Appearance demo</title>'+styles+'<style>'+${JSON.stringify(fs.readFileSync(path.join(root, 'ui-shell.css'), 'utf8'))}+'</style><style>body{margin:0;padding:16px}#settingsDialog{display:flex;position:relative;inset:auto;margin:16px auto;max-width:100%;height:calc(100vh - 64px);box-sizing:border-box}</style></head><body class="atlas-ui"><main>'+copy.outerHTML.replace('<dialog','<section').replace('</dialog>','</section>')+'</main></body></html>';
+    })()`);
+    fs.writeFileSync(path.join(out, 'inspect.html'), inspection);
+    for (const theme of ['light', 'contrast']) {
+      await win.webContents.executeJavaScript(
+        `atlasAppearanceUi.saved({uiTheme:'${theme}',uiTextScale:1.3});document.getElementById('settingsDialog').close();`,
+      );
+      await new Promise((r) => setTimeout(r, 80));
+      fs.writeFileSync(path.join(out, 'chat-' + theme + '.png'), (await win.webContents.capturePage()).toPNG());
+      await win.webContents.executeJavaScript(`atlasUi.open('tasks','Parallel')`);
+      await new Promise((r) => setTimeout(r, 80));
+      fs.writeFileSync(path.join(out, 'tasks-' + theme + '.png'), (await win.webContents.capturePage()).toPNG());
+      await win.webContents.executeJavaScript(`atlasUi.hub.close()`);
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    win.setSize(1280, 800);
+    await win.webContents.executeJavaScript(
+      `document.getElementById('settingsDialog').close();atlasCommandMenu.open();`,
+    );
+    await new Promise((r) => setTimeout(r, 80));
+    fs.writeFileSync(path.join(out, 'search.png'), (await win.webContents.capturePage()).toPNG());
     console.log(
-      'PASS: Six destinations, embedded Queue/Workflows/Recovery, keyboard resizing and form-linked composers.',
+      'PASS: Navigation, embedded tools, keyboard resizing, composers, Ctrl+K search, saved/discarded appearance and three themes at three widths.',
     );
     clearTimeout(timeout);
     app.exit(0);

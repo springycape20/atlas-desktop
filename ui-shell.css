@@ -6,11 +6,284 @@
   --atlas-focus: #a6e1e9;
   color-scheme: dark;
 }
+.command-menu {
+  width: min(620px, calc(100vw - 32px));
+  max-height: 80vh;
+  padding: 20px;
+  border: 1px solid #47616d;
+  border-radius: 10px;
+  background: #0c171e;
+  color: #d1e1e6;
+}
+.command-menu::backdrop {
+  background: #000a;
+}
+.command-menu > header {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.command-menu h2 {
+  flex: 1;
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+.command-menu input {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  padding: 12px;
+}
+.command-menu p {
+  font-size: 13px;
+  color: #a8bac3;
+}
+.command-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 48vh;
+  overflow: auto;
+}
+.command-results button {
+  text-align: left;
+  flex-shrink: 0;
+  padding: 10px 12px;
+}
+.command-results button[aria-current='true'] {
+  background: #263940;
+  color: white;
+}
+.command-trigger {
+  order: -1;
+  white-space: nowrap;
+}
+:root body.atlas-ui :is(.eyebrow, .settings-kicker, #settingsSaved) {
+  font-size: calc(12px * var(--atlas-text-scale));
+  letter-spacing: normal;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(.eyebrow, .settings-kicker, #settingsSaved) {
+  color: var(--atlas-muted) !important;
+}
+:root body.atlas-ui :is(input, select, textarea, .shell-hub, .command-menu, .shell-composer-tools button) {
+  font-size: calc(14px * var(--atlas-text-scale));
+}
+:root body.atlas-ui :is(.shell-hub h1, .command-menu h2) {
+  font-size: calc(22px * var(--atlas-text-scale));
+}
+:root body.atlas-ui .colab-chat-header {
+  flex-wrap: wrap;
+}
+:root body.atlas-ui .shell-composer-tools {
+  flex-wrap: wrap;
+}
+:root body.atlas-ui :is(.settings-body, .shell-hub-content, .colab-chat-main, .core, .command-results) {
+  min-width: 0;
+}
+:root[data-ui-density='compact'] body.atlas-ui :is(.quiet-button, .primary-button, .nav-item, .shell-hub button) {
+  min-height: 32px;
+  padding-block: 5px;
+}
+:root[data-ui-density='compact'] body.atlas-ui :is(.setting-section, .graph-stage-summary article) {
+  padding-block: 12px;
+}
+:root[data-ui-theme='light'] {
+  color-scheme: light;
+  --atlas-ground: #f1f3f4;
+  --atlas-surface: #ffffff;
+  --atlas-raised: #e8edf0;
+  --atlas-ink: #17232b;
+  --atlas-muted: #485b66;
+  --atlas-line: #82939d;
+  --atlas-focus: #005c72;
+  --atlas-selected: #dce5e9;
+}
+:root[data-ui-theme='contrast'] {
+  color-scheme: dark;
+  --atlas-ground: #000;
+  --atlas-surface: #000;
+  --atlas-raised: #141414;
+  --atlas-ink: #fff;
+  --atlas-muted: #e5e5e5;
+  --atlas-line: #bdbdbd;
+  --atlas-focus: #ffe870;
+  --atlas-selected: #303030;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui {
+  background: var(--atlas-ground) !important;
+  color: var(--atlas-ink) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(
+    .app,
+    .layout,
+    .workspace-nav,
+    .assistant-workspace,
+    .colab-workspace,
+    .assistant-chats,
+    .colab-chats,
+    .core,
+    .colab-chat-main,
+    .composer,
+    .colab-composer,
+    .shell-chat-resize,
+    dialog,
+    .settings-layout,
+    .settings-nav,
+    .settings-body,
+    .settings-footer,
+    .settings-header,
+    .workspace-dialog-body,
+    .power-body,
+    .power-footer,
+    .shell-hub-content,
+    .colab-graph-body,
+    .colab-chat-header,
+    .colab-config,
+    .colab-transcript,
+    .assistant-transcript,
+    .colab-run-details,
+    .colab-dispute,
+    .colab-approval,
+    .shell-more,
+    .graph-stage-summary article
+  ) {
+  background: var(--atlas-surface) !important;
+  color: var(--atlas-ink) !important;
+  border-color: var(--atlas-line) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(
+    button,
+    input,
+    select,
+    textarea,
+    .assistant-chat-item,
+    .colab-chat-item,
+    .attachment-project,
+    .assistant-turn,
+    .colab-message,
+    .power-card,
+    .workspace-card,
+    pre,
+    code
+  ) {
+  background: var(--atlas-raised) !important;
+  color: var(--atlas-ink) !important;
+  border-color: var(--atlas-line) !important;
+  box-shadow: none !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(
+    p,
+    small,
+    label,
+    summary,
+    h1,
+    h2,
+    h3,
+    h4,
+    .answer,
+    #output,
+    .provider-chip,
+    .session-chip,
+    .setting-note,
+    .power-status,
+    .power-footer,
+    .workspace-dialog-subtitle,
+    .colab-chat-subtitle,
+    .colab-compose-footer,
+    .colab-work-note,
+    .voice-hint,
+    .attachment-project-label,
+    .settings-nav-item small,
+    .settings-nav-item[aria-current='true'] small
+  ) {
+  color: var(--atlas-ink) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(time, .assistant-chat-item small, .colab-chat-item small, .settings-nav-item small, .setting-note) {
+  color: var(--atlas-muted) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(
+    button.active,
+    button[aria-current='true'],
+    button[aria-selected='true'],
+    button[aria-pressed='true'],
+    .assistant-chat-item.active,
+    .colab-chat-item.active
+  ) {
+  background: var(--atlas-selected) !important;
+  color: var(--atlas-ink) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui :is(a, .live) {
+  color: var(--atlas-focus) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui ::placeholder {
+  color: var(--atlas-muted) !important;
+  opacity: 1;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui button:disabled {
+  opacity: 0.6;
+}
+:root[data-ui-theme='light'] body.atlas-ui .sigil img {
+  filter: brightness(0.2);
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui .grid {
+  display: none;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui .colab-graph-body svg text {
+  fill: var(--atlas-ink);
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui .colab-graph-body svg rect {
+  fill: var(--atlas-raised);
+  stroke: var(--atlas-line);
+}
+@media (max-width: 750px) {
+  .command-trigger {
+    font-size: 12px !important;
+    padding-inline: 8px;
+  }
+  :root body.atlas-ui .shell-send {
+    margin-left: 0;
+  }
+}
 .power-dialog nav[hidden] {
   display: none;
 }
 body.atlas-ui {
   font-family: 'Segoe UI', system-ui, sans-serif;
+}
+:root body.atlas-ui :is(.auth-state, .auth-row small, #providerHealth small) {
+  font-size: calc(12px * var(--atlas-text-scale));
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui :is(.toast, .settings-dialog) {
+  background: var(--atlas-surface) !important;
+  color: var(--atlas-ink) !important;
+  border-color: var(--atlas-line) !important;
+  box-shadow: none !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(.nav-item[aria-current='page'], .nav-item.active) {
+  background: var(--atlas-selected) !important;
+  color: var(--atlas-ink) !important;
+  opacity: 1 !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(#coreEngine, #sub, #workingFolder, .auth-state, .auth-row small) {
+  color: var(--atlas-muted) !important;
 }
 :root
   body.atlas-ui
