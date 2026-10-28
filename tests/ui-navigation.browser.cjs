@@ -47,6 +47,22 @@ app.whenReady().then(async () => {
     );
     const out = path.join(root, '.handover', 'ui-navigation');
     fs.mkdirSync(out, { recursive: true });
+    await win.webContents.executeJavaScript(`(async()=>{
+      if(document.querySelector('.provider-usage-dock'))throw Error('Old overlapping dock remains');
+      atlas.providerUsage=async()=>{throw Error('Subscription usage must not be polled');};
+      const originalJobs=atlas.jobs, originalHealth=atlas.providerHealth;
+      atlas.jobs=async()=>[{provider:'codex',status:'running'},{provider:'claude',status:'completed'},{collaboration:true,status:'completed'}];
+      atlas.providerHealth=async()=>[{provider:'codex',available:true},{provider:'claude',available:false,retryAt:Date.now()+60000,estimated:true}];
+      document.getElementById('providerActivityOpen').click();await new Promise(r=>setTimeout(r,100));
+      const rows=[...document.querySelectorAll('.provider-activity-row')];
+      if(rows.length!==3||!rows[0].textContent.includes('1 running')||!rows[1].textContent.includes('1 completed')||!rows[2].textContent.includes('1 retained tasks'))throw Error('Provider activity counts incorrect');
+      if(!rows[0].textContent.includes('allowance is unknown')||!rows[1].textContent.includes('estimated retry'))throw Error('Availability labels misleading');
+      atlas.jobs=originalJobs;atlas.providerHealth=originalHealth;
+    })()`);
+    fs.writeFileSync(path.join(out, 'provider-activity.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `document.getElementById('settingsDialog').close();new Promise(r=>setTimeout(r,30))`,
+    );
     await win.webContents.executeJavaScript(`atlasUi.open('tasks','Parallel')`);
     await new Promise((r) => setTimeout(r, 200));
     fs.writeFileSync(path.join(out, 'tasks.png'), (await win.webContents.capturePage()).toPNG());

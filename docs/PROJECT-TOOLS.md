@@ -6,6 +6,8 @@ Use **Tasks** for running work, the queue, parallel batches, recovery, reminders
 
 The main sidebar contains Chat, Colab, Projects, Tasks, Library and Settings. Press **Ctrl+K**, or choose **Search** in the top bar, to find a destination. Search only opens screens; it does not start a provider task. Arrow keys and Enter select a result; Escape closes the menu.
 
+**Provider activity** in the top bar or Settings shows retained local task counts for Codex, Claude and shared Colab tasks, plus limit cooldowns recorded by ATLAS. Refresh reads local state. These figures do not measure subscription usage, token totals, spending or remaining account allowance, and exclude activity outside ATLAS. Links open each provider's account usage page for those details. The previous sidebar quota rings and automatic quota polling have been removed.
+
 Choose **Settings > Appearance** for Dark, Light or High contrast, text sizes of 100%, 115% or 130%, and Comfortable or Compact spacing. Changes preview immediately. Choose **Save settings** to persist them; closing without saving restores the previous appearance. These preferences stay on this computer.
 
 Drag the divider beside a conversation list to resize it, or focus the divider and use the arrow keys. Home/End choose the smallest/largest width; double-click resets it. Long conversation titles wrap to two lines, with the full title in a tooltip. Narrow windows stack the list above the conversation.

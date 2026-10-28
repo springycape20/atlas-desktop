@@ -28,9 +28,16 @@
       () => window.atlasUi.open('tasks', name),
     ]),
     ...['Memories', 'Workflows'].map((name) => ['Library · ' + name, () => window.atlasUi.open('library', name)]),
-    ...['Provider accounts', 'Models', 'Appearance', 'Permissions', 'Voice', 'App updates', 'Diagnostics'].map(
-      (name) => ['Settings · ' + name, () => window.atlasUi.settings(name)],
-    ),
+    ...[
+      'Provider accounts',
+      'Models',
+      'Appearance',
+      'Provider activity',
+      'Permissions',
+      'Voice',
+      'App updates',
+      'Diagnostics',
+    ].map((name) => ['Settings · ' + name, () => window.atlasUi.settings(name)]),
   ];
   let active = 0,
     origin;

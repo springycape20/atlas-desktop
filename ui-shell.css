@@ -261,6 +261,27 @@
 .power-dialog nav[hidden] {
   display: none;
 }
+.provider-activity-row {
+  padding: 12px 0 18px;
+  border-bottom: 1px solid #82939d;
+}
+.provider-activity-row h4 {
+  font-size: calc(16px * var(--atlas-text-scale));
+  margin: 8px 0;
+}
+.provider-activity-row p {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 750px) {
+  .topright {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  #providerActivityOpen {
+    font-size: 12px;
+  }
+}
 body.atlas-ui {
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
