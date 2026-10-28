@@ -52,6 +52,8 @@ The source branch adds local project indexing, context controls, runtime measure
 
 The development UI also groups tools under Tasks, Library and Settings, adds Ctrl+K navigation search, resizable conversation lists and readable task summaries, and offers theme, text-size and spacing preferences in Settings > Appearance.
 
+Further development tools add editable task plans with approval, opt-in fast/strong model tiers, project-scoped memory, local hardware capacity checks, project environment recipes, a unified review centre, live progress estimates and search across local work. See the [capability guide](docs/PROJECT-TOOLS.md) for locations and limits.
+
 ## Install
 
 1. Download **ATLAS-Setup-*version*.exe** from the [latest release](https://github.com/springycape20/atlas-desktop/releases/latest) (about 440 MB, Windows 10/11 x64) and run it.

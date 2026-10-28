@@ -112,7 +112,7 @@ function createService({ directory, launchApp, volume, notify, now = () => Date.
     const terms = new Set((prompt + ' ' + cwd).toLowerCase().match(/[a-z0-9]{3,}/g) || []);
     return state.memories
       .filter((m) => !m.projectFolder || sameProject(m.projectFolder, cwd))
-      .map((m) => ({ m, score: m.category === 'preference' ? 2 : 0, ...{} }))
+      .map((m) => ({ m, score: m.projectFolder ? 3 : m.category === 'preference' ? 2 : 0 }))
       .map((x) => ({ ...x, score: x.score + [...terms].filter((t) => x.m.text.toLowerCase().includes(t)).length }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)

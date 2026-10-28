@@ -19,6 +19,12 @@
   dialog.append(header, search, status, results);
   document.body.append(dialog);
   const actions = [
+    ['Search all work', () => window.atlasUi.open('library', 'Search all work')],
+    ...['Plan a task', 'Review centre', 'Progress'].map((name) => [
+      'Tasks · ' + name,
+      () => window.atlasUi.open('tasks', name),
+    ]),
+    ['Library · Project memory', () => window.atlasUi.open('library', 'Project memory')],
     ['Chat', () => document.querySelector('[data-chat-workspace="assistant"]').click()],
     ['Colab', () => document.querySelector('[data-chat-workspace="colab"]').click()],
     ['Projects', () => window.atlasWorkspace.open.projects()],

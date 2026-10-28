@@ -265,6 +265,17 @@
   padding: 12px 0 18px;
   border-bottom: 1px solid #82939d;
 }
+.shell-composer-tools select {
+  min-height: 36px;
+  max-width: 200px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #47616d;
+  border-radius: 6px;
+  background: #142730;
+  color: #d1e1e6;
+  font: inherit;
+}
 .provider-activity-row h4 {
   font-size: calc(16px * var(--atlas-text-scale));
   margin: 8px 0;

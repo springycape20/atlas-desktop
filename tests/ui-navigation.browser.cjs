@@ -47,6 +47,19 @@ app.whenReady().then(async () => {
     );
     const out = path.join(root, '.handover', 'ui-navigation');
     fs.mkdirSync(out, { recursive: true });
+    await win.webContents.executeJavaScript(`(async()=>{
+      window.__searchOriginals={searchWork:atlas.searchWork,memory:atlas.memory,historyList:atlas.historyList,projectKnowledge:atlas.projectKnowledge};window.__fileSearchCalls=0;
+      atlas.searchWork=async()=>[{kind:'task',title:'Cobalt renderer fix',text:'Task result',jobId:'fixture'}];atlas.memory=async()=>[{id:'fixture',category:'decision',text:'Keep cobalt rendering local'}];atlas.historyList=async()=>[];atlas.projectKnowledge=async()=>{__fileSearchCalls++;return {results:[{path:'cobalt.js',line:4,excerpt:'const cobalt = true;'}]};};
+      await atlasUi.open('library','Search all work');const search=atlasUi.hub.querySelector('input');search.value='cobalt';const run=[...atlasUi.hub.querySelectorAll('button')].find(button=>button.textContent==='Search local work');run.click();await new Promise(r=>setTimeout(r,100));if(__fileSearchCalls)throw Error('File search must be opt-in');atlasUi.hub.querySelector('input[type=checkbox]').checked=true;run.click();await new Promise(r=>setTimeout(r,100));if(!atlasUi.hub.textContent.includes('cobalt.js:4')||!atlasUi.hub.textContent.includes('3 results shown'))throw Error('Unified search sources missing');
+    })()`);
+    fs.writeFileSync(path.join(out, 'unified-search.png'), (await win.webContents.capturePage()).toPNG());
+    const capabilityInspection = await win.webContents.executeJavaScript(
+      `(()=>{const copy=atlasUi.hub.cloneNode(true);const styles=[...document.querySelectorAll('style')].map(item=>item.outerHTML).join('');return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>ATLAS local work search</title>'+styles+'<style>'+${JSON.stringify(fs.readFileSync(path.join(root, 'ui-shell.css'), 'utf8'))}+'</style><style>body{margin:0;padding:16px;background:#0c171e}.shell-hub{position:relative;inset:auto;margin:0 auto;max-width:100%;height:calc(100vh - 32px);box-sizing:border-box}</style></head><body class="atlas-ui"><main>'+copy.outerHTML.replace('<dialog','<section').replace('</dialog>','</section>')+'</main></body></html>';})()`,
+    );
+    fs.writeFileSync(path.join(out, 'capabilities-inspect.html'), capabilityInspection);
+    await win.webContents.executeJavaScript(
+      `Object.assign(atlas,__searchOriginals);atlasUi.hub.close();new Promise(r=>setTimeout(r,30))`,
+    );
     await win.webContents.executeJavaScript(
       `atlas.taskProgress=async()=>[{id:'fixture',title:'Implement keyboard search',status:'running',stage:'Waiting for review',elapsedMs:65000,estimate:{lowMs:30000,highMs:90000,samples:8},waiting:['Run project tests?'],stages:4,finishedStages:2,checks:[]}];atlasUi.open('tasks','Progress')`,
     );

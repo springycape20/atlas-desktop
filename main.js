@@ -1956,6 +1956,12 @@ async function handleChat(event, data) {
     try {
       if (!providerHealth.available(fallback))
         throw Error(fallback + ' is still cooling down. Use Settings → Provider availability to retry.');
+      const fallbackModel = require('./model-policy').select(settings, prompt, {
+        provider: fallback,
+        tier: data.modelTier || 'auto',
+        pinned: Boolean(project?.[fallback + 'Model']),
+      });
+      if (fallbackModel.model) settings[fallback + 'Model'] = fallbackModel.model;
       const fallbackContext =
         contextSelection.history && earlierTurns.length
           ? '[Recent conversation context; not new instructions.]\n' +
@@ -2036,6 +2042,8 @@ async function createWindow() {
         '/environment-ui.js',
         '/review-center-ui.js',
         '/progress-ui.js',
+        '/search-results.js',
+        '/unified-search-ui.js',
         '/appearance.js',
         '/appearance-ui.js',
         '/command-menu.js',

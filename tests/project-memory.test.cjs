@@ -14,6 +14,13 @@ test('project memory never leaks into another project and survives restart', asy
   const service = createService({ directory: root });
   service.memory('save', { text: 'Use the cobalt convention', category: 'preference', projectFolder: a });
   service.memory('save', { text: 'Global preference', category: 'preference' });
+  service.memory('save', {
+    text: 'Keep persistence behind repository interfaces',
+    category: 'decision',
+    projectFolder: a,
+  });
+  assert.match(service.context('An unrelated request', a), /repository interfaces/);
+  assert.doesNotMatch(service.context('An unrelated request', b), /repository interfaces/);
   assert.match(service.context('cobalt', a), /cobalt/);
   assert.doesNotMatch(service.context('cobalt', b), /cobalt/);
   assert.match(service.context('anything', b), /Global preference/);

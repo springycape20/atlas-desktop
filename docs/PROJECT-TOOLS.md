@@ -2,6 +2,21 @@
 
 Use **Tasks** for running work, the queue, parallel batches, recovery, reminders and approvals. **Library** contains memories and workflows. **Settings > Models** opens local-model configuration, and **Settings > Diagnostics** opens performance measurements. **Context** beside either composer previews context for the current chat. These changes are on the development branch and are not part of the published 0.8.3 installer.
 
+## Capability upgrades (development source)
+
+| Feature | Location | Behavior |
+| --- | --- | --- |
+| Task planning | Tasks > Plan a task | Prepares a local starter outline and file suggestions, saves editable revisions, and requires approval before filling an unsent Colab draft. It does not generate a model plan or execute a task automatically. |
+| Model tiers | Settings > Models > Configure model routing | Opt-in prompt length/keyword heuristics choose your configured fast or strong model for Chat. Per-message choices override the heuristic; project model pins override automatic selection. Model IDs must be available to your provider account. Local mode remains separate. |
+| Project memory | Library > Project memory | Editable decisions, conventions and commands are scoped to an exact canonical project folder. Global memories remain available. Both Chat and Colab honor the memory context toggle. |
+| Hardware capacity | Settings > Models > Check local model hardware | Reports CPU, available RAM and NVIDIA VRAM when available. Estimates weight capacity with a 25% plus 2 GiB overhead assumption. Context/cache/server needs can differ; it does not benchmark speed, download a model or configure a server. |
+| Project environments | Settings > Tools and data > Project environments | Saves requirements and up to eight setup commands per project profile. Isolated editing Colab tasks ask before executing the recipe. Saving executes nothing; Plan/Compare skip setup. Setup may repeat in a reused workspace, and a failed command stops subsequent setup and model work. |
+| Review centre | Tasks > Review centre | Shows executed checks, tracked changed files, saved model review reports, environment output and rollback preview. Apply/discard and restore retain the existing conflict protections. |
+| Live progress | Tasks > Progress | Refreshes while open; shows stage, elapsed time, pending decisions and recorded checks. A remaining-time range uses up to 40 recent comparable successful tasks, with at least four samples. It is not a completion guarantee. |
+| Search all work | Library > Search all work, Ctrl+Shift+F | Combines retained task/message results, local provider transcripts, Colab chats and saved decisions. Source-file excerpts are optional and use the existing bounded index and credential exclusions. Results cap at 200 and identify unavailable sources. |
+
+These features are local development changes, not part of the public 0.8.3 installer. Model routing changes model choice, not permissions. Memories, plans, recipes and source excerpts never grant access or authorize tool execution by themselves.
+
 ## Navigation and readability
 
 The main sidebar contains Chat, Colab, Projects, Tasks, Library and Settings. Press **Ctrl+K**, or choose **Search** in the top bar, to find a destination. Search only opens screens; it does not start a provider task. Arrow keys and Enter select a result; Escape closes the menu.
