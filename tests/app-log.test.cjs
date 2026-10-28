@@ -56,11 +56,14 @@ test('diagnostic logs redact labelled credentials, bearer tokens and private key
   const file = path.join(await folder(t), 'atlas.log');
   const log = createAppLog(file);
   for (const message of [
+    { token: 'private token with both "double" and \'single\' quotes' },
     'Authorization: Bearer test-access-value',
     'Authorization: Basic example-basic-value',
     'Proxy-Authorization: Digest example-digest-value',
+    'Authorization: Token example-other-scheme-value',
     'api_key=example-key-value',
     JSON.stringify({ accessToken: 'example-oauth-value', password: 'example-password-value' }),
+    JSON.stringify({ token: 'example-token-value', authToken: 'example-auth-token-value' }),
     JSON.stringify({ password: 'private phrase with spaces and "quotes"' }),
     '-----BEGIN PRIVATE KEY-----\nexample-private-value\n-----END PRIVATE KEY-----',
   ])
@@ -70,14 +73,18 @@ test('diagnostic logs redact labelled credentials, bearer tokens and private key
     'test-access-value',
     'example-basic-value',
     'example-digest-value',
+    'example-other-scheme-value',
     'example-key-value',
     'example-oauth-value',
+    'example-token-value',
+    'example-auth-token-value',
     'example-password-value',
     'example-private-value',
   ])
     assert(!text.includes(secret), secret);
   assert.match(text, /\[REDACTED\]/);
   assert(!text.includes('private phrase') && !text.includes('spaces and'));
+  assert(!text.includes('private token') && !text.includes('double') && !text.includes('single'));
 });
 
 test('malformed quoted credentials cannot stall synchronous diagnostic redaction', () => {
