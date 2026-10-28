@@ -1116,7 +1116,7 @@ function setupIpc() {
     },
     run: async (row) => {
       const event = { sender: mainWindow.webContents, senderFrame: { url: mainWindow.webContents.getURL() } };
-      if (row.provider === 'colab') return colabJobs.runQueued(event, row);
+      if (['colab', 'integration'].includes(row.provider)) return colabJobs.runQueued(event, row);
       const id = randomUUID();
       await startAssistant(event, { requestId: id, prompt: row.prompt, cwd: row.cwd, profileId: row.profileId });
       return { jobId: id, checksFailed: activeJobs.get(id).verification?.status === 'failed' };
@@ -1952,6 +1952,7 @@ async function createWindow() {
         '/power-tools-ui.js',
         '/recovery-ui.js',
         '/workflow-ui.js',
+        '/parallel-ui.js',
         '/code-syntax.js',
         '/syntax-worker.js',
         '/syntax-highlight.js',

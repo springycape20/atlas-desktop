@@ -40,6 +40,13 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
     const row = state.items[index],
       limit = state.pauseBetween ? 1 : state.concurrency || 1,
       others = [...running].map((id) => state.items.find((r) => r.id === id));
+    if (
+      row.dependsOn?.length &&
+      !row.dependsOn.every((id) =>
+        state.items.some((item) => item.id === id && item.status === 'completed' && item.result?.workspaceId),
+      )
+    )
+      return null;
     if (running.size >= limit) return null;
     if (others.some((r) => r?.provider !== 'colab')) return null;
     if (row.provider !== 'colab' && running.size) return null;
@@ -50,6 +57,8 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
     return row;
   }
   function start(row) {
+    if (row.dependsOn?.length)
+      row.sourceWorkspaces = row.dependsOn.map((id) => state.items.find((item) => item.id === id).result.workspaceId);
     running.add(row.id);
     row.status = 'running';
     row.startedAt = Date.now();
@@ -101,7 +110,17 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
     const work = lock.then(async () => {
       await ready();
       const row = state.items.find((r) => r.id === request.id);
-      if (request.action === 'add') {
+      if (request.action === 'add-batch') {
+        if (typeof request.cwd !== 'string' || !path.isAbsolute(request.cwd)) throw Error('Choose a project folder.');
+        const cwd = await fs.realpath(request.cwd);
+        if (!(await fs.stat(cwd)).isDirectory()) throw Error('Choose a project folder.');
+        const batch = require('./parallel-batches').batchItems(request, cwd);
+        if (state.items.length + batch.length > 100) throw Error('Remove completed tasks before adding this batch.');
+        state.items.push(...batch);
+        state.paused = true;
+        state.pauseBetween = false;
+        state.concurrency = [1, 2, 3].includes(request.concurrency) ? request.concurrency : 2;
+      } else if (request.action === 'add') {
         const p = request.task || {};
         if (
           typeof p.prompt !== 'string' ||
@@ -137,12 +156,18 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
         if (!row || row.status !== 'queued') throw Error('Only waiting tasks can change when they start.');
         row.waitForPrevious = request.wait === true;
       } else if (request.action === 'move') {
+        if (row?.batchId) throw Error('Batch tasks keep their dependency order.');
         if (!row || row.status !== 'queued') throw Error('Only waiting tasks can be reordered.');
         const index = state.items.indexOf(row),
           next = index + (request.direction === 'up' ? -1 : 1);
         if (next >= 0 && next < state.items.length && state.items[next].status === 'queued')
           [state.items[index], state.items[next]] = [state.items[next], row];
       } else if (request.action === 'remove') {
+        if (row?.batchId) {
+          if (state.items.some((item) => item.batchId === row.batchId && item.status === 'running'))
+            throw Error('Stop the batch tasks before removing the batch.');
+          state.items = state.items.filter((item) => item.batchId !== row.batchId);
+        }
         if (row?.status === 'running') throw Error('Stop the running task in Tasks first.');
         state.items = state.items.filter((r) => r.id !== request.id);
       } else if (request.action === 'retry') {

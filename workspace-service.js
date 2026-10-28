@@ -472,7 +472,13 @@ function createWorkspaceService(directory, options = {}) {
     const overlaps = [];
     if (row.state === 'active')
       for (const other of (await state()).worktrees) {
-        if (other.id === row.id || other.state !== 'active' || other.root !== row.root) continue;
+        if (
+          other.id === row.id ||
+          other.integratedInto === row.id ||
+          other.state !== 'active' ||
+          other.root !== row.root
+        )
+          continue;
         const shared = (await changedNames(other).catch(() => [])).filter((name) => names.includes(name));
         if (shared.length) overlaps.push({ id: other.id, files: shared.slice(0, 20) });
       }
@@ -533,6 +539,11 @@ function createWorkspaceService(directory, options = {}) {
   async function reviewAction(request) {
     return serial(async () => {
       const row = await tree(request.id);
+      if (request.action === 'accept' && row.integratedInto) {
+        const combined = await tree(row.integratedInto);
+        if (combined.state !== 'discarded')
+          throw Error('This task belongs to a combined batch. Review and accept its integration workspace instead.');
+      }
       if (row.state !== 'active') throw Error('This workspace is already ' + row.state + '.');
       const latest = await review(row.id);
       if (request.token !== latest.token)
@@ -703,6 +714,39 @@ function createWorkspaceService(directory, options = {}) {
       return structuredClone(s.chatMeta);
     });
   }
+  async function combineWorktrees(ids, cwd) {
+    if (!Array.isArray(ids) || ids.length < 2 || ids.length > 8 || new Set(ids).size !== ids.length)
+      throw Error('Choose 2–8 distinct task workspaces.');
+    const sources = await Promise.all(ids.map(tree));
+    const root = (await repository(cwd)).root;
+    if (sources.some((row) => row.state !== 'active' || row.root !== root))
+      throw Error('All batch tasks must be active workspaces from the same project.');
+    const combined = await createWorktree(cwd);
+    return serial(async () => {
+      const target = await tree(combined.id);
+      for (const source of sources) {
+        const before = await review(source.id);
+        if (!before.files.length) continue;
+        const commit = await snapshot(source, 'Parallel ATLAS subtask');
+        if ((await review(source.id)).token !== before.token)
+          throw Error('Subtask changed during integration. Review the source task and retry.');
+        try {
+          await git(target.path, ['cherry-pick', '--no-commit', commit]);
+        } catch (error) {
+          const conflicts = await unmerged(target.path);
+          await git(target.path, ['cherry-pick', '--quit']).catch(() => {});
+          if (!conflicts.length) throw error;
+          target.conflicts = conflicts;
+          await save();
+          return { ...structuredClone(target), conflicts, needsAttention: true };
+        }
+      }
+      for (const source of sources) source.integratedInto = target.id;
+      target.batchSources = ids;
+      await save();
+      return structuredClone(target);
+    });
+  }
   return {
     profiles,
     profile,
@@ -717,6 +761,7 @@ function createWorkspaceService(directory, options = {}) {
     repository,
     initializeRepository,
     createWorktree,
+    combineWorktrees,
     tree,
     review,
     reviewAction,

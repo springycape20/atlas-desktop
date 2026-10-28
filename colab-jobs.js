@@ -45,7 +45,7 @@ function createColabJobs({
       });
   }
   // queued marks a job the task queue started; only runQueued sets it, never the window's request.
-  async function start(event, input, { queued = false } = {}) {
+  async function start(event, input, { queued = false, preparedWorkspace = null } = {}) {
     if (!trusted(event)) throw Error('Untrusted app window.');
     const previous = input?.resumeJobId ? jobs.get(input.resumeJobId) : null;
     if (input?.resumeJobId && (!previous?.collaboration || !previous.request || previous.status === 'running'))
@@ -169,7 +169,7 @@ function createColabJobs({
         request,
         checkpoints: previous?.checkpoints ? structuredClone(previous.checkpoints) : [],
         preparedProposals: structuredClone(previous?.preparedProposals || {}),
-        workspaceId: previous?.workspaceId || reusable?.id || '',
+        workspaceId: previous?.workspaceId || preparedWorkspace?.id || reusable?.id || '',
         budget: {
           maxRuntimeSeconds: request.maxRuntimeSeconds,
           maxRounds: request.maxRounds,
@@ -416,10 +416,28 @@ function createColabJobs({
   // A Colab task started by the task queue: always isolated, and it doesn't hold the queue the way a
   // task you started yourself does. Returns what the queue records for the item.
   async function runQueued(event, row) {
+    const combined =
+      row.provider === 'integration' ? await workspace().combineWorktrees(row.sourceWorkspaces, row.cwd) : null;
+    if (combined?.needsAttention)
+      return {
+        workspaceId: combined.id,
+        needsAttention: true,
+        reason:
+          'Batch merge conflicts in ' +
+          combined.conflicts.join(', ') +
+          '. Review the combined checkout. All source task workspaces are retained.',
+      };
     const result = await start(
       event,
-      { task: row.prompt, cwd: row.cwd, profileId: row.profileId, roles: row.roles, isolated: true },
-      { queued: true },
+      {
+        task: row.prompt,
+        cwd: row.cwd,
+        profileId: row.profileId,
+        roles: row.roles,
+        isolated: true,
+        workflowChecks: row.workflowChecks || '',
+      },
+      { queued: true, preparedWorkspace: combined },
     );
     await jobs.get(result.id).promise;
     const job = jobs.get(result.id);
@@ -433,7 +451,7 @@ function createColabJobs({
   }
   // An isolated queue task is settled once its changes are accepted or discarded.
   async function settled(row) {
-    if (row.provider !== 'colab' || !row.result?.workspaceId) return true;
+    if (!['colab', 'integration'].includes(row.provider) || !row.result?.workspaceId) return true;
     return (
       (
         await workspace()

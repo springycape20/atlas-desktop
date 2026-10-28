@@ -63,6 +63,16 @@ app.whenReady().then(async () => {
     );
     win.setContentSize(640, 600);
     await win.webContents.executeJavaScript(
+      `(async()=>{atlas.taskQueue=async request=>{powerCalls.push(request);return {paused:true,items:[]};};await atlasPower.show('Parallel');document.querySelector('#parallelTasks').value=['Add voice tests','Document voice controls'].join(String.fromCharCode(10));document.querySelector('#parallelChecks').value='npm test';})()`,
+    );
+    win.setContentSize(1280, 800);
+    await new Promise((r) => setTimeout(r, 150));
+    fs.writeFileSync(path.join(shots, 'parallel.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `(async()=>{[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Queue batch for review').click();await new Promise(r=>setTimeout(r,30));const request=powerCalls.find(r=>r.action==='add-batch');if(!request||request.tasks.length!==2||request.checks!=='npm test')throw Error('Batch request incomplete');if(powerCalls.some(r=>r.action==='start'))throw Error('Batch started without Start');})()`,
+    );
+    win.setContentSize(640, 600);
+    await win.webContents.executeJavaScript(
       `if(document.querySelector('#powerDialog').getBoundingClientRect().right>innerWidth+1)throw Error('Dialog overflow');`,
     );
     console.log('PASS: Context exclusions, preview, performance and narrow dialog. Screenshots: ' + shots);

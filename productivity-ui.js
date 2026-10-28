@@ -304,6 +304,8 @@
           actions,
         );
       if (item.result?.jobId) button('View result', () => showTask(item.result.jobId), actions);
+      if (item.result?.workspaceId)
+        button('Review changes', () => window.atlasWorkspace.review(item.result.workspaceId), actions);
       if (item.status !== 'running')
         button(
           'Remove',
