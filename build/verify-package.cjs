@@ -11,7 +11,9 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
   for (const file of ['local-data.js', 'uv-runtime.js']) assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {
     assert(
-      !/(?:^|[/\\])(?:\.handover|\.aws|\.codex|\.agents|\.git|\.env(?:\.[^/\\]+)?)(?:[/\\]|$)/i.test(file),
+      !/(?:^|[/\\])(?:\.handover|\.setup-cache|\.aws|\.codex|\.agents|\.git|\.env(?:\.[^/\\]+)?)(?:[/\\]|$)/i.test(
+        file,
+      ),
       'Private path packaged: ' + file,
     );
     assert(
@@ -19,6 +21,7 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
       'Removed speech dependency packaged: ' + file,
     );
     assert(!/(?:^|[/\\])(?:voice-worker\.cjs|speech-model\.js)$/.test(file), 'Removed speech code packaged: ' + file);
+    assert(!/(?:^|[/\\])ATLAS\.lnk$/i.test(file), 'Development shortcut packaged: ' + file);
   }
   const notices = fs.readFileSync(path.join(resources, 'compliance', 'THIRD-PARTY-NOTICES.txt'), 'utf8');
   for (const phrase of ['whisper.cpp-MIT.txt', 'Whisper-model-card.md', 'electron-updater', 'lazy-val-MIT-notice.txt'])
