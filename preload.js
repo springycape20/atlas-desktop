@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('atlas', {
   projectSetup: (request) => ipcRenderer.invoke('atlas:project-setup', request),
   projectKnowledge: (request) => ipcRenderer.invoke('atlas:project-knowledge', request),
   performance: () => ipcRenderer.invoke('atlas:performance'),
+  contextPreview: (request) => ipcRenderer.invoke('atlas:context-preview', request),
   searchWork: (request) => ipcRenderer.invoke('atlas:search-work', request),
   taskOpen: (id) => ipcRenderer.invoke('atlas:task-open', { id }),
   onDesktopPermissions: (callback) => {

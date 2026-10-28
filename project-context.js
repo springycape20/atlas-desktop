@@ -97,11 +97,11 @@ function createProjectContext({ directory, listFiles } = {}) {
       return rows.sort();
     }
   }
-  async function context(cwd, task, { limit = 6000, signal } = {}) {
+  async function context(cwd, task, { limit = 6000, signal, excluded = [] } = {}) {
     signal?.throwIfAborted();
     await load();
     const root = await fs.realpath(cwd),
-      candidates = await files(root, signal),
+      candidates = (await files(root, signal)).filter((name) => !excluded.includes(name)),
       words =
         String(task)
           .toLowerCase()

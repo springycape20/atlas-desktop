@@ -1059,6 +1059,7 @@
     try {
       const result = await window.atlas.collaborate({
         task,
+        contextSelection: window.atlasPower?.selection('colab'),
         context,
         workspaceId: chat.isolated !== false ? chat.workspaceId || '' : '',
         preset: chat.preset || 'balanced',

@@ -106,13 +106,18 @@ function createColabJobs({
       codexModel: model(source.codexModel),
       claudeModel: model(source.claudeModel),
       profileId: typeof source.profileId === 'string' ? source.profileId : '',
-      attachments: Array.isArray(source.attachments) ? source.attachments.slice(0, 8) : [],
+      attachments:
+        source.contextSelection?.attachments === false
+          ? []
+          : Array.isArray(source.attachments)
+            ? source.attachments.slice(0, 8)
+            : [],
       isolated: source.isolated !== false,
       maxRounds: load('./collaboration').normalizePassLimit(source.maxRounds),
       maxRuntimeSeconds: null,
       context: efficiency.selectHistory(
         task,
-        (Array.isArray(source.context) ? source.context : [])
+        (source.contextSelection?.history === false ? [] : Array.isArray(source.context) ? source.context : [])
           .slice(-500)
           .filter((turn) => ['user', 'assistant'].includes(turn?.role) && typeof turn.content === 'string')
           .map((turn) => ({ role: turn.role, content: turn.content.slice(0, 12000) })),
@@ -243,7 +248,7 @@ function createColabJobs({
         let navigation = require('./colab-answer').isSimpleMessage(task)
           ? ''
           : await projectContext()
-              .context(job.cwd, task, { signal: job.signal })
+              .context(job.cwd, task, { signal: job.signal, excluded: request.contextSelection.files })
               .catch(() => '');
         if (request.contextSelection.project && knowledge) {
           const indexed = await knowledge().search(job.cwd, task, { excluded: request.contextSelection.files });
@@ -343,7 +348,7 @@ function createColabJobs({
           settings,
           checkpoints: job.checkpoints,
           preparedProposals: job.preparedProposals,
-          instructions: project?.instructions || '',
+          instructions: request.contextSelection.instructions ? project?.instructions || '' : '',
           attachmentContext,
           projectContext: navigation,
           signal: controller.signal,

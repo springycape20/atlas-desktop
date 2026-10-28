@@ -984,6 +984,7 @@ let foregroundRequest = '',
   jobList = [];
 async function sendMessage(prompt, options = {}) {
   if (!prompt || !cwd) return;
+  const selectedContext = window.atlasPower?.selection('assistant');
   if (/^(?:tell me more|read (?:the )?(?:full answer|full reply|details))[.!? ]*$/i.test(prompt) && lastSpokenAnswer) {
     $('#prompt').value = '';
     sizeAssistantComposer();
@@ -1007,6 +1008,7 @@ async function sendMessage(prompt, options = {}) {
   startLatency(requestId);
   const currentConversation = options.conversationId || conversationId || crypto.randomUUID();
   conversationId = currentConversation;
+  if (selectedContext) window.atlasPower?.setSelection('assistant', selectedContext);
   localStorage.setItem('atlas.activeConversation', conversationId);
   $('#prompt').value = '';
   sizeAssistantComposer();
@@ -1025,6 +1027,7 @@ async function sendMessage(prompt, options = {}) {
       conversationId: currentConversation,
       requestId,
       resumeJobId: options.resumeJobId,
+      contextSelection: selectedContext,
       effort: window.atlasWorkspace?.context('assistant').effort,
       ...attached.request,
     });
