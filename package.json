@@ -1,6 +1,6 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
@@ -20,7 +20,8 @@
     "format:check": "prettier --check .",
     "test:dispute-ui": "electron tests/colab-dispute.browser.cjs",
     "test:settings-ui": "electron tests/settings.browser.cjs",
-    "test:release-ui": "electron tests/release-screens.browser.cjs"
+    "test:release-ui": "electron tests/release-screens.browser.cjs",
+    "build:compliance": "node build/prepare-compliance.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0",
@@ -31,11 +32,7 @@
     "@modelcontextprotocol/sdk": "1.32.1",
     "diff": "9.0.0",
     "electron-updater": "6.8.11",
-    "kokoro-js": "1.2.1",
     "prismjs": "1.30.0"
-  },
-  "allowScripts": {
-    "onnxruntime-node@1.21.0": true
   },
   "productName": "ATLAS",
   "build": {
@@ -55,9 +52,15 @@
       "!docs/**",
       "!dist/**",
       "!speech/**",
-      "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**",
-      "!node_modules/onnxruntime-node/bin/napi-v3/linux/**",
-      "!node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**"
+      "!.handover/**",
+      "!.agents/**",
+      "!.codex/**",
+      "!.aws/**",
+      "!.github/**",
+      "!.env",
+      "!.env.*",
+      "!*.enc",
+      "!legal/**"
     ],
     "extraResources": [
       {
@@ -65,7 +68,10 @@
         "to": "speech/whisper/Release",
         "filter": [
           "whisper-server.exe",
-          "*.dll"
+          "whisper.dll",
+          "ggml.dll",
+          "ggml-base.dll",
+          "ggml-cpu.dll"
         ]
       },
       {
@@ -75,6 +81,10 @@
           "ggml-tiny.en.bin",
           "ggml-small.en-q5_1.bin"
         ]
+      },
+      {
+        "from": "dist/compliance",
+        "to": "compliance"
       }
     ],
     "win": {
@@ -113,11 +123,11 @@
     "electronFuses": {
       "runAsNode": false,
       "enableNodeOptionsEnvironmentVariable": false,
-      "enableNodeCliInspectArguments": false
-    }
-  },
-  "overrides": {
-    "sharp": "0.35.5"
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
+    "beforePack": "build/prepare-compliance.cjs"
   },
   "license": "MIT",
   "author": "springycape20"

@@ -1,6 +1,3 @@
-const fs = require('node:fs/promises'),
-  path = require('node:path'),
-  os = require('node:os');
 const USAGE_URLS = {
   codex: 'https://chatgpt.com/codex/cloud/settings/analytics#usage',
   claude: 'https://claude.ai/settings/usage',
@@ -86,51 +83,11 @@ function normalizeClaude(data, plan) {
       );
   return summary('claude', rows, plan);
 }
-async function readClaudeUsage({
-  readFile = fs.readFile,
-  fetchImpl = fetch,
-  env = process.env,
-  home = os.homedir(),
-} = {}) {
-  if (
-    !env.CLAUDE_CODE_OAUTH_TOKEN &&
-    (env.ANTHROPIC_API_KEY || env.CLAUDE_CODE_USE_BEDROCK || env.CLAUDE_CODE_USE_VERTEX)
-  )
-    throw Error('Subscription limits are unavailable for this Claude API account.');
-  let credentials = {};
-  try {
-    credentials = JSON.parse(
-      await readFile(path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), '.credentials.json'), 'utf8'),
-    );
-  } catch {}
-  const oauth = credentials.claudeAiOauth,
-    token = env.CLAUDE_CODE_OAUTH_TOKEN || oauth?.accessToken;
-  if (typeof token !== 'string' || !token) throw Error('Sign in to Claude Code to read plan usage.');
-  let response;
-  try {
-    response = await fetchImpl('https://api.anthropic.com/api/oauth/usage', {
-      headers: { Authorization: 'Bearer ' + token, 'anthropic-beta': 'oauth-2025-04-20' },
-      redirect: 'error',
-      signal: AbortSignal.timeout(10000),
-    });
-  } catch {
-    throw Error('Claude usage could not be refreshed.');
-  }
-  if (!response.ok)
-    throw Error(
-      [401, 403].includes(response.status)
-        ? 'Sign in to Claude Code again to refresh plan usage.'
-        : response.status === 429
-          ? 'Claude usage refresh is temporarily rate limited.'
-          : 'Claude usage is temporarily unavailable.',
-    );
-  let data;
-  try {
-    data = await response.json();
-  } catch {
-    throw Error('Claude returned an unreadable usage response.');
-  }
-  return normalizeClaude(data, oauth?.subscriptionType);
+async function readClaudeUsage() {
+  return {
+    ...summary('claude', []),
+    message: "Open Claude's usage page to see your allowance. ATLAS does not read Claude sign-in tokens.",
+  };
 }
 function createProviderUsage({ codex, claude = readClaudeUsage, now = Date.now, notify = () => {} }) {
   const cache = new Map(),

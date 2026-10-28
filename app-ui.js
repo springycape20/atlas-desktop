@@ -111,6 +111,20 @@ function updateWakeIndicator(label, active = false) {
   chip.classList.toggle('active', active);
   mic.classList.toggle('wake', active);
 }
+$('#wakeIndicator').onclick = async () => {
+  settings.wakeWordEnabled = false;
+  settings.autoListenReplies = false;
+  clearFollowup();
+  stopInterruptionMonitor();
+  stopWakeListener();
+  cancelRecording();
+  updateWakeIndicator('MIC PAUSED', false);
+  try {
+    settings = await window.atlas.saveSettings(settings);
+  } catch {
+    toast('Listening paused for this session. Save Microphone settings to keep it off after restart.');
+  }
+};
 function stopWakeListener() {
   wakeGeneration++;
   if (!wakeListening) return;
@@ -452,9 +466,7 @@ function hydrateSettings(value) {
   $('#endSilence').value = String(settings.endSilenceMs || 1000);
   $('#wakeWordEnabled').checked = settings.wakeWordEnabled === true;
   $('#autoListenReplies').checked = settings.autoListenReplies !== false;
-  $('#voiceEngine').value = settings.voiceEngine || 'kokoro';
-  $('#kokoroVoice').value = settings.kokoroVoice || 'bm_george';
-  $('#kokoroControls').hidden = $('#voiceEngine').value !== 'kokoro';
+  $('#voiceEngine').value = settings.voiceEngine || 'windows';
   $('#elevenLabsControls').hidden = $('#voiceEngine').value !== 'elevenlabs';
   $('#elevenLabsEnabled').checked = settings.elevenLabsEnabled === true;
   $('#elevenLabsModel').value = settings.elevenLabsModel || 'eleven_multilingual_v2';
@@ -550,28 +562,7 @@ $('#loadElevenLabsVoices').onclick = async () => {
   }
 };
 $('#voiceEngine').addEventListener('change', (e) => {
-  $('#kokoroControls').hidden = e.target.value !== 'kokoro';
   $('#elevenLabsControls').hidden = e.target.value !== 'elevenlabs';
-});
-$('#testKokoroVoice').onclick = async () => {
-  const button = $('#testKokoroVoice');
-  button.disabled = true;
-  button.textContent = 'Preparing local voice…';
-  try {
-    const bytes = await timedVoice('kokoro', {
-      voice: $('#kokoroVoice').value,
-      text: 'Good evening. I am ATLAS, at your service. How may I assist you today?',
-    });
-    await playAudio(bytes, 'audio/wav');
-  } catch (e) {
-    toast('Local voice preview failed: ' + e.message);
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Preview local voice';
-  }
-};
-window.atlas.onVoiceProgress((message) => {
-  if ($('#voiceEngine').value === 'kokoro') toast(`Preparing local speech model · ${message}`);
 });
 $('#elevenLabsSpeed').addEventListener(
   'input',
@@ -590,7 +581,7 @@ $('#testElevenLabsVoice').onclick = async () => {
       elevenLabsModel: $('#elevenLabsModel').value,
       elevenLabsSpeed: Number($('#elevenLabsSpeed').value),
     });
-    const bytes = await timedVoice('elevenlabs', {
+    const bytes = await timedVoice({
       voiceId,
       text: 'Good evening. I am ATLAS, at your service. How may I assist you today?',
     });
@@ -733,7 +724,6 @@ $('#settingsSave').addEventListener('click', async () => {
     showReasoning: $('#showReasoning').checked,
     launchAtStartup: $('#launchAtStartup').checked,
     voiceEngine: $('#voiceEngine').value,
-    kokoroVoice: $('#kokoroVoice').value,
     codexSandbox: $('#codexSandbox').value,
     permissionBypass: $('#permissionBypass').checked,
     voiceDeviceId: $('#micSelect').value,
@@ -1295,6 +1285,7 @@ function stopInterruptionMonitor() {
   void m.ctx.close();
 }
 async function startInterruptionMonitor() {
+  if (!settings.wakeWordEnabled && !settings.autoListenReplies) return;
   if (interruptionMic || interruptionOpening || listening) return;
   interruptionOpening = true;
   try {
@@ -1303,7 +1294,7 @@ async function startInterruptionMonitor() {
     if (settings.voiceDeviceId) audio.deviceId = { exact: settings.voiceDeviceId };
     const generation = speechGeneration;
     const s = await navigator.mediaDevices.getUserMedia({ audio });
-    if (generation !== speechGeneration || listening) {
+    if (generation !== speechGeneration || listening || (!settings.wakeWordEnabled && !settings.autoListenReplies)) {
       s.getTracks().forEach((t) => t.stop());
       return;
     }
@@ -1519,11 +1510,11 @@ async function timedTranscription(wav) {
     pendingVoiceMetrics.transcriptionMs = Math.round(performance.now() - start);
   }
 }
-async function timedVoice(engine, request) {
+async function timedVoice(request) {
   const start = performance.now(),
     id = latency?.id;
   try {
-    return await (engine === 'kokoro' ? window.atlas.kokoroSpeak(request) : window.atlas.elevenLabsSpeak(request));
+    return await window.atlas.elevenLabsSpeak(request);
   } finally {
     if (latency?.id === id) {
       latency.synthesisMs = (latency.synthesisMs || 0) + Math.round(performance.now() - start);
@@ -1666,7 +1657,6 @@ function speakWindows(text) {
   });
 }
 function stopSpeaking() {
-  void window.atlas.cancelSpeech().catch(() => {});
   speechGeneration++;
   speechStopped = true;
   clearTimeout(streamFlushTimer);
@@ -1692,11 +1682,11 @@ function newSpeechBatch() {
   };
 }
 async function prepareSpeech(text) {
-  const engine = settings.voiceEngine || 'kokoro';
+  const engine = settings.voiceEngine || 'windows';
   if (engine === 'windows') return { text };
   if (engine === 'elevenlabs' && settings.elevenLabsEnabled && settings.elevenLabsVoiceId)
-    return { bytes: await timedVoice('elevenlabs', { text, voiceId: settings.elevenLabsVoiceId }), type: 'audio/mpeg' };
-  return { bytes: await timedVoice('kokoro', { text, voice: settings.kokoroVoice || 'bm_george' }), type: 'audio/wav' };
+    return { bytes: await timedVoice({ text, voiceId: settings.elevenLabsVoiceId }), type: 'audio/mpeg' };
+  return { text };
 }
 function prefetchSpeech(batch) {
   if (batch.stopped) return;

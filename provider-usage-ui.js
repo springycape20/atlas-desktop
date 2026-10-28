@@ -137,10 +137,12 @@
           ? '\nLast successful update: ' + new Date(data.updatedAt).toLocaleTimeString()
           : '');
     if (data && !data.error)
-      status.textContent = data.windows.length
-        ? 'Circle shows the lowest remaining main session/weekly limit.\nUpdated ' +
-          new Date(data.updatedAt).toLocaleTimeString()
-        : "This account does not report subscription limits. Open the provider's usage page for details.";
+      status.textContent =
+        data.message ||
+        (data.windows.length
+          ? 'Circle shows the lowest remaining main session/weekly limit.\nUpdated ' +
+            new Date(data.updatedAt).toLocaleTimeString()
+          : "This account does not report subscription limits. Open the provider's usage page for details.");
     popup.querySelector('.usage-refresh').disabled = refreshing;
   }
   async function refresh(force = false) {

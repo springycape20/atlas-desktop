@@ -10,7 +10,7 @@ app.setPath('userData', path.join(temp, 'data'));
 protocol.registerSchemesAsPrivileged([
   { scheme: 'atlas', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
-const mock = `window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'kokoro',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>null,jobs:async()=>[],providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'current',currentVersion:'test'}),chatMetadata:async()=>({}),saveSettings:async(next)=>next},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
+const mock = `window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'windows',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>null,jobs:async()=>[],providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'current',currentVersion:'test'}),chatMetadata:async()=>({}),saveSettings:async(next)=>next},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
 const timeout = setTimeout(() => {
   console.error('Settings browser test timed out');
   app.exit(1);

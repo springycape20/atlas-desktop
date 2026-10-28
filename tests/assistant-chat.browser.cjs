@@ -169,6 +169,17 @@ app.whenReady().then(async () => {
       'PASS: Assistant timeline/sidebar, image previews, streaming follow-ups, preserved controls, scroll/search, native-name import paging/workspaces, new chat, Colab switching, hiding the chat lists, one control row, the Beacon and menu icons and three viewport sizes.',
     );
     console.log('Preview: ' + path.join(temp, 'assistant-chat.png'));
+    await win.webContents.executeJavaScript(`(async()=>{
+      settings.wakeWordEnabled=false;settings.autoListenReplies=false;
+      const original=navigator.mediaDevices.getUserMedia;let captures=0;
+      navigator.mediaDevices.getUserMedia=async()=>{captures++;throw Error('No real microphone in this test');};
+      try { await startInterruptionMonitor();await startWakeListener();if(captures)throw Error('Automatic listening ignored microphone opt-out'); }
+      finally { navigator.mediaDevices.getUserMedia=original; }
+      let saved;atlas.saveSettings=async value=>(saved=structuredClone(value));
+      settings.wakeWordEnabled=true;settings.autoListenReplies=true;
+      document.querySelector('#wakeIndicator').click();await new Promise(r=>setTimeout(r,20));
+      if(saved?.wakeWordEnabled!==false||saved?.autoListenReplies!==false)throw Error('Pause did not persist both listening opt-outs');
+    })()`);
     await win.webContents.executeJavaScript(`localStorage.setItem('atlas.chatListsHidden','1')`);
     const normalMock = mock;
     protocol.unhandle('atlas');

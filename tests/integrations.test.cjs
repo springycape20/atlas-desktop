@@ -1083,6 +1083,7 @@ for (const choice of ['Allow once', 'Screen control', 'Allow for this chat'])
         appPid = Number(launched.content[0].text);
         pids.push(appPid);
       }
+      if (choice === 'Allow for this chat') await f.service.grantShell('colab:one');
       const marker = path.join(f.directory, 'shell.pid');
       const request = f.call('integrations_call', {
         id: 'windows',
@@ -1092,7 +1093,7 @@ for (const choice of ['Allow once', 'Screen control', 'Allow for this chat'])
         },
       });
       const approval = await f.waitApproval();
-      f.approvals.answer(approval.id, choice === 'Screen control' ? 'Allow once' : choice);
+      f.approvals.answer(approval.id, 'Allow once');
       let shellPid;
       for (let i = 0; i < 500; i++) {
         try {
@@ -1127,7 +1128,7 @@ test('Allow for this chat runs later non-routine PowerShell in that chat without
   const first = f.shell('npm test'),
     request = await f.waitApproval();
   assert.deepEqual(request.choices, chatChoices);
-  assert.match(request.permissionScope, /without asking[\s\S]*still ask/);
+  assert.match(request.permissionScope, /not a sandbox/);
   f.approvals.answer(request.id, 'Allow for this chat');
   assert(!(await first).isError);
   assert(!(await f.shell('node build.js')).isError);

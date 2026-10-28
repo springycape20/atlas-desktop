@@ -121,10 +121,26 @@ test('a denied working folder cannot be re-entered by a pathless diagnostic comm
 const risky = (f, command, denied = []) =>
   riskyPowerShell(command, f.project, { denied, env: { SystemRoot: f.system } });
 
+test('remembered shell permission rejects obfuscated commands and nested interpreters', async (t) => {
+  const f = await fixture(t);
+  for (const command of [
+    "& ('Remove' + '-Item') 'app.txt'",
+    'r`emove-item app.txt',
+    'Get-Date\nRemove-Item app.txt',
+    'powershell -Command "Write-Output harmless"',
+    'cmd /c echo harmless',
+    'node -e "console.log(1)"',
+    'python -c "print(1)"',
+    "python '-cprint(1)'",
+    'node --eval "console.log(1)"',
+    'node -p "1"',
+  ])
+    assert.notEqual(await risky(f, command), '', command);
+});
+
 test('in a chat that allows PowerShell, building, testing and launching programs run without asking', async (t) => {
   const f = await fixture(t);
   for (const command of [
-    "Set-Location -LiteralPath 'C:\\Users\\User\\Documents\\test'; node --check main.js; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node pong.test.js; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Start-Process node -ArgumentList 'pong.js'",
     'npm test; npm run build',
     'git status; git diff --stat',
     'Get-ChildItem | Format-Table Name, Length',

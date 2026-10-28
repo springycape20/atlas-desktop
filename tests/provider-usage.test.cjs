@@ -50,60 +50,28 @@ test('Claude reports session and weekly windows with model-specific details and 
   assert.equal(normalizeClaude({ five_hour: { utilization: null } }).remainingPercent, null);
   assert.equal(normalizeClaude({ seven_day_opus: { utilization: 20 } }).remainingPercent, null);
 });
-test('Claude usage reads the existing credential only for the fixed provider endpoint and returns no credentials', async () => {
-  const secret = 'test-oauth-secret';
-  let fetched = 0;
+test('Claude usage never reads credentials or sends authenticated requests', async () => {
+  let reads = 0,
+    requests = 0;
   const result = await readClaudeUsage({
-    env: { CLAUDE_CONFIG_DIR: '/custom' },
-    home: '/home',
-    readFile: async (file) => {
-      assert(file.includes('.credentials.json'));
-      return JSON.stringify({ claudeAiOauth: { accessToken: secret, subscriptionType: 'pro' } });
+    env: { CLAUDE_CODE_OAUTH_TOKEN: 'test-only', ANTHROPIC_API_KEY: 'test-only' },
+    readFile: async () => {
+      reads++;
+      throw Error('Credentials must not be read');
     },
-    fetchImpl: async (url, options) => {
-      fetched++;
-      assert.equal(url, 'https://api.anthropic.com/api/oauth/usage');
-      assert.equal(options.headers.Authorization, 'Bearer ' + secret);
-      assert.equal(options.redirect, 'error');
-      return { ok: true, json: async () => ({ five_hour: { utilization: 20 } }) };
+    fetchImpl: async () => {
+      requests++;
+      throw Error('Network must not be used');
     },
   });
-  assert.equal(fetched, 1);
-  assert.equal(result.remainingPercent, 80);
-  assert(!JSON.stringify(result).includes(secret));
-  await assert.rejects(
-    readClaudeUsage({
-      env: {},
-      readFile: async () => {
-        throw Error('missing');
-      },
-    }),
-    /Sign in/,
-  );
-  await assert.rejects(readClaudeUsage({ env: { ANTHROPIC_API_KEY: 'key' } }), /API account/);
-  await assert.rejects(
-    readClaudeUsage({
-      env: { CLAUDE_CODE_OAUTH_TOKEN: secret },
-      readFile: async () => {
-        throw Error('missing');
-      },
-      fetchImpl: async () => ({ ok: false, status: 401, text: async () => secret }),
-    }),
-    /Sign in/,
-  );
-  await assert.rejects(
-    readClaudeUsage({
-      env: { CLAUDE_CODE_OAUTH_TOKEN: secret },
-      readFile: async () => {
-        throw Error('missing');
-      },
-      fetchImpl: async () => {
-        throw Error(secret);
-      },
-    }),
-    (error) => !error.message.includes(secret) && /could not be refreshed/.test(error.message),
-  );
+  assert.equal(reads, 0);
+  assert.equal(requests, 0);
+  assert.equal(result.remainingPercent, null);
+  assert.deepEqual(result.windows, []);
+  assert.match(result.message, /usage page/);
+  assert.equal(result.usageUrl, USAGE_URLS.claude);
 });
+
 test('usage refreshes coalesce, cache briefly, handle offline errors and recover without fabricated quota', async () => {
   let clock = 100000,
     codexCalls = 0,

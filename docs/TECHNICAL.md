@@ -10,7 +10,7 @@ Detailed behaviour, limits and design notes. For installation and an overview, s
 - Colab runs a task through a build, ATLAS checks and an independent review (Debug mode reproduces the bug first), then displays one final summary. Switch chats while a task runs; its result returns to the chat that started it.
 - Provider cooldowns persist locally. Settings shows availability, estimated retry times, and **Retry now**. Availability means ATLAS has no active cooldown; it is not a live quota or sign-in check.
 - Brief spoken replies by default; full written answers remain on screen. Say **tell me more** or click **Read full answer** for more speech.
-- Local Kokoro British voices, Whisper recognition, wake-word and follow-up listening controls.
+- Windows speech, Whisper recognition, wake-word and follow-up listening controls.
 - Task pause/cancel/resume, saved conversations, local transcript lookup, memories, and reminders.
 
 ## Device data and permissions
@@ -29,7 +29,7 @@ Install a newer **ATLAS-Setup** from [GitHub Releases](https://github.com/spring
 
 ## Third-party components
 
-Electron, Kokoro, whisper.cpp, their models, and provider CLIs retain their own licenses and terms. The speech runtime is downloaded from the official whisper.cpp GitHub release and its archive checksum is checked. Models are downloaded from their publishers; they are not redistributed in this repository.
+Electron, whisper.cpp, its models, and provider CLIs retain their own licenses and terms. The speech runtime is downloaded from the official whisper.cpp GitHub release and its archive checksum is checked. Models are downloaded from their publishers; they are not redistributed in this repository.
 
 This app is independent of OpenAI and Anthropic. Other operating systems and mobile devices have not been adapted or tested.
 
@@ -37,7 +37,7 @@ This app is independent of OpenAI and Anthropic. Other operating systems and mob
 
 - Whisper starts on the first transcription and retains one model for subsequent requests. Switching Fast/Enhanced replaces that process. The server binds only to loopback on a temporary port with a random request path, and closes when ATLAS exits. Re-run setup if `whisper-server.exe` is missing from an older installation.
 - Provider transcript scanning, decompression, parsing, and search run in a worker. Parsed transcripts use a bounded cache refreshed when file size or timestamps change.
-- Interrupting speech discards queued Kokoro work and ignores the cancelled result. A synthesis already executing may finish internally; the loaded model and short-reply cache stay available.
+- Interrupting speech stops renderer playback and discards queued replies. An ElevenLabs request already sent may finish at the provider.
 - Streamed text is painted once per animation frame. Final answers cancel pending stream paints, and workspace indicators update when state changes instead of polling.
 - Task notifications batch changed jobs. The app retains the latest 40 finished jobs plus all running/paused jobs. State saves use queued atomic writes, and shutdown waits for pending saves.
 - ATLAS conversation history is cached for the current process. Restart ATLAS after externally editing its conversation file.
@@ -171,3 +171,10 @@ Desktop control reuses a live chat controller. Codex and Claude can issue short 
 ATLAS displays a thin, click-through border with **Atlas is controlling this PC** on each monitor during an authorized desktop task, including pauses between actions. It does not take keyboard focus or block mouse clicks. The border hides on completion, Stop, Revoke, closing ATLAS, or disconnecting control.
 
 With remembered chat control, routine managed PowerShell diagnostics and simple project-file edits are approved automatically. Literal paths are checked against protected and denied files, and commands run in the selected project. Deletion, elevation, security/registry changes, downloads/installers, external scripts/programs, dynamic expressions and other commands whose effects cannot be checked still need approval. This policy checks a supported command subset; it does not predict every possible effect or sandbox launched code. Other native provider tools keep their own approval rules.
+
+
+## Security remediation (28 October 2026)
+
+Continuous microphone capture now requires explicit opt-in, including renewed consent for legacy defaults. Speech-interruption listening honours the same opt-out. The wake indicator pauses automatic microphone use. Claude usage does not read OAuth credentials; it directs users to the provider page. Remembered PowerShell permission rejects unrecognised dynamic syntax and nested/inline interpreters, but literal project programs can still change files: the permission is not a sandbox.
+
+See [privacy and deletion](PRIVACY.md), [release gates](RELEASE-SECURITY.md), and [third-party source review](THIRD-PARTY-SOURCE-REVIEW.md). For 0.8.3 the owner authorized removing Kokoro and its affected dependencies, and releasing unsigned after SignPath denial. The technical release review binds the dependency lock and package checks; it is not legal certification. See PATCH-RELEASE-REVIEW.md. Generated notices cover the actual remaining production packages.

@@ -382,6 +382,27 @@ async function riskyPowerShell(command, cwd, { denied = [], env = process.env } 
     if ((root && inside(file, root)) || text.includes(slashes(file)) || (relative && text.includes(slashes(relative))))
       return 'This command uses a file or folder you denied before.';
   }
+  // A denylist cannot understand PowerShell expansion or nested command languages.
+  // Remembered permission covers literal syntax only; unknown syntax asks again.
+  let groups;
+  try {
+    if (/[\r\n\u0000-\u001f]/.test(command)) throw Error('Use explicit command separators.');
+    groups = parse(command);
+  } catch {
+    return 'Dynamic, escaped or unrecognised PowerShell syntax requires approval.';
+  }
+  for (const { tokens } of groups) {
+    const name = tokens[0].value.toLowerCase();
+    if (tokens[0].quoted || !/^[a-z][a-z0-9.-]*$/i.test(name)) return 'Indirect command names require approval.';
+    if (
+      /^(?:powershell|pwsh|cmd|wscript|cscript|mshta|bash|sh)(?:\.exe)?$/.test(name) ||
+      (/^(?:node|python[\d.]*|ruby|perl)(?:\.exe)?$/.test(name) &&
+        tokens
+          .slice(1)
+          .some((token) => /^(?:-[ecp]|--(?:eval|print|command|encodedcommand)(?:=|$))/i.test(token.value)))
+    )
+      return 'Nested shells and inline programs require approval.';
+  }
   return '';
 }
 module.exports = { parse, assessPowerShell, scopeCommand, riskyPowerShell };

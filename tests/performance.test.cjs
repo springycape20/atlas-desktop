@@ -85,59 +85,6 @@ test('history worker lists, searches and invalidates cached/compressed transcrip
   await assert.rejects(client.request('read', request), /could not be found/);
 });
 
-test('speech cancellation skips queued jobs and suppresses an in-flight result', async () => {
-  const source = await fs.readFile(path.join(root, 'voice-worker.cjs'), 'utf8');
-  let onMessage, release;
-  const generated = [],
-    results = [];
-  const fakeTts = {
-    async generate(text) {
-      generated.push(text);
-      if (text === 'old active')
-        await new Promise((resolve) => {
-          release = resolve;
-        });
-      return { toWav: () => Buffer.from(text) };
-    },
-  };
-  const context = vm.createContext({
-    Buffer,
-    fakeTts,
-    console,
-    require(name) {
-      if (name === 'node:worker_threads')
-        return {
-          workerData: { userData: '' },
-          parentPort: {
-            on(event, listener) {
-              onMessage = listener;
-            },
-            postMessage(value) {
-              results.push(value);
-            },
-          },
-        };
-      return require(name);
-    },
-  });
-  vm.runInContext(source + '\nruntime = Promise.resolve(fakeTts);', context);
-  onMessage({ id: 1, voice: 'bm_george', text: 'old active' });
-  await tick();
-  onMessage({ id: 2, voice: 'bm_george', text: 'old queued' });
-  onMessage({ type: 'cancel', ids: [1, 2] });
-  onMessage({ id: 3, voice: 'bm_george', text: 'new reply' });
-  release();
-  await tick();
-  assert.deepEqual(generated, ['old active', 'new reply']);
-  assert.deepEqual(
-    results.map((value) => value.id),
-    [3],
-  );
-  onMessage({ id: 4, voice: 'bm_george', text: 'new reply' });
-  await tick();
-  assert.equal(generated.length, 2, 'short replies retain the warm cache');
-});
-
 test('migration finds original package data despite the new product name', async (t) => {
   const h = await mainHarness(t);
   const legacy = path.join(h.paths.appData, 'atlas-local-desktop');

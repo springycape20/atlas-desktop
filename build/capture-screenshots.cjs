@@ -154,7 +154,7 @@ const mock = `localStorage.setItem('atlas.activeConversation','demo-assistant');
 localStorage.setItem('atlas.colab.chats.v1',JSON.stringify(${JSON.stringify({ chats: [colabChat, disputeChat], selected: 'demo-colab' })}));
 window.savedChats=${JSON.stringify([assistantChat])};window.jobListeners=[];
 window.pushJobs=(patch)=>jobListeners.forEach((listener)=>listener(patch));
-window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'kokoro',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>savedChats[0],jobs:async()=>[],onJobs:fn=>{jobListeners.push(fn);return()=>{};},onCollaborationStatus:fn=>{window.colabStatus=fn;return()=>{};},providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'current',currentVersion:'0.6.12'}),chatMetadata:async()=>({}),historyList:async()=>savedChats.map(chat=>({...chat,turnCount:chat.turns.length,searchText:chat.turns.map(turn=>turn.content).join(' ')})),historyRead:async req=>structuredClone(savedChats.find(chat=>chat.id===req.id)),prepareProject:async()=>({ready:true,isolated:true})},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
+window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'windows',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>savedChats[0],jobs:async()=>[],onJobs:fn=>{jobListeners.push(fn);return()=>{};},onCollaborationStatus:fn=>{window.colabStatus=fn;return()=>{};},providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'current',currentVersion:'0.6.12'}),chatMetadata:async()=>({}),historyList:async()=>savedChats.map(chat=>({...chat,turnCount:chat.turns.length,searchText:chat.turns.map(turn=>turn.content).join(' ')})),historyRead:async req=>structuredClone(savedChats.find(chat=>chat.id===req.id)),prepareProject:async()=>({ready:true,isolated:true})},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const timeout = setTimeout(() => {
@@ -214,6 +214,18 @@ app.whenReady().then(async () => {
 
     await run(`atlasColab.selectAssistant?.();document.querySelector('#settingsOpen').click();`);
     await shot(process.env.ATLAS_SETTINGS_SHOT || 'settings.png');
+    if (process.env.ATLAS_EXTRA_SETTINGS_SHOTS === '1') {
+      for (const [section, name] of [
+        ['Voice', 'settings-voice.png'],
+        ['Microphone', 'settings-microphone.png'],
+        ['Tools and data', 'settings-data.png'],
+      ]) {
+        await run(
+          `document.querySelectorAll('.settings-nav-item').forEach(button=>{if(button.dataset.section===${JSON.stringify(section)})button.click();});`,
+        );
+        await shot(name);
+      }
+    }
   } catch (error) {
     console.error(error);
     process.exitCode = 1;

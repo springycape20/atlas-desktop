@@ -1,6 +1,6 @@
 # ATLAS
 
-**A local Windows desktop assistant for Codex and Claude Code.** Chat with either model in one app, talk to it with local speech, or hand a task to **Colab**, where Codex and Claude build, check and review each other's work before you see a single, verified answer.
+**A local Windows desktop assistant for Codex and Claude Code.** Chat with either model in one app, talk to it with local speech, or hand a task to **Colab**, where Codex and Claude build, check and review each other's work before you see one reviewed result. Verification labels name the checks ATLAS actually ran; AI output and model review can still be wrong.
 
 [![Latest release](https://img.shields.io/github/v/release/springycape20/atlas-desktop?label=download)](https://github.com/springycape20/atlas-desktop/releases/latest)
 ![Windows x64](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-blue)
@@ -11,7 +11,7 @@
 ## What you can do
 
 - **Chat with Codex and Claude in one place.** ATLAS routes each message to the right provider, streams the reply, and keeps a searchable history of your conversations. You can also import existing Codex and Claude Code chats.
-- **Talk to it.** Local Whisper speech recognition, local Kokoro voices, a wake word, and short spoken replies with the full answer on screen. Your speech is processed on your PC.
+- **Talk to it.** Local Whisper speech recognition, Windows speech, an optional wake word, and short spoken replies with the full answer on screen. Recognition runs on your PC; recognised prompts go to your chosen AI provider.
 - **Let two models work together in Colab.** One builds and the other reviews. Your project's checks run automatically, and the task only finishes when the reviewer accepts the work.
 - **Keep your work organised.** Project profiles, file and screenshot attachments, memories, reminders, and a task list.
 - **Control your PC, with permission.** Optional Windows computer control through the open-source [Windows-MCP](https://github.com/CursorTouch/Windows-MCP) server. ATLAS asks before each kind of action and shows a border while it is in control.
@@ -54,7 +54,7 @@ Also in Colab:
 
 ![The Settings dialog with its section list and search](docs/images/settings.png)
 
-ATLAS installs for your Windows account in `%LOCALAPPDATA%\Programs\atlas-local-desktop`, with Desktop and Start Menu shortcuts. The installer includes the speech-recognition runtime and English models. The Kokoro voice model downloads the first time ATLAS speaks.
+ATLAS installs for your Windows account in `%LOCALAPPDATA%\Programs\atlas-local-desktop`, with Desktop and Start Menu shortcuts. The installer includes the speech-recognition runtime and English models. Version 0.8.3 removes bundled Kokoro while its dependency source obligations remain unresolved; existing Kokoro selections switch to Windows speech.
 
 **If Windows warns about the installer:** the installer isn't code-signed yet, so Windows may warn about it.
 - **SmartScreen:** choose **More info**, then **Run anyway**.
@@ -69,8 +69,9 @@ ATLAS checks for new releases when it starts. Open **Settings → App updates**,
 
 - **Stays on your PC:** conversations, memories, reminders, settings and Colab history are stored in `%LOCALAPPDATA%\ATLAS`. They are not synced between devices.
 - **Sent to your providers:** your prompts and the files you attach go to Codex and/or Claude through your own accounts, under their terms. ATLAS has no server of its own.
-- **Voice is local:** speech recognition and the Kokoro voices run on your PC. ElevenLabs voices are optional and need your own API key.
-- **Check Settings:** wake-word and automatic follow-up listening are on by default, and you can turn them off. Computer control is off until you allow it for a chat.
+- **Voice choices:** Whisper recognition runs on your PC, and Windows speech uses available system voices. ElevenLabs sends spoken text online and needs your own API key.
+- **Check Settings:** wake-word and automatic follow-up listening are off until you enable them. The wake indicator pauses automatic listening. Computer control is off until you allow it for a chat.
+- **Deletion:** Settings → Tools and data offers a confirmed reset of current ATLAS records and a redacted diagnostic-log export. Project files, Git recovery snapshots, exports, legacy folders and provider histories remain; see the privacy explanation.
 - **Uninstalling** keeps your data in `%LOCALAPPDATA%\ATLAS`, so a reinstall picks up where you left off.
 
 ## Troubleshooting
@@ -105,28 +106,27 @@ For detailed behaviour, limits and design notes, see the [technical reference](d
 
 ## Code signing policy
 
-Windows releases are being set up for signing. Free code signing is provided by [SignPath.io](https://about.signpath.io), with the certificate issued by the [SignPath Foundation](https://signpath.org). Until signing is approved, installers are unsigned (see [Install](#install)).
+Windows installers are currently unsigned (see [Install](#install)). The application to the [SignPath Foundation](https://signpath.org) free signing programme was denied because ATLAS has no active users. No signing certificate is currently available.
 
 - **Committers and reviewers:** [springycape20](https://github.com/springycape20)
 - **Approvers:** [springycape20](https://github.com/springycape20)
 
-Only installers built by this repository's GitHub Actions release workflow from tagged source are signed, and each signing request must be approved manually. Every team member uses multi-factor authentication for GitHub and SignPath.
+If signing becomes available, it will be limited to artifacts built by this repository's GitHub Actions release workflow, including draft builds used to verify signing before a public release. Each signing request will require manual approval. Every team member must use multi-factor authentication for GitHub and the signing service. See the [future signing setup](docs/SIGNING-HANDOFF.md).
 
 ### Privacy policy
 
-ATLAS has no server of its own and collects no telemetry, analytics or crash reports. It connects to other systems only in the following cases:
+ATLAS has no developer-operated application server and collects no publisher telemetry, analytics or crash reports. See the [full privacy and local-data explanation](docs/PRIVACY.md), including retention, deletion and third-party requests. The main built-in connections are listed below. Enabled tools, provider CLIs and programs you authorise may make their own requests:
 
 - **Update checks:** at launch, ATLAS asks GitHub (`api.github.com`) for the latest release. Updates download only when you choose to.
-- **Your AI providers:** when you send a message or a Colab task, your prompt and attached files go to Codex (OpenAI) and/or Claude (Anthropic) through their command-line tools and your own accounts. At launch ATLAS also refreshes each provider's model list and your usage allowance (including `api.anthropic.com` with your Claude Code sign-in). Each provider's own privacy policy applies.
-- **Voice model:** the first time ATLAS speaks with a Kokoro voice, it downloads the voice model from Hugging Face.
-- **Optional services you turn on:** ElevenLabs voices (with your own API key), and Windows computer control, whose runtime is downloaded from astral.sh, Python's package index and GitHub when you install it.
+- **Your AI providers:** when you send a message or a Colab task, your prompt and attached files go to Codex (OpenAI) and/or Claude (Anthropic) through their command-line tools and your own accounts. At launch ATLAS also refreshes each provider's model list and your usage allowance (Claude allowance is available through its provider usage page; ATLAS does not read Claude sign-in tokens). Each provider's own privacy policy applies.
+- **Optional services you turn on:** ElevenLabs voices (with your own API key), and Windows computer control, whose runtime is downloaded from pinned GitHub resources and Python's package index when you install it.
 
 Your conversations, memories, reminders and settings stay in `%LOCALAPPDATA%\ATLAS` on your PC.
 
 ## License
 
-ATLAS is released under the [MIT License](LICENSE).
+ATLAS source is released under the [MIT License](LICENSE). Bundled components retain their own licences. Generated notices and the dependency inventory ship in `resources/compliance`; Electron's licence and Chromium notices also ship with the application. The [patch review](docs/PATCH-RELEASE-REVIEW.md) records the removal of Kokoro, eSpeak, sharp/libvips and ONNX dependencies from 0.8.3. This is a technical review, not legal certification. Historical source questions must be resolved before those components are reintroduced.
 
 ## Credits
 
-ATLAS uses Electron, [whisper.cpp](https://github.com/ggml-org/whisper.cpp), [Kokoro](https://github.com/hexgrad/kokoro) via kokoro-js, and Windows-MCP, each under its own license. The Colab workflow graph is inspired by [Graphify](https://github.com/Graphify-Labs/graphify). ATLAS is an independent project, not affiliated with OpenAI or Anthropic.
+ATLAS uses Electron and [whisper.cpp](https://github.com/ggml-org/whisper.cpp), and offers optional Windows-MCP integration, each under its own license. The Colab workflow graph is inspired by [Graphify](https://github.com/Graphify-Labs/graphify). ATLAS is an independent project, not affiliated with OpenAI or Anthropic.
