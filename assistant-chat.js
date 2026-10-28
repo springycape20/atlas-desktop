@@ -51,12 +51,18 @@
       toggle.setAttribute('aria-expanded', String(!hidden));
     }
   };
-  showLists(localStorage.getItem('atlas.chatListsHidden') === '1');
+  let listsHidden = false;
+  try {
+    listsHidden = localStorage.getItem('atlas.chatListsHidden') === '1';
+  } catch {}
+  showLists(listsHidden);
   for (const toggle of listToggles)
     toggle.addEventListener('click', () => {
       const hidden = !document.body.classList.contains('chat-lists-hidden');
-      localStorage.setItem('atlas.chatListsHidden', hidden ? '1' : '0');
       showLists(hidden);
+      try {
+        localStorage.setItem('atlas.chatListsHidden', hidden ? '1' : '0');
+      } catch {}
     });
   const heading = node('header', undefined, 'assistant-chat-heading'),
     title = node('h1', 'Assistant'),

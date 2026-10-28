@@ -125,6 +125,14 @@ app.whenReady().then(async () => {
   if(document.querySelector('.assistant-chat-list').offsetParent)throw Error('Hidden chat list still shows chats');
   toggles[0].click();await new Promise(r=>setTimeout(r,60));
   if(document.body.classList.contains('chat-lists-hidden')||chats.clientWidth<150||localStorage.getItem('atlas.chatListsHidden')!=='0')throw Error('Showing the chat list again failed');
+  const setItem=Storage.prototype.setItem;
+  try{
+    Storage.prototype.setItem=function(key,value){if(key==='atlas.chatListsHidden')throw new DOMException('Storage full','QuotaExceededError');return setItem.call(this,key,value);};
+    toggles[0].click();
+    if(!document.body.classList.contains('chat-lists-hidden')||toggles[1].getAttribute('aria-expanded')!=='false')throw Error('Storage failure prevented hiding the chat lists');
+    toggles[1].click();
+    if(document.body.classList.contains('chat-lists-hidden')||toggles[0].getAttribute('aria-expanded')!=='true')throw Error('Storage failure prevented showing the chat lists');
+  }finally{Storage.prototype.setItem=setItem;}
   const input=document.querySelector('#form').getBoundingClientRect(),mic=document.querySelector('#mic').getBoundingClientRect(),effort=document.querySelector('.assistant-effort-button').getBoundingClientRect();
   if(mic.top<input.bottom||Math.abs(mic.top-effort.top)>12)throw Error('Mic and Effort should share one row under the message box');
   const [idle,working]=document.querySelectorAll('.sigil img');
@@ -161,6 +169,38 @@ app.whenReady().then(async () => {
       'PASS: Assistant timeline/sidebar, image previews, streaming follow-ups, preserved controls, scroll/search, native-name import paging/workspaces, new chat, Colab switching, hiding the chat lists, one control row, the Beacon and menu icons and three viewport sizes.',
     );
     console.log('Preview: ' + path.join(temp, 'assistant-chat.png'));
+    await win.webContents.executeJavaScript(`localStorage.setItem('atlas.chatListsHidden','1')`);
+    const normalMock = mock;
+    protocol.unhandle('atlas');
+    protocol.handle('atlas', (request) => {
+      const file = new URL(request.url).pathname.slice(1);
+      if (file === '__blocked-mock.js')
+        return new Response(
+          normalMock +
+            `
+          const getItem=Storage.prototype.getItem;
+          Storage.prototype.getItem=function(key){if(key==='atlas.chatListsHidden')throw new DOMException('Storage blocked','SecurityError');return getItem.call(this,key);};`,
+          { headers: { 'Content-Type': 'application/javascript;charset=utf-8' } },
+        );
+      return new Response(
+        file
+          ? fs.readFileSync(path.join(root, file))
+          : fs
+              .readFileSync(path.join(root, 'index.html'), 'utf8')
+              .replace('<head>', '<head><script src="/__blocked-mock.js"></script>'),
+        { headers: { 'Content-Type': file ? 'application/javascript;charset=utf-8' : 'text/html;charset=utf-8' } },
+      );
+    });
+    await win.webContents.session.clearCache();
+    await win.loadURL('atlas://app/');
+    await win.webContents.executeJavaScript(`(async()=>{
+      if(!window.atlasAssistant)throw Error('Blocked chat-list storage prevented Assistant startup');
+      await atlasAssistant.ready;
+      if(document.body.classList.contains('chat-lists-hidden')||document.querySelectorAll('.assistant-past .assistant-turn').length!==40)throw Error('Blocked storage did not fall back to visible lists and load history: '+JSON.stringify({hidden:document.body.classList.contains('chat-lists-hidden'),turns:document.querySelectorAll('.assistant-past .assistant-turn').length,conversationId,selected:localStorage.getItem('atlas.activeConversation')}));
+      document.querySelector('.chat-list-toggle').click();
+      if(!document.body.classList.contains('chat-lists-hidden'))throw Error('Blocked reads prevented list toggling');
+    })()`);
+    console.log('PASS: Chat lists work when preference reads are blocked or writes exceed storage quota.');
   } catch (error) {
     console.error(error);
     process.exitCode = 1;
