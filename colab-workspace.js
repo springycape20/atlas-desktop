@@ -1548,6 +1548,7 @@
       const chat = current()?.messages.length ? makeChat() : current();
       Object.assign(chat, {
         draft: workflow.task,
+        ...(workflow.cwd ? { cwd: workflow.cwd } : {}),
         mode: workflow.mode,
         brief: { criteria: workflow.criteria || '', outOfScope: workflow.outOfScope || '' },
         workflowChecks: workflow.checks || '',

@@ -47,6 +47,13 @@ app.whenReady().then(async () => {
     );
     const out = path.join(root, '.handover', 'ui-navigation');
     fs.mkdirSync(out, { recursive: true });
+    await win.webContents.executeJavaScript(`atlasUi.open('tasks','Plan a task')`);
+    await new Promise((r) => setTimeout(r, 120));
+    await win.webContents.executeJavaScript(
+      `if(!atlasUi.hub.open||!atlasUi.hub.textContent.includes('Review a plan before starting'))throw Error('Task planning screen missing');`,
+    );
+    fs.writeFileSync(path.join(out, 'task-plan.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(`atlasUi.hub.close();new Promise(r=>setTimeout(r,30))`);
     await win.webContents.executeJavaScript(`atlasPower.show('Hardware check')`);
     fs.writeFileSync(path.join(out, 'hardware-check.png'), (await win.webContents.capturePage()).toPNG());
     await win.webContents.executeJavaScript(`atlasPower.close();new Promise(r=>setTimeout(r,30))`);

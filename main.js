@@ -70,6 +70,7 @@ const taskNotifications = require('./task-notifications').createTaskNotification
   getWindow: () => mainWindow,
 });
 let modelCatalogService, updateService, providerUsageService;
+let taskPlanService;
 function providerUsage() {
   return (providerUsageService ||= require('./provider-usage').createProviderUsage({
     codex: async () => {
@@ -1220,6 +1221,11 @@ function setupIpc() {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     return require('./hardware-check').check(request.modelGiB);
   });
+  ipcMain.handle('atlas:task-plans', (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    taskPlanService ||= require('./task-plans').createTaskPlans(app.getPath('userData'));
+    return taskPlanService.action(request);
+  });
   ipcMain.handle('atlas:context-preview', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     if (typeof request.cwd !== 'string' || !path.isAbsolute(request.cwd)) throw Error('Choose a project folder.');
@@ -2020,6 +2026,7 @@ async function createWindow() {
         '/capability-ui.js',
         '/model-routing-ui.js',
         '/hardware-ui.js',
+        '/planning-ui.js',
         '/appearance.js',
         '/appearance-ui.js',
         '/command-menu.js',
