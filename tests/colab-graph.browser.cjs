@@ -109,7 +109,15 @@ app.whenReady().then(async () => {
             name ? 'NOT_PRESENT' : '<head>',
             name ? 'NOT_PRESENT' : '<head><script src="/__test-mock.js"></script>',
           ),
-        { headers: { 'Content-Type': name ? 'application/javascript;charset=utf-8' : 'text/html;charset=utf-8' } },
+        {
+          headers: {
+            'Content-Type': name.endsWith('.css')
+              ? 'text/css'
+              : name
+                ? 'application/javascript;charset=utf-8'
+                : 'text/html;charset=utf-8',
+          },
+        },
       );
     });
     win = new BrowserWindow({ show: false, width: 1400, height: 900, webPreferences: { backgroundThrottling: false } });

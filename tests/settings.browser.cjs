@@ -30,7 +30,7 @@ app.whenReady().then(async () => {
           { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
         );
       return new Response(fs.readFileSync(path.join(root, file)), {
-        headers: { 'Content-Type': 'application/javascript;charset=utf-8' },
+        headers: { 'Content-Type': file.endsWith('.css') ? 'text/css' : 'application/javascript;charset=utf-8' },
       });
     });
     const win = new BrowserWindow({
@@ -49,6 +49,11 @@ app.whenReady().then(async () => {
       const nav=()=>$$('.settings-nav-item');
       $('#settingsOpen').click();await wait(200);
       if(!$('#settingsDialog').open)fail('Settings did not open');
+      const hint=$('.settings-nav-item[aria-current="true"] small'),hintStyle=getComputedStyle(hint);
+      if(parseFloat(hintStyle.fontSize)<13)fail('Settings hint text is too small: '+hintStyle.fontSize);
+      const rgb=s=>s.match(/[\\d.]+/g).slice(0,3).map(Number),lum=c=>c.map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4).reduce((s,x,i)=>s+x*[.2126,.7152,.0722][i],0);
+      const foreground=lum(rgb(hintStyle.color)),background=lum(rgb(getComputedStyle(hint.parentElement).backgroundColor));
+      if((Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05)<4.5)fail('Selected Settings hint contrast is below 4.5:1');
       const order=nav().map(b=>b.dataset.section);
       const expected=['Provider accounts','Models','Assistant','Voice','Microphone','Permissions','Transparency','Startup','App updates','Tools and data'];
       if(JSON.stringify(order)!==JSON.stringify(expected))fail('Section order: '+JSON.stringify(order));

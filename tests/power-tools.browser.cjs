@@ -28,7 +28,11 @@ app.whenReady().then(async () => {
         fs
           .readFileSync(path.join(root, file || 'index.html'), 'utf8')
           .replace(file ? 'NO_REPLACE' : '<head>', file ? 'NO_REPLACE' : '<head><script src="/__mock.js"></script>'),
-        { headers: { 'Content-Type': file ? 'application/javascript' : 'text/html' } },
+        {
+          headers: {
+            'Content-Type': file.endsWith('.css') ? 'text/css' : file ? 'application/javascript' : 'text/html',
+          },
+        },
       );
     });
     const win = new BrowserWindow({

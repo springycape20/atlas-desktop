@@ -2000,6 +2000,8 @@ async function createWindow() {
         '/workflow-ui.js',
         '/parallel-ui.js',
         '/local-model-ui.js',
+        '/ui-shell.js',
+        '/ui-shell.css',
         '/code-syntax.js',
         '/syntax-worker.js',
         '/syntax-highlight.js',
@@ -2010,15 +2012,20 @@ async function createWindow() {
       return new Response('Not found', { status: 404 });
     }
     const javascript = url.pathname.endsWith('.js'),
+      stylesheet = url.pathname.endsWith('.css'),
       image = url.pathname.endsWith('.png');
-    const html = await readFile(path.join(__dirname, javascript || image ? url.pathname.slice(1) : 'index.html'));
+    const html = await readFile(
+      path.join(__dirname, javascript || stylesheet || image ? url.pathname.slice(1) : 'index.html'),
+    );
     return new Response(html, {
       headers: {
         'Content-Type': image
           ? 'image/png'
-          : javascript
-            ? 'application/javascript; charset=utf-8'
-            : 'text/html; charset=utf-8',
+          : stylesheet
+            ? 'text/css; charset=utf-8'
+            : javascript
+              ? 'application/javascript; charset=utf-8'
+              : 'text/html; charset=utf-8',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'no-referrer',
       },

@@ -1,0 +1,85 @@
+:root {
+  --atlas-text-scale: 1;
+  --atlas-label: 14px;
+  --atlas-meta: 12px;
+  --atlas-body: 15px;
+  --atlas-focus: #a6e1e9;
+  color-scheme: dark;
+}
+body.atlas-ui {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+:root
+  body.atlas-ui
+  :is(
+    .nav-item,
+    .quiet-button,
+    .primary-button,
+    .settings-nav-item,
+    .field,
+    .toggle-row,
+    .power-dialog button,
+    .productivity-dialog nav button
+  ) {
+  font-size: calc(var(--atlas-label) * var(--atlas-text-scale));
+}
+:root
+  body.atlas-ui
+  :is(
+    .setting-note,
+    .field small,
+    .toggle-row small,
+    .settings-body p,
+    .workspace-dialog p,
+    .productivity-dialog p,
+    .power-body p
+  ) {
+  font-size: calc(14px * var(--atlas-text-scale));
+  line-height: 1.6;
+}
+:root body.atlas-ui .settings-nav-item small {
+  font-size: calc(13px * var(--atlas-text-scale));
+  color: #a8bac3;
+  line-height: 1.45;
+}
+:root body.atlas-ui .settings-nav-item[aria-current='true'] small {
+  color: #d0e0e7;
+}
+:root body.atlas-ui :is(.setting-section h3, .power-body h3, .workspace-dialog h3) {
+  font-size: calc(16px * var(--atlas-text-scale));
+}
+:root body.atlas-ui :is(.assistant-turn .answer, .colab-message p, #output, .power-body, .workspace-dialog-body) {
+  font-size: calc(var(--atlas-body) * var(--atlas-text-scale));
+}
+:root body.atlas-ui :is(.assistant-chat-item span, .colab-chat-item span, .settings-search, .history-search) {
+  font-size: calc(var(--atlas-label) * var(--atlas-text-scale));
+}
+:root
+  body.atlas-ui
+  :is(
+    .assistant-chat-item small,
+    .colab-chat-item small,
+    .colab-message time,
+    .colab-compose-footer [role='status'],
+    .voice-hint,
+    .attachment-project,
+    .power-status,
+    .colab-run-details,
+    .colab-work-note
+  ) {
+  font-size: calc(var(--atlas-meta) * var(--atlas-text-scale));
+  line-height: 1.5;
+}
+:root body.atlas-ui :is(button, input, select, textarea, summary, a):focus-visible {
+  outline: 2px solid var(--atlas-focus);
+  outline-offset: 3px;
+}
+:root body.atlas-ui :is(.quiet-button, .primary-button, .power-dialog button) {
+  min-height: 36px;
+}
+:root body.atlas-ui :is(dialog, .workspace-drawer, .power-body, .settings-body) {
+  overscroll-behavior: contain;
+}
+:root body.atlas-ui .setting-note {
+  color: #a8b8c1;
+}

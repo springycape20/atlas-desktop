@@ -205,6 +205,12 @@ test('the real app protocol serves every renderer script while blocking private 
     assert.match(response.headers.get('Content-Type'), /javascript/);
     new vm.Script(await response.text());
   }
+  for (const stylesheet of html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"/g)) {
+    const response = await handler({ url: 'atlas://app' + stylesheet[1] }, fs.readFile, path, root);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('Content-Type'), /text\/css/);
+    assert.ok((await response.text()).length > 100);
+  }
   for (const image of html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/g)) {
     const response = await handler({ url: 'atlas://app' + image[1] }, fs.readFile, path, root);
     assert.equal(response.status, 200, image[1] + ' must be served');

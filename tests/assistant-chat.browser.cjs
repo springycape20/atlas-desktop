@@ -78,7 +78,7 @@ app.whenReady().then(async () => {
           { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
         );
       return new Response(fs.readFileSync(path.join(root, file)), {
-        headers: { 'Content-Type': 'application/javascript;charset=utf-8' },
+        headers: { 'Content-Type': file.endsWith('.css') ? 'text/css' : 'application/javascript;charset=utf-8' },
       });
     });
     win = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { backgroundThrottling: false } });
@@ -201,7 +201,15 @@ app.whenReady().then(async () => {
           : fs
               .readFileSync(path.join(root, 'index.html'), 'utf8')
               .replace('<head>', '<head><script src="/__blocked-mock.js"></script>'),
-        { headers: { 'Content-Type': file ? 'application/javascript;charset=utf-8' : 'text/html;charset=utf-8' } },
+        {
+          headers: {
+            'Content-Type': file?.endsWith('.css')
+              ? 'text/css'
+              : file
+                ? 'application/javascript;charset=utf-8'
+                : 'text/html;charset=utf-8',
+          },
+        },
       );
     });
     await win.webContents.session.clearCache();
