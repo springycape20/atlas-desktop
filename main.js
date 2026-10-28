@@ -1216,6 +1216,10 @@ function setupIpc() {
       runningTasks: [...activeJobs.values()].filter((job) => job.status === 'running').length,
     };
   });
+  ipcMain.handle('atlas:hardware-check', (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    return require('./hardware-check').check(request.modelGiB);
+  });
   ipcMain.handle('atlas:context-preview', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     if (typeof request.cwd !== 'string' || !path.isAbsolute(request.cwd)) throw Error('Choose a project folder.');
@@ -2015,6 +2019,7 @@ async function createWindow() {
         '/ui-shell.js',
         '/capability-ui.js',
         '/model-routing-ui.js',
+        '/hardware-ui.js',
         '/appearance.js',
         '/appearance-ui.js',
         '/command-menu.js',

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('atlas', {
   projectSetup: (request) => ipcRenderer.invoke('atlas:project-setup', request),
   projectKnowledge: (request) => ipcRenderer.invoke('atlas:project-knowledge', request),
   performance: () => ipcRenderer.invoke('atlas:performance'),
+  hardwareCheck: (request) => ipcRenderer.invoke('atlas:hardware-check', request),
   contextPreview: (request) => ipcRenderer.invoke('atlas:context-preview', request),
   workflows: (request) => ipcRenderer.invoke('atlas:workflows', request),
   localModel: (request) => ipcRenderer.invoke('atlas:local-model', request),
