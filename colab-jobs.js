@@ -338,6 +338,8 @@ function createColabJobs({
           fingerprint: async () => (job.changeId ? changes().fingerprint(job.changeId) : null),
           checkpoint: async (reports) => {
             job.checkpoints = reports;
+            // Seal only at a completed stage. A crash mid-stage leaves mismatching files that restore refuses.
+            if (job.changeId) await changes().seal(job.changeId);
             await persist();
             await flush();
           },

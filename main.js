@@ -1009,6 +1009,7 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       preparedProposals,
       graph,
       graphRunId,
+      recoveryNote,
     } = job;
     return {
       id,
@@ -1039,6 +1040,7 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       recoveryChangeId,
       sessions,
       graphRunId,
+      recoveryNote,
       ...(graphs ? { graph } : {}),
       ...(persist ? { preparedProposals } : {}),
       budget: budget
@@ -1942,6 +1944,7 @@ async function createWindow() {
         '/productivity-ui.js',
         '/settings-nav.js',
         '/power-tools-ui.js',
+        '/recovery-ui.js',
         '/code-syntax.js',
         '/syntax-worker.js',
         '/syntax-highlight.js',
@@ -2055,13 +2058,7 @@ app.whenReady().then(async () => {
     },
   });
   for (const saved of assistantService.state.jobs || []) {
-    const status = saved.status === 'running' ? 'paused' : saved.status;
-    activeJobs.set(saved.id, {
-      ...saved,
-      status,
-      graph: saved.graph ? require('./colab-graph').terminal(saved.graph, status, saved.verification) : undefined,
-      child: null,
-    });
+    activeJobs.set(saved.id, require('./task-recovery').recoverSavedJob(saved));
   }
   setInterval(() => assistantService.tick(), 1000).unref();
   providerHealth = new (require('./provider-health').ProviderHealth)(
