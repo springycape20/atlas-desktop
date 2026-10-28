@@ -1416,7 +1416,11 @@
     }
     const heading = document.createElement('h4');
     heading.textContent =
-      name(dispute.builder) + ' and ' + name(dispute.reviewer) + ' disagree. Choose who is right to continue.';
+      'Needs your decision · ' +
+      name(dispute.builder) +
+      ' and ' +
+      name(dispute.reviewer) +
+      ' propose different approaches.';
     box.append(heading);
     for (const issue of dispute.issues) {
       const card = document.createElement('section'),
@@ -1429,8 +1433,8 @@
       reviewerSide.textContent = name(dispute.reviewer) + ' (reviewer): ' + issue.reviewerEvidence;
       choices.className = 'colab-dispute-choices';
       for (const [side, label] of [
-        ['builder', name(dispute.builder) + ' is right'],
-        ['reviewer', name(dispute.reviewer) + ' is right'],
+        ['builder', 'Use ' + name(dispute.builder) + '’s approach'],
+        ['reviewer', 'Use ' + name(dispute.reviewer) + '’s approach'],
       ]) {
         const button = document.createElement('button');
         button.type = 'button';

@@ -91,15 +91,15 @@ app.whenReady().then(async () => {
       const box=document.querySelector('#colabDispute'),buttons=()=>[...box.querySelectorAll('button')];
       if(box.hidden)throw Error('Dispute card is hidden');if(!box.getClientRects().length||box.closest('details:not([open])'))throw Error('Dispute card is not visible on screen');
       if(!document.querySelector('#colabResume').hidden)throw Error('Generic resume should be replaced by the dispute card');
-      if(!box.textContent.includes('Codex and Claude disagree'))throw Error('Heading missing: '+box.textContent);
+      if(!box.textContent.includes('Needs your decision'))throw Error('Heading missing: '+box.textContent);
       if(!box.textContent.includes('Codex (builder): transport.js already retries'))throw Error('Builder side missing');
       if(!box.textContent.includes('Claude (reviewer): Only GET is retried'))throw Error('Reviewer side missing');
       if(box.querySelector('img'))throw Error('Provider text was rendered as HTML');
       const proceed=()=>buttons().find(b=>b.textContent==='Continue with these rulings');
       if(!proceed().disabled)throw Error('Continue must wait for every ruling');
-      buttons().filter(b=>b.textContent==='Codex is right')[0].click();
+      buttons().filter(b=>b.textContent==='Use Codex’s approach')[0].click();
       if(!proceed().disabled)throw Error('Continue enabled with one blocker undecided');
-      buttons().filter(b=>b.textContent==='Claude is right')[1].click();
+      buttons().filter(b=>b.textContent==='Use Claude’s approach')[1].click();
       if(buttons().filter(b=>b.getAttribute('aria-pressed')==='true').length!==2)throw Error('Choices are not shown as selected');
       if(proceed().disabled)throw Error('Continue stayed disabled');
       proceed().click();await new Promise(r=>setTimeout(r,100));

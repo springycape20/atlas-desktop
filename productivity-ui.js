@@ -19,6 +19,7 @@
   modal.append(header, tabs, body, status);
   document.body.append(modal);
   let page = 'Queue',
+    embedded = null,
     generation = 0,
     queueState,
     pending = [],
@@ -56,7 +57,7 @@
     body.replaceChildren();
     status.textContent = '';
     const version = ++generation;
-    if (!modal.open) modal.showModal();
+    if (!modal.open && !embedded) modal.showModal();
     try {
       await sections[name](version);
     } catch (error) {
@@ -994,7 +995,7 @@
   });
   api.onQueue((state) => {
     queueState = state;
-    if (modal.open && page === 'Queue') {
+    if ((modal.open || embedded) && page === 'Queue') {
       const list = body.querySelector('#queueItems');
       if (list) renderQueueItems(list, state);
       const label = body.querySelector('#queueState');
@@ -1015,5 +1016,21 @@
     .then(syncApprovals)
     .catch(() => {});
   void refreshApprovalJobs();
-  window.atlasWorkbench = { open };
+  window.atlasWorkbench = {
+    open,
+    mount: async (name, host) => {
+      embedded?.();
+      if (modal.open) modal.close();
+      const restore = () => {
+        if (embedded !== restore) return;
+        embedded = null;
+        generation++;
+        modal.append(body, status);
+      };
+      embedded = restore;
+      host.append(body, status);
+      await open(name);
+      return restore;
+    },
+  };
 })();

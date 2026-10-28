@@ -218,5 +218,13 @@
   }).observe(body, { childList: true });
   known = names();
   arrange();
-  window.atlasSettings = { show: (name) => show(name), current: () => current };
+  window.atlasSettings = {
+    show: (name) => show(name),
+    current: () => current,
+    register: (section) => {
+      body.append(section);
+      known = names();
+      arrange();
+    },
+  };
 })();

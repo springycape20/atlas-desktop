@@ -84,7 +84,7 @@
         button(
           'Review changes',
           () => {
-            power.dialog.close();
+            power.close();
             return window.atlasWorkspace.review(row.result.workspaceId);
           },
           details,
@@ -94,7 +94,7 @@
           'Open task',
           async () => {
             await api.taskOpen(row.result.jobId);
-            power.dialog.close();
+            power.close();
           },
           details,
         );

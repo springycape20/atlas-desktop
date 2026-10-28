@@ -31,7 +31,7 @@
         'Open task',
         async () => {
           await api.taskOpen(job.id);
-          power.dialog.close();
+          power.close();
         },
         actions,
       );

@@ -68,11 +68,21 @@ app.whenReady().then(async () => {
       `(async()=>{const wait=async fn=>{for(let i=0;i<100;i++){if(fn())return;await new Promise(resolve=>setTimeout(resolve,10));}throw Error('PowerShell UI did not update');};atlasColab.selectChat('colab-one');const shell=document.querySelector('.shell-control-bar[data-workspace="colab"]');if(!shell||!shell.hidden)throw Error('PowerShell bar shown without a grant');testShell=[{owner:'colab:colab-one',id:'shell'}];for(const fn of permissionListeners)fn(testPermissions);await wait(()=>!shell.hidden);if(!shell.textContent.includes('PowerShell allowed for this chat'))throw Error('PowerShell bar text missing');if(!document.querySelector('.colab-run-details>summary').textContent.includes('PowerShell allowed'))throw Error('Collapsed run details hide the PowerShell grant');atlasColab.selectChat('colab-two');if(!shell.hidden)throw Error('PowerShell grant leaked to another chat');atlasColab.selectChat('colab-one');if(shell.hidden)throw Error('PowerShell bar did not return');shell.querySelector('button').click();await wait(()=>shell.hidden);if(shellRevokes!==1)throw Error('Revoke did not call revoke-shell');await wait(()=>[...document.querySelectorAll('.task-command')].some(node=>node.textContent.includes('npm run build')));const command=[...document.querySelectorAll('.task-command')].find(node=>node.textContent.includes('npm run build'));if(!command.querySelector('summary').textContent.includes('approved for this chat'))throw Error('Command row does not say how it was approved: '+command.querySelector('summary').textContent);if(!command.textContent.includes('built ok'))throw Error('Command output missing');})()`,
     );
     const compact = await win.webContents.executeJavaScript(
-      `(()=>{atlasColab.selectChat('colab-one');const main=document.querySelector('.colab-chat-main'),transcript=document.querySelector('#colabTranscript'),form=document.querySelector('#colabForm'),details=document.querySelector('.colab-run-details');return {main:main.clientHeight,transcript:transcript.clientHeight,composer:form.offsetHeight,collapsed:!details.open};})()`,
+      `(async()=>{atlasColab.selectChat('colab-one');await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));const main=document.querySelector('.colab-chat-main'),transcript=document.querySelector('#colabTranscript'),form=document.querySelector('#colabForm'),details=document.querySelector('.colab-run-details');return {main:main.clientHeight,transcript:transcript.clientHeight,composer:form.offsetHeight,collapsed:!details.open};})()`,
     );
+    if (process.env.ATLAS_COMPACT_CAPTURE)
+      fs.writeFileSync(process.env.ATLAS_COMPACT_CAPTURE, (await win.webContents.capturePage()).toPNG());
     assert(compact.collapsed);
     assert(compact.composer < 155, JSON.stringify(compact));
-    assert(compact.transcript > compact.main * 0.5, JSON.stringify(compact));
+    assert(
+      compact.transcript > compact.main * 0.5,
+      JSON.stringify({
+        ...compact,
+        rows: await win.webContents.executeJavaScript(
+          `[...document.querySelector('.colab-chat-main').children].map(el=>({name:el.className,height:Math.round(el.getBoundingClientRect().height)}))`,
+        ),
+      }),
+    );
     await new Promise((resolve) => setTimeout(resolve, 250));
     assert.equal(await win.webContents.executeJavaScript('document.body.dataset.workspace'), 'colab');
     if (process.env.ATLAS_COMPACT_CAPTURE)

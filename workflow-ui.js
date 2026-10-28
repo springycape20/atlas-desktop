@@ -68,7 +68,7 @@
         const workflow = read();
         if (!workflow.task.trim()) throw Error('Enter a task first.');
         window.atlasColab.applyWorkflow(workflow);
-        power.dialog.close();
+        power.close();
       },
       actions,
     ).className = 'power-primary';

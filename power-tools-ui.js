@@ -50,7 +50,8 @@
   document.body.append(dialog);
   const views = new Map();
   let currentView = '',
-    sequence = 0;
+    sequence = 0,
+    embedded = null;
   function button(text, action, parent = body) {
     const item = node('button', text);
     item.type = 'button';
@@ -74,7 +75,9 @@
     status.textContent = '';
     for (const item of nav.querySelectorAll('button'))
       item.setAttribute('aria-current', String(item.textContent === name));
-    if (!dialog.open) dialog.showModal();
+    title.textContent = 'ATLAS · ' + name;
+    nav.hidden = true;
+    if (!dialog.open && !embedded) dialog.showModal();
     try {
       await views.get(name)?.({ body, status, node, button, current: () => id === sequence });
     } catch (error) {
@@ -264,6 +267,24 @@
     node,
     button,
     dialog,
+    close: () => {
+      if (embedded) embedded.onClose();
+      else dialog.close();
+    },
+    mount: async (name, host, onClose) => {
+      embedded?.restore();
+      if (dialog.open) dialog.close();
+      const restore = () => {
+        if (embedded?.restore !== restore) return;
+        embedded = null;
+        sequence++;
+        dialog.append(body, status);
+      };
+      embedded = { restore, onClose };
+      host.append(body, status);
+      await show(name);
+      return restore;
+    },
     body,
     status,
     currentView: () => currentView,

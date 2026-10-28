@@ -73,6 +73,7 @@
   ]) {
     const item = button(label, action, nav);
     item.className = 'nav-item';
+    item.dataset.destination = label.toLowerCase();
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     for (const [key, value] of Object.entries({
       viewBox: '0 0 24 24',
@@ -1095,6 +1096,7 @@
     $id('prompt').focus();
   }
   window.atlasWorkspace = {
+    open: { projects: showProjects, history: showHistory, diagnostics: showDiagnostics },
     importChats: showImport,
     refreshProfiles: async () => {
       profiles = await api.projects();
