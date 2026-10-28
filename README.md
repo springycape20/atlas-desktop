@@ -46,13 +46,13 @@ Also in Colab:
 - **Effort and cost controls.** Economy, Balanced and Thorough presets, an optional pass limit, and an optional token warning.
 - **Resumable runs.** Stopped or paused tasks continue from their saved stages.
 
-## In development: project tools
+## Project tools in 0.9.0
 
-The source branch adds local project indexing, context controls, runtime measurements, a task recovery view, reusable Colab workflows, parallel batches with combined integration checks, and optional local-model text chat. These features are intended for the next release; the published 0.8.3 installer does not include them. See the [project tools guide](docs/PROJECT-TOOLS.md) for usage and limits.
+Version 0.9.0 adds local project indexing, context controls, runtime measurements, a task recovery view, reusable Colab workflows, parallel batches with combined integration checks, and optional local-model text chat. These features are included in 0.9.0. See the [project tools guide](docs/PROJECT-TOOLS.md) for usage and limits.
 
-The development UI also groups tools under Tasks, Library and Settings, adds Ctrl+K navigation search, resizable conversation lists and readable task summaries, and offers theme, text-size and spacing preferences in Settings > Appearance.
+The interface also groups tools under Tasks, Library and Settings, adds Ctrl+K navigation search, resizable conversation lists and readable task summaries, and offers theme, text-size and spacing preferences in Settings > Appearance.
 
-Further development tools add editable task plans with approval, opt-in fast/strong model tiers, project-scoped memory, local hardware capacity checks, project environment recipes, a unified review centre, live progress estimates and search across local work. See the [capability guide](docs/PROJECT-TOOLS.md) for locations and limits.
+Additional tools include editable task plans with approval, opt-in fast/strong model tiers, project-scoped memory, local hardware capacity checks, project environment recipes, a unified review centre, live progress estimates and search across local work. See the [capability guide](docs/PROJECT-TOOLS.md) for locations and limits.
 
 ## Install
 

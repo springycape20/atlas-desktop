@@ -1,8 +1,8 @@
-# Project tools (next release)
+# Project tools (0.9.0)
 
-Use **Tasks** for running work, the queue, parallel batches, recovery, reminders and approvals. **Library** contains memories and workflows. **Settings > Models** opens local-model configuration, and **Settings > Diagnostics** opens performance measurements. **Context** beside either composer previews context for the current chat. These changes are on the development branch and are not part of the published 0.8.3 installer.
+Use **Tasks** for running work, the queue, parallel batches, recovery, reminders and approvals. **Library** contains memories and workflows. **Settings > Models** opens local-model configuration, and **Settings > Diagnostics** opens performance measurements. **Context** beside either composer previews context for the current chat. These tools are included in ATLAS 0.9.0.
 
-## Capability upgrades (development source)
+## Capability upgrades
 
 | Feature | Location | Behavior |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ Use **Tasks** for running work, the queue, parallel batches, recovery, reminders
 | Live progress | Tasks > Progress | Refreshes while open; shows stage, elapsed time, pending decisions and recorded checks. A remaining-time range uses up to 40 recent comparable successful tasks, with at least four samples. It is not a completion guarantee. |
 | Search all work | Library > Search all work, Ctrl+Shift+F | Combines retained task/message results, local provider transcripts, Colab chats and saved decisions. Source-file excerpts are optional and use the existing bounded index and credential exclusions. Results cap at 200 and identify unavailable sources. |
 
-These features are local development changes, not part of the public 0.8.3 installer. Model routing changes model choice, not permissions. Memories, plans, recipes and source excerpts never grant access or authorize tool execution by themselves.
+These features are included in 0.9.0. Model routing changes model choice, not permissions. Memories, plans, recipes and source excerpts never grant access or authorize tool execution by themselves.
 
 ## Navigation and readability
 
