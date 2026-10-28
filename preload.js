@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('atlas', {
   integrations: (request) => ipcRenderer.invoke('atlas:integrations', request),
   pluginConnect: (request) => ipcRenderer.invoke('atlas:plugin-connect', request),
   projectSetup: (request) => ipcRenderer.invoke('atlas:project-setup', request),
+  projectKnowledge: (request) => ipcRenderer.invoke('atlas:project-knowledge', request),
   searchWork: (request) => ipcRenderer.invoke('atlas:search-work', request),
   taskOpen: (id) => ipcRenderer.invoke('atlas:task-open', { id }),
   onDesktopPermissions: (callback) => {

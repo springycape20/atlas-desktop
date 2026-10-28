@@ -11,6 +11,8 @@ const skipped = new Set([
   '.azure',
   '.gnupg',
   '.kube',
+  '.handover',
+  '.agents',
   'node_modules',
   'vendor',
   '.venv',
@@ -150,6 +152,6 @@ function createProjectContext({ directory, listFiles } = {}) {
       row.commands.join('\n')
     ).slice(0, limit);
   }
-  return { context, flush: () => store?.flush() };
+  return { context, files, flush: () => store?.flush() };
 }
-module.exports = { createProjectContext };
+module.exports = { createProjectContext, allowed };

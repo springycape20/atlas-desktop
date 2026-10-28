@@ -19,6 +19,7 @@ function createColabJobs({
   workspace,
   changes,
   projectContext,
+  knowledge,
   integrations,
   approvals,
   taskChecks,
@@ -94,6 +95,7 @@ function createColabJobs({
         criteria: typeof source.brief?.criteria === 'string' ? source.brief.criteria.slice(0, 4000) : '',
         outOfScope: typeof source.brief?.outOfScope === 'string' ? source.brief.outOfScope.slice(0, 2000) : '',
       },
+      contextSelection: require('./context-selection').selection(source.contextSelection),
       task,
       cwd: folder,
       chatId:
@@ -238,11 +240,15 @@ function createColabJobs({
             }),
         });
         const formatReviewContext = require('./review-context').createReviewContext();
-        const navigation = require('./colab-answer').isSimpleMessage(task)
+        let navigation = require('./colab-answer').isSimpleMessage(task)
           ? ''
           : await projectContext()
               .context(job.cwd, task, { signal: job.signal })
               .catch(() => '');
+        if (request.contextSelection.project && knowledge) {
+          const indexed = await knowledge().search(job.cwd, task, { excluded: request.contextSelection.files });
+          navigation += '\n\n' + require('./project-knowledge').formatKnowledge(indexed);
+        }
         // Provider-written commands ATLAS runs itself (reproductions, milestone checks), logged in the task activity.
         const runJobCommand = async (label, command, start) => {
           job.statusText = label + ': ' + command;
