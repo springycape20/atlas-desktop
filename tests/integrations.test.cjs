@@ -35,9 +35,24 @@ async function fixture(t, options = {}) {
     await fs.rm(directory, { recursive: true, force: true });
   });
   const call = (name, args) => client.callTool({ name, arguments: args });
-  const waitApproval = async () => {
-    for (let i = 0; i < 100 && !approvals.list().length; i++) await tick();
-    assert(approvals.list().length, 'approval expected');
+  const waitApproval = async ({ timeoutMs = 1500, pending } = {}) => {
+    let completed;
+    pending?.then(
+      (result) => {
+        completed = { result };
+      },
+      (error) => {
+        completed = { error };
+      },
+    );
+    const deadline = Date.now() + timeoutMs;
+    while (!approvals.list().length && !completed && Date.now() < deadline) await tick();
+    if (completed?.error) throw completed.error;
+    assert(
+      approvals.list().length,
+      'approval expected' +
+        (completed ? ' but tool finished first: ' + JSON.stringify(completed.result) : ' within ' + timeoutMs + 'ms'),
+    );
     return approvals.list()[0];
   };
   return { directory, approvals, events, service, controller, job, binding, client, call, waitApproval };
@@ -1076,7 +1091,7 @@ for (const choice of ['Allow once', 'Screen control', 'Allow for this chat'])
       let appPid;
       if (choice === 'Screen control') {
         const warm = f.call('integrations_call', { id: 'windows', tool: 'ControlStatus' });
-        f.approvals.answer((await f.waitApproval()).id, 'Allow');
+        f.approvals.answer((await f.waitApproval({ timeoutMs: 10000, pending: warm })).id, 'Allow');
         assert(!(await warm).isError);
         assert.equal((await f.service.desktopPermissions()).length, 1);
         const launched = await connections.at(-1).call('App', {}, f.controller.signal);
@@ -1092,7 +1107,7 @@ for (const choice of ['Allow once', 'Screen control', 'Allow for this chat'])
           command: `[IO.File]::WriteAllText('${marker.replace(/'/g, "''")}',[string]$PID); Start-Sleep -Seconds 60`,
         },
       });
-      const approval = await f.waitApproval();
+      const approval = await f.waitApproval({ timeoutMs: 10000, pending: request });
       f.approvals.answer(approval.id, 'Allow once');
       let shellPid;
       for (let i = 0; i < 500; i++) {

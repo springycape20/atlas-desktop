@@ -61,6 +61,7 @@ test('diagnostic logs redact labelled credentials, bearer tokens and private key
     'Proxy-Authorization: Digest example-digest-value',
     'api_key=example-key-value',
     JSON.stringify({ accessToken: 'example-oauth-value', password: 'example-password-value' }),
+    JSON.stringify({ token: 'example-token-value', authToken: 'example-auth-token-value' }),
     JSON.stringify({ password: 'private phrase with spaces and "quotes"' }),
     '-----BEGIN PRIVATE KEY-----\nexample-private-value\n-----END PRIVATE KEY-----',
   ])
@@ -72,6 +73,8 @@ test('diagnostic logs redact labelled credentials, bearer tokens and private key
     'example-digest-value',
     'example-key-value',
     'example-oauth-value',
+    'example-token-value',
+    'example-auth-token-value',
     'example-password-value',
     'example-private-value',
   ])
