@@ -120,6 +120,7 @@ contextBridge.exposeInMainWorld('atlas', {
       profileId: payload?.profileId,
       attachments: payload?.attachments,
       effort: typeof payload?.effort === 'string' ? payload.effort : undefined,
+      modelTier: payload?.modelTier,
       maxRuntimeSeconds: payload?.maxRuntimeSeconds,
       cwd: typeof payload?.cwd === 'string' ? payload.cwd : '',
       prompt: typeof payload?.prompt === 'string' ? payload.prompt : '',

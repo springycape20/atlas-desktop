@@ -1024,6 +1024,7 @@ async function sendMessage(prompt, options = {}) {
   $('#followup').hidden = true;
   try {
     const d = await window.atlas.chat({
+      modelTier: document.getElementById('messageModelTier')?.value || 'auto',
       cwd: options.cwd || cwd,
       prompt,
       conversationId: currentConversation,

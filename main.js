@@ -292,6 +292,7 @@ const colabJobs = require('./colab-jobs').createColabJobs({
 function defaultSettings() {
   return {
     ...require('./appearance').defaults,
+    ...require('./model-policy').clean({}),
     routeMode: 'auto',
     localModelEnabled: false,
     localModelBaseUrl: 'http://127.0.0.1:11434/v1',
@@ -335,6 +336,7 @@ function sanitizeSettings(value) {
   const cleanModel = (input) => (typeof input === 'string' && modelIdPattern.test(input) ? input : '');
   return {
     ...require('./appearance').clean(value),
+    ...require('./model-policy').clean(value),
     routeMode: ['auto', 'codex', 'claude'].includes(value?.routeMode) ? value.routeMode : defaults.routeMode,
     localModelEnabled: value?.localModelEnabled === true,
     localModelBaseUrl,
@@ -1820,6 +1822,13 @@ async function handleChat(event, data) {
     route.provider = availableProvider;
     route.reason = 'temporarily avoiding ' + preferredProvider + ' usage limit';
   }
+  const modelChoice = require('./model-policy').select(settings, prompt, {
+    provider: route.provider,
+    tier: data.modelTier || 'auto',
+    pinned: Boolean(project?.[route.provider + 'Model']),
+  });
+  if (modelChoice.model) settings[route.provider + 'Model'] = modelChoice.model;
+  route.reason += ' · ' + modelChoice.reason;
   const historyRequested = contextSelection.history && historyLookupRequested(prompt);
   const referencedHistory = historyRequested ? await findReferencedProviderHistory(prompt) : [];
   const earlierTurns = conversation.turns
@@ -2005,6 +2014,7 @@ async function createWindow() {
         '/local-model-ui.js',
         '/ui-shell.js',
         '/capability-ui.js',
+        '/model-routing-ui.js',
         '/appearance.js',
         '/appearance-ui.js',
         '/command-menu.js',

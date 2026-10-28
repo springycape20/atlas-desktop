@@ -47,6 +47,9 @@ app.whenReady().then(async () => {
     );
     const out = path.join(root, '.handover', 'ui-navigation');
     fs.mkdirSync(out, { recursive: true });
+    await win.webContents.executeJavaScript(`atlasPower.show('Model routing')`);
+    fs.writeFileSync(path.join(out, 'model-routing.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(`atlasPower.close();new Promise(r=>setTimeout(r,30))`);
     await win.webContents.executeJavaScript(`atlasUi.open('library','Project memory')`);
     fs.writeFileSync(path.join(out, 'project-memory.png'), (await win.webContents.capturePage()).toPNG());
     await win.webContents.executeJavaScript(`atlasUi.hub.close();new Promise(r=>setTimeout(r,30))`);
