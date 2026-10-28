@@ -96,6 +96,7 @@ function createColabJobs({
         outOfScope: typeof source.brief?.outOfScope === 'string' ? source.brief.outOfScope.slice(0, 2000) : '',
       },
       contextSelection: require('./context-selection').selection(source.contextSelection),
+      workflowChecks: require('./workflow-templates').cleanChecks(source.workflowChecks),
       task,
       cwd: folder,
       chatId:
@@ -209,7 +210,12 @@ function createColabJobs({
           });
       };
       try {
-        const project = previous?.projectSnapshot || (await workspace().profile(request.profileId));
+        const project =
+          previous?.projectSnapshot ||
+          require('./workflow-templates').workflowProject(
+            await workspace().profile(request.profileId),
+            request.workflowChecks,
+          );
         job.projectSnapshot = project;
         const attachmentContext = await workspace().attachmentContext(request.attachments);
         if (job.workspaceId) {

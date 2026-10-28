@@ -208,6 +208,7 @@ async function finishTask(job) {
 let workspaceService;
 let projectContextService;
 let knowledgeService;
+let workflowService;
 function knowledge() {
   return (knowledgeService ||= new (require('./knowledge-client').KnowledgeClient)());
 }
@@ -1226,6 +1227,11 @@ function setupIpc() {
       note: 'Preview of optional ATLAS additions. Provider instructions, retained sessions, tools and file reads may add context. Restricting a category starts a fresh Assistant provider session. File exclusions apply to ATLAS project excerpts and navigation, not provider file permissions.',
     };
   });
+  ipcMain.handle('atlas:workflows', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    workflowService ||= require('./workflow-templates').createWorkflowTemplates(app.getPath('userData'));
+    return workflowService.action(request);
+  });
   // Answers to the once-per-project offer to turn on completion checks, or a one-off run of the
   // offered checks on a finished task. Only commands recorded with the offer can run.
   ipcMain.handle('atlas:check-offer', async (event, request = {}) => {
@@ -1945,6 +1951,7 @@ async function createWindow() {
         '/settings-nav.js',
         '/power-tools-ui.js',
         '/recovery-ui.js',
+        '/workflow-ui.js',
         '/code-syntax.js',
         '/syntax-worker.js',
         '/syntax-highlight.js',

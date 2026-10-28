@@ -53,6 +53,14 @@ app.whenReady().then(async () => {
     );
     await new Promise((r) => setTimeout(r, 150));
     fs.writeFileSync(path.join(shots, 'recovery.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `(async()=>{atlas.workflows=async()=>[{id:'fixture',name:'Voice bug workflow',task:'Reproduce and fix the voice bug',mode:'debug',criteria:'Reproduction passes after the fix',checks:'npm test',builtin:false}];await atlasPower.show('Workflows');const picker=document.querySelector('#powerDialog select');picker.value='fixture';picker.dispatchEvent(new Event('change'));})()`,
+    );
+    await new Promise((r) => setTimeout(r, 150));
+    fs.writeFileSync(path.join(shots, 'workflows.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `(async()=>{await atlasColab.ready;[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Use draft in Colab').click();await new Promise(r=>setTimeout(r,30));const chat=atlasColab.current();if(chat.draft!=='Reproduce and fix the voice bug'||chat.workflowChecks!=='npm test'||chat.busy)throw Error('Workflow did not produce an unsent draft');await atlasPower.show('Workflows');})()`,
+    );
     win.setContentSize(640, 600);
     await win.webContents.executeJavaScript(
       `if(document.querySelector('#powerDialog').getBoundingClientRect().right>innerWidth+1)throw Error('Dialog overflow');`,
