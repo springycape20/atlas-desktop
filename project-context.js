@@ -11,6 +11,8 @@ const skipped = new Set([
   '.azure',
   '.gnupg',
   '.kube',
+  '.handover',
+  '.agents',
   'node_modules',
   'vendor',
   '.venv',
@@ -26,7 +28,7 @@ const allowed = (name) =>
   !/[\x00-\x1f\x7f]/.test(name) &&
   !path.isAbsolute(name) &&
   !path.win32.isAbsolute(name) &&
-  !name.split(/[\\/]/).some((part) => part === '..' || skipped.has(part)) &&
+  !name.split(/[\\/]/).some((part) => part === '..' || skipped.has(part.toLowerCase())) &&
   !/(?:^|\/)(?:\.env(?:\..*)?|auth\.json|credentials[^/]*\.json|\.npmrc|\.netrc|\.git-credentials|id_rsa[^/]*|secrets\.[^/]*)$|\.(?:pem|key|pfx|p12|token)$/i.test(
     name,
   );
@@ -95,11 +97,11 @@ function createProjectContext({ directory, listFiles } = {}) {
       return rows.sort();
     }
   }
-  async function context(cwd, task, { limit = 6000, signal } = {}) {
+  async function context(cwd, task, { limit = 6000, signal, excluded = [] } = {}) {
     signal?.throwIfAborted();
     await load();
     const root = await fs.realpath(cwd),
-      candidates = await files(root, signal),
+      candidates = (await files(root, signal)).filter((name) => !excluded.includes(name)),
       words =
         String(task)
           .toLowerCase()
@@ -150,6 +152,6 @@ function createProjectContext({ directory, listFiles } = {}) {
       row.commands.join('\n')
     ).slice(0, limit);
   }
-  return { context, flush: () => store?.flush() };
+  return { context, files, flush: () => store?.flush() };
 }
-module.exports = { createProjectContext };
+module.exports = { createProjectContext, allowed };

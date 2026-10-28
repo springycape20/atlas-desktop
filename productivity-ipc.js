@@ -38,8 +38,8 @@ function registerProductivityIpc({
       return fn(request);
     });
   handle('task-queue', async (request) => {
-    if (request.action === 'add' && request.task?.provider === 'colab') {
-      const status = await workspace().repository(request.task.cwd);
+    if ((request.action === 'add' && request.task?.provider === 'colab') || request.action === 'add-batch') {
+      const status = await workspace().repository(request.action === 'add-batch' ? request.cwd : request.task.cwd);
       if (!status.exists || !status.hasCommit)
         throw Error('Set up Git for this folder using Project setup before queuing Colab.');
     }

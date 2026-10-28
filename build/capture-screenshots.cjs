@@ -177,7 +177,13 @@ app.whenReady().then(async () => {
           { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
         );
       return new Response(fs.readFileSync(path.join(root, file)), {
-        headers: { 'Content-Type': 'application/javascript;charset=utf-8' },
+        headers: {
+          'Content-Type': file.endsWith('.css')
+            ? 'text/css'
+            : file.endsWith('.png')
+              ? 'image/png'
+              : 'application/javascript;charset=utf-8',
+        },
       });
     });
     const win = new BrowserWindow({

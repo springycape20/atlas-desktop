@@ -47,6 +47,38 @@ test('project profiles persist and attachment snapshots detect tampering', async
     /image format/,
   );
 });
+
+test('parallel changes combine in a separate worktree and only the combined result can be accepted', async (t) => {
+  const { repo, service } = await fixture(t);
+  const a = await service.createWorktree(repo),
+    b = await service.createWorktree(repo);
+  await fs.writeFile(path.join(a.path, 'first.txt'), 'first task');
+  await fs.writeFile(path.join(b.path, 'second.txt'), 'second task');
+  const combined = await service.combineWorktrees([a.id, b.id], repo);
+  assert.equal(await fs.readFile(path.join(combined.path, 'first.txt'), 'utf8'), 'first task');
+  assert.equal(await fs.readFile(path.join(combined.path, 'second.txt'), 'utf8'), 'second task');
+  await assert.rejects(fs.readFile(path.join(repo, 'first.txt')), { code: 'ENOENT' });
+  const source = await service.review(a.id);
+  await assert.rejects(service.reviewAction({ id: a.id, action: 'accept', token: source.token }), /combined batch/);
+  const review = await service.review(combined.id);
+  assert.equal(review.overlaps.length, 0);
+  await service.reviewAction({ id: combined.id, action: 'accept', token: review.token });
+  assert.equal(await fs.readFile(path.join(repo, 'first.txt'), 'utf8'), 'first task');
+  assert.equal(await fs.readFile(path.join(repo, 'second.txt'), 'utf8'), 'second task');
+});
+test('parallel merge conflicts remain in isolation and retain both source tasks', async (t) => {
+  const { repo, service } = await fixture(t);
+  const a = await service.createWorktree(repo),
+    b = await service.createWorktree(repo);
+  await fs.writeFile(path.join(a.path, 'example.txt'), 'first\n');
+  await fs.writeFile(path.join(b.path, 'example.txt'), 'second\n');
+  const combined = await service.combineWorktrees([a.id, b.id], repo);
+  assert.equal(combined.needsAttention, true);
+  assert.deepEqual(combined.conflicts, ['example.txt']);
+  assert.equal(await fs.readFile(path.join(repo, 'example.txt'), 'utf8'), 'original\n');
+  assert.equal((await service.tree(a.id)).state, 'active');
+  assert.equal((await service.tree(b.id)).state, 'active');
+});
 test('isolated review rejects stale diffs and accepts only reviewed changes', async (t) => {
   const { repo, service } = await fixture(t),
     tree = await service.createWorktree(repo);
@@ -172,6 +204,12 @@ test('the real app protocol serves every renderer script while blocking private 
     assert.equal(response.status, 200, script[1] + ' must be served');
     assert.match(response.headers.get('Content-Type'), /javascript/);
     new vm.Script(await response.text());
+  }
+  for (const stylesheet of html.matchAll(/<link\b[^>]*\bhref="([^"]+\.css)"/g)) {
+    const response = await handler({ url: 'atlas://app' + stylesheet[1] }, fs.readFile, path, root);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('Content-Type'), /text\/css/);
+    assert.ok((await response.text()).length > 100);
   }
   for (const image of html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"/g)) {
     const response = await handler({ url: 'atlas://app' + image[1] }, fs.readFile, path, root);

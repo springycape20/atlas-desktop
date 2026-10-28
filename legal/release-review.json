@@ -1,17 +1,27 @@
 {
   "status": "technical-review-complete",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "reviewedBy": "Codex automated technical review; not legal counsel",
-  "reviewedAt": "2026-10-28",
-  "packageLockSha256": "df4759e24d07a863fbcbeb9e2a9d35b663a0e509d69a7b34de4071c8e57716af",
-  "evidence": "docs/PATCH-RELEASE-REVIEW.md",
+  "reviewedAt": "2026-10-29",
+  "packageLockSha256": "8b9dce43f515dcc52b6f93ddd8024770a1b10f73acabc273a051f12fd5f8762e",
+  "evidence": "docs/RELEASE-0.9.0-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner explicitly approved removing Kokoro for 0.8.3 and an unsigned release gate with technical dependency, notices, hashes and test checks on 2026-10-28.",
+  "ownerDecision": "Owner requested publication of the completed feature and UI updates on 2026-10-29. The prior explicit unsigned-release gate decision remains in effect; no signing configuration or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 422,
-    "electronSuites": ["assistant", "settings", "release", "colab", "graph", "approvals", "dispute"],
-    "productionAudit": "0 vulnerabilities reported 2026-10-28",
-    "package": "Unsigned NSIS built and inspected; removed dependencies absent; notices, model hashes, fuses, ASAR and updater hashes verified"
+    "unitTests": 449,
+    "electronSuites": [
+      "assistant",
+      "settings",
+      "release",
+      "colab",
+      "graph",
+      "approvals",
+      "dispute",
+      "power",
+      "navigation"
+    ],
+    "productionAudit": "0 vulnerabilities reported 2026-10-29",
+    "package": "No new production dependencies; exact lock differs from 0.8.3 only in root version metadata. Final 0.9.0 installer must pass the release verifier before publication."
   }
 }

@@ -78,7 +78,7 @@ app.whenReady().then(async () => {
           { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
         );
       return new Response(fs.readFileSync(path.join(root, file)), {
-        headers: { 'Content-Type': 'application/javascript;charset=utf-8' },
+        headers: { 'Content-Type': file.endsWith('.css') ? 'text/css' : 'application/javascript;charset=utf-8' },
       });
     });
     win = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { backgroundThrottling: false } });
@@ -133,8 +133,9 @@ app.whenReady().then(async () => {
     toggles[1].click();
     if(document.body.classList.contains('chat-lists-hidden')||toggles[0].getAttribute('aria-expanded')!=='true')throw Error('Storage failure prevented showing the chat lists');
   }finally{Storage.prototype.setItem=setItem;}
-  const input=document.querySelector('#form').getBoundingClientRect(),mic=document.querySelector('#mic').getBoundingClientRect(),effort=document.querySelector('.assistant-effort-button').getBoundingClientRect();
-  if(mic.top<input.bottom||Math.abs(mic.top-effort.top)>12)throw Error('Mic and Effort should share one row under the message box');
+  const input=document.querySelector('#form').getBoundingClientRect(),mic=document.querySelector('#mic').getBoundingClientRect(),send=document.querySelector('#send').getBoundingClientRect();
+  if(mic.top<input.bottom||Math.abs(mic.top-send.top)>12)throw Error('Voice and Send should share one row under the message box');
+  [...document.querySelectorAll('.composer .shell-composer-tools button')].find(button=>button.textContent==='Options').click();await new Promise(r=>setTimeout(r,20));if(!document.querySelector('.assistant-effort-button').getClientRects().length)throw Error('Effort options are unreachable');document.querySelector('#assistantMessageOptions').hidePopover();
   const [idle,working]=document.querySelectorAll('.sigil img');
   if(!idle?.complete||!idle.naturalWidth||!working?.naturalWidth)throw Error('The Beacon logo did not load');
   const visible=()=>[idle,working].map(img=>getComputedStyle(img).visibility);
@@ -201,7 +202,15 @@ app.whenReady().then(async () => {
           : fs
               .readFileSync(path.join(root, 'index.html'), 'utf8')
               .replace('<head>', '<head><script src="/__blocked-mock.js"></script>'),
-        { headers: { 'Content-Type': file ? 'application/javascript;charset=utf-8' : 'text/html;charset=utf-8' } },
+        {
+          headers: {
+            'Content-Type': file?.endsWith('.css')
+              ? 'text/css'
+              : file
+                ? 'application/javascript;charset=utf-8'
+                : 'text/html;charset=utf-8',
+          },
+        },
       );
     });
     await win.webContents.session.clearCache();

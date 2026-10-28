@@ -51,6 +51,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:settings-ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:power-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:navigation-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:release-ui
       - name: Download speech runtime and models
         shell: pwsh

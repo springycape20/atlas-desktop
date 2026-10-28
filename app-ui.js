@@ -719,6 +719,7 @@ $('#settingsSave').addEventListener('click', async () => {
   }
   const next = {
     ...settings,
+    ...window.atlasAppearanceUi?.read(),
     speechDetail: $('#speechDetail').value,
     routeMode: $('#routeMode').value,
     timeoutSeconds: Number($('#requestTimeout').value),
@@ -745,6 +746,7 @@ $('#settingsSave').addEventListener('click', async () => {
   $('#settingsSave').disabled = true;
   try {
     settings = await window.atlas.saveSettings(next);
+    window.atlasAppearanceUi?.saved(settings);
     hydrateSettings(settings);
     if (settings.wakeWordEnabled) startWakeListener();
     else stopWakeListener();
@@ -984,6 +986,7 @@ let foregroundRequest = '',
   jobList = [];
 async function sendMessage(prompt, options = {}) {
   if (!prompt || !cwd) return;
+  const selectedContext = window.atlasPower?.selection('assistant');
   if (/^(?:tell me more|read (?:the )?(?:full answer|full reply|details))[.!? ]*$/i.test(prompt) && lastSpokenAnswer) {
     $('#prompt').value = '';
     sizeAssistantComposer();
@@ -1007,6 +1010,7 @@ async function sendMessage(prompt, options = {}) {
   startLatency(requestId);
   const currentConversation = options.conversationId || conversationId || crypto.randomUUID();
   conversationId = currentConversation;
+  if (selectedContext) window.atlasPower?.setSelection('assistant', selectedContext);
   localStorage.setItem('atlas.activeConversation', conversationId);
   $('#prompt').value = '';
   sizeAssistantComposer();
@@ -1020,11 +1024,13 @@ async function sendMessage(prompt, options = {}) {
   $('#followup').hidden = true;
   try {
     const d = await window.atlas.chat({
+      modelTier: document.getElementById('messageModelTier')?.value || 'auto',
       cwd: options.cwd || cwd,
       prompt,
       conversationId: currentConversation,
       requestId,
       resumeJobId: options.resumeJobId,
+      contextSelection: selectedContext,
       effort: window.atlasWorkspace?.context('assistant').effort,
       ...attached.request,
     });

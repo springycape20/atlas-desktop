@@ -88,6 +88,45 @@ test('Colab start refuses bad requests before creating a job', async (t) => {
   assert.equal(h.passes.length, 0);
 });
 
+test('workflow checks are task-specific and a failing check blocks Colab review', async (t) => {
+  const h = await colabHarness(t);
+  const job = await h.colab({ workflowChecks: 'node -e "process.exit(2)"', maxRounds: 2 });
+  assert.equal(job.projectSnapshot.autoCheck, true);
+  assert.equal(job.projectSnapshot.checkCommands, 'node -e "process.exit(2)"');
+  const evidence = JSON.parse(
+    await fs.readFile(path.join(h.paths.userData, 'colab-reports', job.id, 'checks.json'), 'utf8'),
+  );
+  assert.equal(evidence.status, 'failed');
+  assert.equal(evidence.results[0].exitCode, 2);
+  assert.notEqual(job.result.outcome, 'completed');
+  assert.ok(!h.passes.some((pass) => pass.provider === 'claude'));
+  assert.deepEqual(await h.call('projects', {}), []);
+});
+
+test('a parallel batch runs final integration checks in the combined workspace', async (t) => {
+  const h = await colabHarness(t, { git: true });
+  await h.call('task-queue', {
+    action: 'add-batch',
+    cwd: h.project,
+    tasks: [task('left.txt'), task('right.txt')],
+    checks: 'node -e "process.exit(0)"',
+    concurrency: 2,
+  });
+  await h.call('task-queue', { action: 'start', pauseBetween: false, concurrency: 2 });
+  await until(
+    async () => (await h.call('task-queue', {})).items.at(-1).status === 'completed',
+    'integrated batch',
+    45000,
+  );
+  const row = (await h.call('task-queue', {})).items.at(-1);
+  const job = h.activeJobs.get(row.result.jobId);
+  assert.equal(job.verification.status, 'passed');
+  assert.equal(job.verification.results[0].exitCode, 0);
+  assert.equal((await fs.readFile(path.join(job.cwd, 'left.txt'), 'utf8')).trim(), 'ready');
+  assert.equal((await fs.readFile(path.join(job.cwd, 'right.txt'), 'utf8')).trim(), 'ready');
+  await assert.rejects(fs.readFile(path.join(h.project, 'left.txt')), { code: 'ENOENT' });
+});
+
 test('a Colab build runs both providers with the protocol as instructions and finishes unverified with a check offer', async (t) => {
   const h = await colabHarness(t);
   const job = await h.colab();

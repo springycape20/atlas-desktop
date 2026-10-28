@@ -24,7 +24,7 @@
     title = document.createElement('h2'),
     close = document.createElement('button'),
     intro = document.createElement('p');
-  title.textContent = 'Shared workflow';
+  title.textContent = 'Task progress';
   close.type = 'button';
   close.className = 'quiet-button';
   close.textContent = 'Close';
@@ -87,6 +87,7 @@
   }
   function setZoom(value) {
     zoom = Math.max(0.03, Math.min(2.5, value));
+    zoomLabel.textContent = Math.round(zoom * 100) + '%';
     const element = viewport.querySelector('svg');
     if (element) {
       element.style.width = size.width * zoom + 'px';
@@ -108,6 +109,37 @@
     control('100%', () => setZoom(1), 'Actual size'),
   );
   dialog.append(header, intro, controls, body, footer);
+  const zoomLabel = document.createElement('span');
+  zoomLabel.className = 'graph-zoom-label';
+  zoomLabel.setAttribute('aria-live', 'polite');
+  controls.append(zoomLabel);
+  const viewControls = document.createElement('nav');
+  viewControls.className = 'graph-view-controls';
+  viewControls.setAttribute('aria-label', 'Progress view');
+  const summaryView = document.createElement('section');
+  summaryView.className = 'graph-stage-summary';
+  summaryView.setAttribute('aria-label', 'Task stage summary');
+  const view = (name) => {
+    dialog.dataset.view = name;
+    for (const button of viewControls.querySelectorAll('button'))
+      button.setAttribute('aria-pressed', String(button.dataset.view === name));
+    if (name === 'graph') requestAnimationFrame(() => setZoom(1));
+  };
+  for (const [name, label] of [
+    ['summary', 'Stage summary'],
+    ['graph', 'Full graph'],
+  ]) {
+    const button = document.createElement('button');
+    button.className = 'quiet-button';
+    button.type = 'button';
+    button.textContent = label;
+    button.dataset.view = name;
+    button.onclick = () => view(name);
+    viewControls.append(button);
+  }
+  intro.after(viewControls);
+  body.before(summaryView);
+  view('summary');
   document.body.append(dialog);
   const colors = {
     task: '#80d2dd',
@@ -180,6 +212,30 @@
     describe();
   }
   function draw() {
+    summaryView.replaceChildren();
+    const summaryStages = (graph?.nodes || [])
+      .filter((node) => node.kind === 'stage' || node.kind === 'check')
+      .sort((a, b) => (a.rank || 0) - (b.rank || 0));
+    if (!summaryStages.length) {
+      const empty = document.createElement('p');
+      empty.textContent = 'Send a task in Colab to see its build, checks and review stages.';
+      summaryView.append(empty);
+    }
+    for (const stage of summaryStages) {
+      const row = document.createElement('article'),
+        heading = document.createElement('h3'),
+        state = document.createElement('p'),
+        details = document.createElement('details'),
+        summary = document.createElement('summary'),
+        text = document.createElement('pre');
+      heading.textContent = stage.label;
+      state.textContent = [stage.provider, stage.status, stage.origin].filter(Boolean).join(' · ');
+      summary.textContent = 'View evidence';
+      text.textContent = stage.detail || 'No further details recorded.';
+      details.append(summary, text);
+      row.append(heading, state, details);
+      summaryView.append(row);
+    }
     viewport.replaceChildren();
     if (!graph?.nodes?.length) {
       const empty = document.createElement('p');
@@ -358,6 +414,7 @@
   }
   button.onclick = () => {
     runId = '';
+    view('summary');
     dialog.showModal();
     refresh(true);
     requestAnimationFrame(fit);

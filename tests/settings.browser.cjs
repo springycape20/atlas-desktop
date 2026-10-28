@@ -21,7 +21,10 @@ app.whenReady().then(async () => {
     protocol.handle('atlas', (request) => {
       const file = new URL(request.url).pathname.slice(1);
       if (file === '__test-mock.js')
-        return new Response(mock, { headers: { 'Content-Type': 'application/javascript;charset=utf-8' } });
+        return new Response(
+          "window.__uiErrors=[];window.addEventListener('error',event=>__uiErrors.push(event.message));" + mock,
+          { headers: { 'Content-Type': 'application/javascript;charset=utf-8' } },
+        );
       if (!file)
         return new Response(
           fs
@@ -30,7 +33,7 @@ app.whenReady().then(async () => {
           { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
         );
       return new Response(fs.readFileSync(path.join(root, file)), {
-        headers: { 'Content-Type': 'application/javascript;charset=utf-8' },
+        headers: { 'Content-Type': file.endsWith('.css') ? 'text/css' : 'application/javascript;charset=utf-8' },
       });
     });
     const win = new BrowserWindow({
@@ -39,7 +42,12 @@ app.whenReady().then(async () => {
       height: 800,
       webPreferences: { backgroundThrottling: false },
     });
+    win.webContents.on('console-message', (event) => {
+      if (event.level === 'error') console.error(event.message);
+    });
     await win.loadURL('atlas://app/');
+    const scriptErrors = await win.webContents.executeJavaScript('window.__uiErrors');
+    if (scriptErrors.length) throw Error(scriptErrors.join('\n'));
     await win.webContents.executeJavaScript(`(async()=>{
       const wait=(ms)=>new Promise(r=>setTimeout(r,ms)),$=(s)=>document.querySelector(s),$$=(s)=>[...document.querySelectorAll(s)];
       const fail=(message)=>{throw Error(message)};
@@ -49,8 +57,13 @@ app.whenReady().then(async () => {
       const nav=()=>$$('.settings-nav-item');
       $('#settingsOpen').click();await wait(200);
       if(!$('#settingsDialog').open)fail('Settings did not open');
+      const hint=$('.settings-nav-item[aria-current="true"] small'),hintStyle=getComputedStyle(hint);
+      if(parseFloat(hintStyle.fontSize)<13)fail('Settings hint text is too small: '+hintStyle.fontSize);
+      const rgb=s=>s.match(/[\\d.]+/g).slice(0,3).map(Number),lum=c=>c.map(x=>x/255).map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4).reduce((s,x,i)=>s+x*[.2126,.7152,.0722][i],0);
+      const foreground=lum(rgb(hintStyle.color)),background=lum(rgb(getComputedStyle(hint.parentElement).backgroundColor));
+      if((Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05)<4.5)fail('Selected Settings hint contrast is below 4.5:1');
       const order=nav().map(b=>b.dataset.section);
-      const expected=['Provider accounts','Models','Assistant','Voice','Microphone','Permissions','Transparency','Startup','App updates','Tools and data'];
+      const expected=['Provider accounts','Models','Appearance','Provider activity','Assistant','Voice','Microphone','Permissions','Transparency','Startup','App updates','Tools and data','Diagnostics'];
       if(JSON.stringify(order)!==JSON.stringify(expected))fail('Section order: '+JSON.stringify(order));
       if(JSON.stringify(shown())!=='["Provider accounts"]')fail('Expected only Provider accounts, saw '+JSON.stringify(shown()));
       if(nav()[0].getAttribute('aria-current')!=='true')fail('Current section is not marked');

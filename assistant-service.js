@@ -19,7 +19,12 @@ function createService({ directory, launchApp, volume, notify, now = () => Date.
       const category = ['preference', 'project', 'decision', 'task'].includes(item.category)
         ? item.category
         : 'preference';
-      const value = { id: item.id || randomUUID(), text, category, updatedAt: now() };
+      let projectFolder = '';
+      if (item.projectFolder) {
+        projectFolder = fs.realpathSync(String(item.projectFolder));
+        if (!fs.statSync(projectFolder).isDirectory()) throw Error('Choose an existing project folder.');
+      }
+      const value = { id: item.id || randomUUID(), text, category, projectFolder, updatedAt: now() };
       const index = state.memories.findIndex((m) => m.id === value.id);
       if (index >= 0) state.memories[index] = value;
       else state.memories.push(value);
@@ -106,13 +111,25 @@ function createService({ directory, launchApp, volume, notify, now = () => Date.
   function context(prompt, cwd) {
     const terms = new Set((prompt + ' ' + cwd).toLowerCase().match(/[a-z0-9]{3,}/g) || []);
     return state.memories
-      .map((m) => ({ m, score: m.category === 'preference' ? 2 : 0, ...{} }))
+      .filter((m) => !m.projectFolder || sameProject(m.projectFolder, cwd))
+      .map((m) => ({ m, score: m.projectFolder ? 3 : m.category === 'preference' ? 2 : 0 }))
       .map((x) => ({ ...x, score: x.score + [...terms].filter((t) => x.m.text.toLowerCase().includes(t)).length }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 12)
       .map((x) => `[${x.m.category}] ${x.m.text}`)
       .join('\n');
+  }
+  function sameProject(left, right) {
+    try {
+      const normalize = (value) => {
+        const resolved = fs.realpathSync(value);
+        return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+      };
+      return normalize(left) === normalize(right);
+    } catch {
+      return false;
+    }
   }
   return { memory, reminder, tick, local, context, state, save, flush: store.flush };
 }

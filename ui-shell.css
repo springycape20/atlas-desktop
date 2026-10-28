@@ -1,0 +1,703 @@
+:root {
+  --atlas-text-scale: 1;
+  --atlas-label: 14px;
+  --atlas-meta: 12px;
+  --atlas-body: 15px;
+  --atlas-focus: #a6e1e9;
+  color-scheme: dark;
+}
+.command-menu {
+  width: min(620px, calc(100vw - 32px));
+  max-height: 80vh;
+  padding: 20px;
+  border: 1px solid #47616d;
+  border-radius: 10px;
+  background: #0c171e;
+  color: #d1e1e6;
+}
+.command-menu::backdrop {
+  background: #000a;
+}
+.command-menu > header {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.command-menu h2 {
+  flex: 1;
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+.command-menu input {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  padding: 12px;
+}
+.command-menu p {
+  font-size: 13px;
+  color: #a8bac3;
+}
+.command-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 48vh;
+  overflow: auto;
+}
+.command-results button {
+  text-align: left;
+  flex-shrink: 0;
+  padding: 10px 12px;
+}
+.command-results button[aria-current='true'] {
+  background: #263940;
+  color: white;
+}
+.command-trigger {
+  order: -1;
+  white-space: nowrap;
+}
+:root body.atlas-ui :is(.eyebrow, .settings-kicker, #settingsSaved) {
+  font-size: calc(12px * var(--atlas-text-scale));
+  letter-spacing: normal;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(.eyebrow, .settings-kicker, #settingsSaved) {
+  color: var(--atlas-muted) !important;
+}
+:root body.atlas-ui :is(input, select, textarea, .shell-hub, .command-menu, .shell-composer-tools button) {
+  font-size: calc(14px * var(--atlas-text-scale));
+}
+:root body.atlas-ui :is(.shell-hub h1, .command-menu h2) {
+  font-size: calc(22px * var(--atlas-text-scale));
+}
+:root body.atlas-ui .colab-chat-header {
+  flex-wrap: wrap;
+}
+:root body.atlas-ui .shell-composer-tools {
+  flex-wrap: wrap;
+}
+:root body.atlas-ui :is(.settings-body, .shell-hub-content, .colab-chat-main, .core, .command-results) {
+  min-width: 0;
+}
+:root[data-ui-density='compact'] body.atlas-ui :is(.quiet-button, .primary-button, .nav-item, .shell-hub button) {
+  min-height: 32px;
+  padding-block: 5px;
+}
+:root[data-ui-density='compact'] body.atlas-ui :is(.setting-section, .graph-stage-summary article) {
+  padding-block: 12px;
+}
+:root[data-ui-theme='light'] {
+  color-scheme: light;
+  --atlas-ground: #f1f3f4;
+  --atlas-surface: #ffffff;
+  --atlas-raised: #e8edf0;
+  --atlas-ink: #17232b;
+  --atlas-muted: #485b66;
+  --atlas-line: #82939d;
+  --atlas-focus: #005c72;
+  --atlas-selected: #dce5e9;
+}
+:root[data-ui-theme='contrast'] {
+  color-scheme: dark;
+  --atlas-ground: #000;
+  --atlas-surface: #000;
+  --atlas-raised: #141414;
+  --atlas-ink: #fff;
+  --atlas-muted: #e5e5e5;
+  --atlas-line: #bdbdbd;
+  --atlas-focus: #ffe870;
+  --atlas-selected: #303030;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui {
+  background: var(--atlas-ground) !important;
+  color: var(--atlas-ink) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(
+    .app,
+    .layout,
+    .workspace-nav,
+    .assistant-workspace,
+    .colab-workspace,
+    .assistant-chats,
+    .colab-chats,
+    .core,
+    .colab-chat-main,
+    .composer,
+    .colab-composer,
+    .shell-chat-resize,
+    dialog,
+    .settings-layout,
+    .settings-nav,
+    .settings-body,
+    .settings-footer,
+    .settings-header,
+    .workspace-dialog-body,
+    .power-body,
+    .power-footer,
+    .shell-hub-content,
+    .colab-graph-body,
+    .colab-chat-header,
+    .colab-config,
+    .colab-transcript,
+    .assistant-transcript,
+    .colab-run-details,
+    .colab-dispute,
+    .colab-approval,
+    .shell-more,
+    .graph-stage-summary article
+  ) {
+  background: var(--atlas-surface) !important;
+  color: var(--atlas-ink) !important;
+  border-color: var(--atlas-line) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(
+    button,
+    input,
+    select,
+    textarea,
+    .assistant-chat-item,
+    .colab-chat-item,
+    .attachment-project,
+    .assistant-turn,
+    .colab-message,
+    .power-card,
+    .workspace-card,
+    pre,
+    code
+  ) {
+  background: var(--atlas-raised) !important;
+  color: var(--atlas-ink) !important;
+  border-color: var(--atlas-line) !important;
+  box-shadow: none !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(
+    p,
+    small,
+    label,
+    summary,
+    h1,
+    h2,
+    h3,
+    h4,
+    .answer,
+    #output,
+    .provider-chip,
+    .session-chip,
+    .setting-note,
+    .power-status,
+    .power-footer,
+    .workspace-dialog-subtitle,
+    .colab-chat-subtitle,
+    .colab-compose-footer,
+    .colab-work-note,
+    .voice-hint,
+    .attachment-project-label,
+    .settings-nav-item small,
+    .settings-nav-item[aria-current='true'] small
+  ) {
+  color: var(--atlas-ink) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(time, .assistant-chat-item small, .colab-chat-item small, .settings-nav-item small, .setting-note) {
+  color: var(--atlas-muted) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(
+    button.active,
+    button[aria-current='true'],
+    button[aria-selected='true'],
+    button[aria-pressed='true'],
+    .assistant-chat-item.active,
+    .colab-chat-item.active
+  ) {
+  background: var(--atlas-selected) !important;
+  color: var(--atlas-ink) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui :is(a, .live) {
+  color: var(--atlas-focus) !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui ::placeholder {
+  color: var(--atlas-muted) !important;
+  opacity: 1;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui button:disabled {
+  opacity: 0.6;
+}
+:root[data-ui-theme='light'] body.atlas-ui .sigil img {
+  filter: brightness(0.2);
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui .grid {
+  display: none;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui .colab-graph-body svg text {
+  fill: var(--atlas-ink);
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui .colab-graph-body svg rect {
+  fill: var(--atlas-raised);
+  stroke: var(--atlas-line);
+}
+@media (max-width: 750px) {
+  .command-trigger {
+    font-size: 12px !important;
+    padding-inline: 8px;
+  }
+  :root body.atlas-ui .shell-send {
+    margin-left: 0;
+  }
+}
+.power-dialog nav[hidden] {
+  display: none;
+}
+.provider-activity-row {
+  padding: 12px 0 18px;
+  border-bottom: 1px solid #82939d;
+}
+.shell-composer-tools select {
+  min-height: 36px;
+  max-width: 200px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #47616d;
+  border-radius: 6px;
+  background: #142730;
+  color: #d1e1e6;
+  font: inherit;
+}
+.provider-activity-row h4 {
+  font-size: calc(16px * var(--atlas-text-scale));
+  margin: 8px 0;
+}
+.provider-activity-row p {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 750px) {
+  .topright {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  #providerActivityOpen {
+    font-size: 12px;
+  }
+}
+body.atlas-ui {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+:root body.atlas-ui :is(.auth-state, .auth-row small, #providerHealth small) {
+  font-size: calc(12px * var(--atlas-text-scale));
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui :is(.toast, .settings-dialog) {
+  background: var(--atlas-surface) !important;
+  color: var(--atlas-ink) !important;
+  border-color: var(--atlas-line) !important;
+  box-shadow: none !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(.nav-item[aria-current='page'], .nav-item.active) {
+  background: var(--atlas-selected) !important;
+  color: var(--atlas-ink) !important;
+  opacity: 1 !important;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(#coreEngine, #sub, #workingFolder, .auth-state, .auth-row small) {
+  color: var(--atlas-muted) !important;
+}
+:root
+  body.atlas-ui
+  :is(
+    .nav-item,
+    .quiet-button,
+    .primary-button,
+    .settings-nav-item,
+    .field,
+    .toggle-row,
+    .power-dialog button,
+    .productivity-dialog nav button
+  ) {
+  font-size: calc(var(--atlas-label) * var(--atlas-text-scale));
+}
+:root
+  body.atlas-ui
+  :is(
+    .setting-note,
+    .field small,
+    .toggle-row small,
+    .settings-body p,
+    .workspace-dialog p,
+    .productivity-dialog p,
+    .power-body p
+  ) {
+  font-size: calc(14px * var(--atlas-text-scale));
+  line-height: 1.6;
+}
+:root body.atlas-ui .settings-nav-item small {
+  font-size: calc(13px * var(--atlas-text-scale));
+  color: #a8bac3;
+  line-height: 1.45;
+}
+:root body.atlas-ui .settings-nav-item[aria-current='true'] small {
+  color: #d0e0e7;
+}
+:root body.atlas-ui :is(.setting-section h3, .power-body h3, .workspace-dialog h3) {
+  font-size: calc(16px * var(--atlas-text-scale));
+}
+:root body.atlas-ui :is(.assistant-turn .answer, .colab-message p, #output, .power-body, .workspace-dialog-body) {
+  font-size: calc(var(--atlas-body) * var(--atlas-text-scale));
+}
+:root body.atlas-ui :is(.assistant-chat-item span, .colab-chat-item span, .settings-search, .history-search) {
+  font-size: calc(var(--atlas-label) * var(--atlas-text-scale));
+}
+:root
+  body.atlas-ui
+  :is(
+    .assistant-chat-item small,
+    .colab-chat-item small,
+    .colab-message time,
+    .colab-compose-footer [role='status'],
+    .voice-hint,
+    .attachment-project,
+    .power-status,
+    .colab-run-details,
+    .colab-work-note
+  ) {
+  font-size: calc(var(--atlas-meta) * var(--atlas-text-scale));
+  line-height: 1.5;
+}
+:root body.atlas-ui :is(button, input, select, textarea, summary, a):focus-visible {
+  outline: 2px solid var(--atlas-focus);
+  outline-offset: 3px;
+}
+:root body.atlas-ui :is(.quiet-button, .primary-button, .power-dialog button) {
+  min-height: 36px;
+}
+:root body.atlas-ui :is(dialog, .workspace-drawer, .power-body, .settings-body) {
+  overscroll-behavior: contain;
+}
+:root body.atlas-ui .setting-note {
+  color: #a8b8c1;
+}
+:root body.atlas-ui .workspace-nav > [data-legacy='true'],
+:root body.atlas-ui .workspace-nav > .workspace-divider {
+  display: none !important;
+}
+:root body.atlas-ui .workspace-nav .shell-settings {
+  margin-top: auto;
+}
+.shell-hub {
+  width: min(1100px, calc(100vw - 32px));
+  height: min(800px, 90vh);
+  padding: 0;
+  border: 1px solid #3b5059;
+  border-radius: 10px;
+  background: #0c171e;
+  color: #d1e1e6;
+}
+.shell-hub[open] {
+  display: flex;
+  flex-direction: column;
+}
+.shell-hub::backdrop {
+  background: #000a;
+}
+.shell-hub > header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 24px;
+}
+.shell-hub h1 {
+  flex: 1;
+  font-size: 22px;
+  margin: 0;
+}
+.shell-hub > nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 24px 16px;
+  border-bottom: 1px solid #29414a;
+}
+.shell-hub button {
+  border: 1px solid #47616d;
+  border-radius: 6px;
+  background: #142730;
+  color: inherit;
+  padding: 8px 12px;
+  font: inherit;
+  min-height: 36px;
+  cursor: pointer;
+}
+.shell-hub > nav button {
+  background: transparent;
+  border-color: transparent;
+}
+.shell-hub [role='tab'][aria-selected='true'] {
+  background: #23343c;
+  color: #fff;
+}
+.shell-hub-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px;
+}
+.shell-hub-content > :is(details, .workspace-dialog-body, .power-body) {
+  padding: 0;
+  max-height: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.shell-hub-content > footer {
+  margin-top: 20px;
+  font-size: 13px;
+  color: #a8bac3;
+  white-space: pre-wrap;
+}
+.shell-hub-content > details > summary {
+  display: none;
+}
+.shell-hub-content :is(input, select, textarea) {
+  background: #0c171e;
+  color: #d1e1e6;
+  border: 1px solid #47616d;
+  padding: 8px;
+  font: inherit;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+:root body.atlas-ui .colab-chat-header > .session-chip {
+  display: none;
+}
+:root body.atlas-ui .colab-config {
+  margin-top: 8px;
+  padding-bottom: 6px;
+}
+:root body.atlas-ui .colab-chat-main {
+  padding-block: 16px;
+}
+@media (max-height: 720px) and (min-width: 751px) {
+  :root body.atlas-ui .colab-chat-main {
+    padding-block: 6px;
+  }
+  :root body.atlas-ui .colab-config {
+    margin-top: 2px;
+    padding-bottom: 2px;
+  }
+}
+:root body.atlas-ui .colab-chat-header > div:first-child {
+  flex: 1;
+  min-width: 180px;
+}
+:root body.atlas-ui.has-conversation .presence {
+  display: none;
+}
+.shell-more {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 8px;
+  width: 220px;
+  border: 1px solid #47616d;
+  border-radius: 8px;
+  background: #14232b;
+  color: #d1e1e6;
+}
+.shell-more:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shell-more button {
+  text-align: left;
+}
+.shell-more .attachment-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.shell-composer-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  flex: 1 0 100%;
+  width: 100%;
+}
+:root body.atlas-ui .system-state {
+  display: none;
+}
+:root body.atlas-ui .shell-composer-tools .attachment-add {
+  width: auto;
+  height: 36px;
+  font:
+    14px 'Segoe UI',
+    sans-serif;
+  padding: 7px 12px;
+}
+:root body.atlas-ui .shell-composer-tools #mic {
+  width: auto;
+  min-width: 72px;
+  height: 36px;
+  border-radius: 7px;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font:
+    14px 'Segoe UI',
+    sans-serif;
+}
+.shell-composer-tools #mic svg {
+  width: 18px;
+  height: 18px;
+}
+:root body.atlas-ui .shell-composer-tools .shell-send {
+  width: auto;
+  height: 38px;
+  min-width: 90px;
+  margin-left: auto;
+  padding: 8px 16px;
+  border: 1px solid #77bbc5;
+  border-radius: 7px;
+  background: #173e46;
+  color: #effbff;
+  font:
+    600 14px 'Segoe UI',
+    sans-serif;
+}
+:root body.atlas-ui .assistant-chat-item span,
+:root body.atlas-ui .colab-chat-item span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+:root body.atlas-ui :is(.assistant-workspace, .colab-workspace) {
+  grid-template-columns: var(--atlas-chat-width, 250px) 8px minmax(0, 1fr) !important;
+}
+.shell-chat-resize {
+  cursor: col-resize;
+  min-width: 8px;
+  background: #0c171e;
+  touch-action: none;
+}
+.graph-view-controls {
+  display: flex;
+  gap: 8px;
+}
+.graph-view-controls [aria-pressed='true'] {
+  background: #263940;
+  color: #fff;
+}
+.colab-graph-dialog[data-view='summary'] :is(.colab-graph-body, .colab-graph-controls) {
+  display: none;
+}
+.colab-graph-dialog[data-view='graph'] .graph-stage-summary {
+  display: none;
+}
+.graph-stage-summary {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.graph-stage-summary article {
+  padding: 16px 4px;
+  border-bottom: 1px solid #29414a;
+}
+.graph-stage-summary h3 {
+  font-size: 17px;
+  margin: 0 0 8px;
+}
+.graph-stage-summary p {
+  font-size: 14px;
+}
+.graph-stage-summary pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    14px/1.6 'Segoe UI',
+    sans-serif;
+}
+.graph-zoom-label {
+  font-variant-numeric: tabular-nums;
+  min-width: 48px;
+}
+.shell-chat-resize:hover,
+.shell-chat-resize:focus-visible {
+  background: #47616d;
+  outline: 2px solid var(--atlas-focus);
+  outline-offset: -2px;
+}
+:root body.atlas-ui.chat-lists-hidden :is(.assistant-workspace, .colab-workspace) {
+  grid-template-columns: 36px 0 minmax(0, 1fr) !important;
+}
+:root body.atlas-ui.chat-lists-hidden .shell-chat-resize {
+  visibility: hidden;
+  min-width: 0;
+}
+:root body.atlas-ui .colab-dispute {
+  font-size: 14px;
+  max-height: 45vh;
+  padding: 14px;
+}
+:root body.atlas-ui .colab-dispute :is(h4, p, button) {
+  font-size: 14px;
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  :root body.atlas-ui :is(.assistant-workspace, .colab-workspace) {
+    grid-template-columns: 200px 0 minmax(0, 1fr) !important;
+  }
+  .shell-chat-resize {
+    visibility: hidden;
+    min-width: 0;
+  }
+}
+@media (max-width: 750px) {
+  :root body.atlas-ui :is(.assistant-workspace, .colab-workspace) {
+    display: flex;
+    flex-direction: column;
+  }
+  .shell-chat-resize {
+    display: none;
+  }
+  :root body.atlas-ui :is(.assistant-chats, .colab-chats) {
+    max-height: 150px;
+    flex-shrink: 0;
+  }
+  :root body.atlas-ui .assistant-workspace > .core,
+  :root body.atlas-ui .colab-chat-main {
+    flex: 1;
+    min-height: 0;
+  }
+}
+@media (max-width: 750px) {
+  .shell-hub {
+    width: calc(100vw - 16px);
+  }
+  .shell-hub > header,
+  .shell-hub-content {
+    padding: 16px;
+  }
+  .shell-hub > nav {
+    padding: 0 16px 12px;
+  }
+}

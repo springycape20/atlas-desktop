@@ -45,6 +45,7 @@ async function mainHarness(t, options = {}) {
     console,
     Buffer,
     AbortController,
+    AbortSignal,
     process: fakeProcess,
     URL,
     setTimeout,

@@ -10,6 +10,8 @@
   const ORDER = [
     'Provider accounts',
     'Models',
+    'Appearance',
+    'Provider activity',
     'Assistant',
     'Voice',
     'Microphone',
@@ -22,6 +24,8 @@
   const HINTS = {
     'Provider accounts': 'Sign-in and connection checks',
     Models: 'Codex and Claude models',
+    Appearance: 'Theme, text size and spacing',
+    'Provider activity': 'Local tasks and limit cooldowns',
     Assistant: 'Routing, timeouts and replies',
     Voice: 'Speech engine and voice',
     Microphone: 'Input, wake word and listening',
@@ -87,6 +91,7 @@
   }
 
   function show(name, { keepScroll = false } = {}) {
+    if (name === 'Provider activity') void window.atlasProviderActivity?.refresh();
     current = name;
     try {
       localStorage.setItem(STORAGE_KEY, name);
@@ -218,5 +223,13 @@
   }).observe(body, { childList: true });
   known = names();
   arrange();
-  window.atlasSettings = { show: (name) => show(name), current: () => current };
+  window.atlasSettings = {
+    show: (name) => show(name),
+    current: () => current,
+    register: (section) => {
+      body.append(section);
+      known = names();
+      arrange();
+    },
+  };
 })();

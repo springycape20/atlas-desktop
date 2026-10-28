@@ -8,7 +8,37 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     archive = path.join(resources, 'app.asar');
   const pkg = JSON.parse(asar.extractFile(archive, 'package.json'));
   assert.equal(pkg.version, require('../package.json').version);
-  for (const file of ['local-data.js', 'uv-runtime.js']) assert(asar.extractFile(archive, file).length);
+  for (const file of [
+    'local-data.js',
+    'uv-runtime.js',
+    'local-model.js',
+    'project-knowledge.js',
+    'knowledge-worker.cjs',
+    'knowledge-client.js',
+    'workflow-templates.js',
+    'parallel-batches.js',
+    'task-recovery.js',
+    'ui-shell.js',
+    'ui-shell.css',
+    'appearance.js',
+    'appearance-ui.js',
+    'capability-ui.js',
+    'command-menu.js',
+    'model-policy.js',
+    'model-routing-ui.js',
+    'hardware-check.js',
+    'hardware-ui.js',
+    'task-plans.js',
+    'planning-ui.js',
+    'environment-recipe.js',
+    'environment-ui.js',
+    'review-center-ui.js',
+    'task-progress.js',
+    'progress-ui.js',
+    'search-results.js',
+    'unified-search-ui.js',
+  ])
+    assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {
     assert(
       !/(?:^|[/\\])(?:\.handover|\.setup-cache|\.aws|\.codex|\.agents|\.git|\.env(?:\.[^/\\]+)?)(?:[/\\]|$)/i.test(

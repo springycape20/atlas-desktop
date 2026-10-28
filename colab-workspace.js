@@ -169,6 +169,19 @@
   efficiencyControls.innerHTML =
     '<label class="field">Efficiency<select id="colabPreset"><option value="economy">Economy · concise handovers and focused review</option><option value="balanced">Balanced · normal implementation and review</option><option value="thorough">Thorough · independent proposals and deeper review</option></select><small>Presets keep your models and shared effort. Explicit role choices are respected.</small></label><label class="field">Milestones<select id="colabMilestones"><option value="auto">Auto · the builder splits large build tasks</option><option value="on">On · plan milestones before every build task</option><option value="off">Off · always one build</option></select><small>Each milestone is built, checked and reviewed on its own, then a final review checks the whole task. Milestones without a check command are marked unverified.</small></label><label class="field">Token warning (optional)<input id="colabTokenWarning" type="number" min="1" step="1" placeholder="Unlimited"><small>Pauses between stages using reported usage plus rough text estimates. Tool/context overhead may add usage. Resume grants another interval.</small></label><label class="toggle-row"><span>Adapt shared effort for blockers<small>Opt in to raise both providers to High for unresolved blockers; higher manual effort stays unchanged.</small></span><input id="colabAdaptiveEffort" type="checkbox"></label><label class="toggle-row"><span>Reuse unchanged ATLAS checks<small>Opt in only for checks based on local files, not time, network or external state. Reuse needs a complete identical snapshot, commands and environment; incomplete scans always rerun.</small></span><input id="colabReuseChecks" type="checkbox"></label><label class="field">Acceptance criteria (optional)<textarea id="colabCriteria" rows="2" maxlength="4000" placeholder="One required outcome per line"></textarea></label><label class="field">Out of scope (optional)<textarea id="colabOutOfScope" rows="2" maxlength="2000" placeholder="What should stay outside this task?"></textarea></label>';
   panel.querySelector('#colabConfig').append(efficiencyControls);
+  const workflowChecksLabel = document.createElement('label');
+  workflowChecksLabel.className = 'field';
+  workflowChecksLabel.textContent = 'Workflow check commands (optional; run for this task)';
+  const workflowChecksInput = document.createElement('textarea');
+  workflowChecksInput.id = 'colabWorkflowChecks';
+  workflowChecksInput.rows = 2;
+  workflowChecksInput.maxLength = 4000;
+  workflowChecksInput.oninput = () => {
+    current().workflowChecks = workflowChecksInput.value;
+    save();
+  };
+  workflowChecksLabel.append(workflowChecksInput);
+  efficiencyControls.append(workflowChecksLabel);
   const efficiencyView = document.createElement('details');
   efficiencyView.className = 'colab-efficiency';
   const efficiencyTitle = document.createElement('summary'),
@@ -363,6 +376,7 @@
       ['colabMilestones', chat.milestones || 'auto'],
       ['colabTokenWarning', chat.tokenWarning ?? ''],
       ['colabCriteria', chat.brief?.criteria || ''],
+      ['colabWorkflowChecks', chat.workflowChecks || ''],
       ['colabOutOfScope', chat.brief?.outOfScope || ''],
     ]) {
       el(id).value = value;
@@ -1059,6 +1073,8 @@
     try {
       const result = await window.atlas.collaborate({
         task,
+        contextSelection: window.atlasPower?.selection('colab'),
+        workflowChecks: chat.workflowChecks || '',
         context,
         workspaceId: chat.isolated !== false ? chat.workspaceId || '' : '',
         preset: chat.preset || 'balanced',
@@ -1400,7 +1416,11 @@
     }
     const heading = document.createElement('h4');
     heading.textContent =
-      name(dispute.builder) + ' and ' + name(dispute.reviewer) + ' disagree. Choose who is right to continue.';
+      'Needs your decision · ' +
+      name(dispute.builder) +
+      ' and ' +
+      name(dispute.reviewer) +
+      ' propose different approaches.';
     box.append(heading);
     for (const issue of dispute.issues) {
       const card = document.createElement('section'),
@@ -1413,8 +1433,8 @@
       reviewerSide.textContent = name(dispute.reviewer) + ' (reviewer): ' + issue.reviewerEvidence;
       choices.className = 'colab-dispute-choices';
       for (const [side, label] of [
-        ['builder', name(dispute.builder) + ' is right'],
-        ['reviewer', name(dispute.reviewer) + ' is right'],
+        ['builder', 'Use ' + name(dispute.builder) + '’s approach'],
+        ['reviewer', 'Use ' + name(dispute.reviewer) + '’s approach'],
       ]) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -1522,6 +1542,26 @@
     return operation;
   }
   window.atlasColab = {
+    applyWorkflow: (workflow) => {
+      if (!historyReady) throw Error('Colab history is loading. Try again.');
+      if (current()?.busy) throw Error('Stop or finish this Colab task before applying a workflow.');
+      const chat = current()?.messages.length ? makeChat() : current();
+      if (workflow.cwd && projectKey(workflow.cwd) !== projectKey(chat.cwd)) {
+        Object.assign(chat, { profileId: '', projectName: '', codexModel: '', claudeModel: '', workspaceId: '' });
+        projectFilter = projectKey(workflow.cwd);
+      }
+      Object.assign(chat, {
+        draft: workflow.task,
+        ...(workflow.cwd ? { cwd: workflow.cwd } : {}),
+        mode: workflow.mode,
+        brief: { criteria: workflow.criteria || '', outOfScope: workflow.outOfScope || '' },
+        workflowChecks: workflow.checks || '',
+        status: 'Workflow: ' + workflow.name + '. Review the draft before sending.',
+      });
+      save();
+      select('colab');
+      render();
+    },
     ready,
     importChats,
     captureActivity,

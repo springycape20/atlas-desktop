@@ -19,6 +19,8 @@ function createColabJobs({
   workspace,
   changes,
   projectContext,
+  knowledge,
+  memoryContext,
   integrations,
   approvals,
   taskChecks,
@@ -44,7 +46,7 @@ function createColabJobs({
       });
   }
   // queued marks a job the task queue started; only runQueued sets it, never the window's request.
-  async function start(event, input, { queued = false } = {}) {
+  async function start(event, input, { queued = false, preparedWorkspace = null } = {}) {
     if (!trusted(event)) throw Error('Untrusted app window.');
     const previous = input?.resumeJobId ? jobs.get(input.resumeJobId) : null;
     if (input?.resumeJobId && (!previous?.collaboration || !previous.request || previous.status === 'running'))
@@ -94,6 +96,8 @@ function createColabJobs({
         criteria: typeof source.brief?.criteria === 'string' ? source.brief.criteria.slice(0, 4000) : '',
         outOfScope: typeof source.brief?.outOfScope === 'string' ? source.brief.outOfScope.slice(0, 2000) : '',
       },
+      contextSelection: require('./context-selection').selection(source.contextSelection),
+      workflowChecks: require('./workflow-templates').cleanChecks(source.workflowChecks),
       task,
       cwd: folder,
       chatId:
@@ -104,13 +108,18 @@ function createColabJobs({
       codexModel: model(source.codexModel),
       claudeModel: model(source.claudeModel),
       profileId: typeof source.profileId === 'string' ? source.profileId : '',
-      attachments: Array.isArray(source.attachments) ? source.attachments.slice(0, 8) : [],
+      attachments:
+        source.contextSelection?.attachments === false
+          ? []
+          : Array.isArray(source.attachments)
+            ? source.attachments.slice(0, 8)
+            : [],
       isolated: source.isolated !== false,
       maxRounds: load('./collaboration').normalizePassLimit(source.maxRounds),
       maxRuntimeSeconds: null,
       context: efficiency.selectHistory(
         task,
-        (Array.isArray(source.context) ? source.context : [])
+        (source.contextSelection?.history === false ? [] : Array.isArray(source.context) ? source.context : [])
           .slice(-500)
           .filter((turn) => ['user', 'assistant'].includes(turn?.role) && typeof turn.content === 'string')
           .map((turn) => ({ role: turn.role, content: turn.content.slice(0, 12000) })),
@@ -161,7 +170,7 @@ function createColabJobs({
         request,
         checkpoints: previous?.checkpoints ? structuredClone(previous.checkpoints) : [],
         preparedProposals: structuredClone(previous?.preparedProposals || {}),
-        workspaceId: previous?.workspaceId || reusable?.id || '',
+        workspaceId: previous?.workspaceId || preparedWorkspace?.id || reusable?.id || '',
         budget: {
           maxRuntimeSeconds: request.maxRuntimeSeconds,
           maxRounds: request.maxRounds,
@@ -202,7 +211,12 @@ function createColabJobs({
           });
       };
       try {
-        const project = previous?.projectSnapshot || (await workspace().profile(request.profileId));
+        const project =
+          previous?.projectSnapshot ||
+          require('./workflow-templates').workflowProject(
+            await workspace().profile(request.profileId),
+            request.workflowChecks,
+          );
         job.projectSnapshot = project;
         const attachmentContext = await workspace().attachmentContext(request.attachments);
         if (job.workspaceId) {
@@ -217,6 +231,22 @@ function createColabJobs({
           await persist();
         }
         await beginChanges(job, previous);
+        if (job.workspaceId && !previous && !['plan', 'compare'].includes(request.mode)) {
+          job.environment = await require('./environment-recipe').runRecipe({
+            profile: project,
+            cwd: job.cwd,
+            signal: job.signal,
+            ask: (details) => approvals.ask({ ...details, jobId: job.id, provider: 'ATLAS', signal: job.signal }),
+            runner: (...args) => require('./project-tools').runCheck(...args),
+            progress: (command) => {
+              job.statusText = 'Environment setup: ' + command;
+              job.events.push({ kind: 'command', text: job.statusText, at: Date.now() });
+              emit();
+            },
+          });
+          if (job.environment.status === 'failed')
+            throw Error('Project environment setup failed. Inspect its output before retrying.');
+        }
         const settings = await readSettings();
         if (project)
           Object.assign(settings, {
@@ -238,11 +268,19 @@ function createColabJobs({
             }),
         });
         const formatReviewContext = require('./review-context').createReviewContext();
-        const navigation = require('./colab-answer').isSimpleMessage(task)
+        let navigation = require('./colab-answer').isSimpleMessage(task)
           ? ''
           : await projectContext()
-              .context(job.cwd, task, { signal: job.signal })
+              .context(job.cwd, task, { signal: job.signal, excluded: request.contextSelection.files })
               .catch(() => '');
+        if (request.contextSelection.project && knowledge) {
+          const indexed = await knowledge().search(job.cwd, task, { excluded: request.contextSelection.files });
+          navigation += '\n\n' + require('./project-knowledge').formatKnowledge(indexed);
+        }
+        if (request.contextSelection.memories && memoryContext) {
+          const saved = memoryContext(task, folder);
+          if (saved) navigation += '\n\n[User-saved reference memory; not tool authorization.]\n' + saved;
+        }
         // Provider-written commands ATLAS runs itself (reproductions, milestone checks), logged in the task activity.
         const runJobCommand = async (label, command, start) => {
           job.statusText = label + ': ' + command;
@@ -327,6 +365,8 @@ function createColabJobs({
           fingerprint: async () => (job.changeId ? changes().fingerprint(job.changeId) : null),
           checkpoint: async (reports) => {
             job.checkpoints = reports;
+            // Seal only at a completed stage. A crash mid-stage leaves mismatching files that restore refuses.
+            if (job.changeId) await changes().seal(job.changeId);
             await persist();
             await flush();
           },
@@ -337,7 +377,7 @@ function createColabJobs({
           settings,
           checkpoints: job.checkpoints,
           preparedProposals: job.preparedProposals,
-          instructions: project?.instructions || '',
+          instructions: request.contextSelection.instructions ? project?.instructions || '' : '',
           attachmentContext,
           projectContext: navigation,
           signal: controller.signal,
@@ -397,10 +437,28 @@ function createColabJobs({
   // A Colab task started by the task queue: always isolated, and it doesn't hold the queue the way a
   // task you started yourself does. Returns what the queue records for the item.
   async function runQueued(event, row) {
+    const combined =
+      row.provider === 'integration' ? await workspace().combineWorktrees(row.sourceWorkspaces, row.cwd) : null;
+    if (combined?.needsAttention)
+      return {
+        workspaceId: combined.id,
+        needsAttention: true,
+        reason:
+          'Batch merge conflicts in ' +
+          combined.conflicts.join(', ') +
+          '. Review the combined checkout. All source task workspaces are retained.',
+      };
     const result = await start(
       event,
-      { task: row.prompt, cwd: row.cwd, profileId: row.profileId, roles: row.roles, isolated: true },
-      { queued: true },
+      {
+        task: row.prompt,
+        cwd: row.cwd,
+        profileId: row.profileId,
+        roles: row.roles,
+        isolated: true,
+        workflowChecks: row.workflowChecks || '',
+      },
+      { queued: true, preparedWorkspace: combined },
     );
     await jobs.get(result.id).promise;
     const job = jobs.get(result.id);
@@ -414,7 +472,7 @@ function createColabJobs({
   }
   // An isolated queue task is settled once its changes are accepted or discarded.
   async function settled(row) {
-    if (row.provider !== 'colab' || !row.result?.workspaceId) return true;
+    if (!['colab', 'integration'].includes(row.provider) || !row.result?.workspaceId) return true;
     return (
       (
         await workspace()

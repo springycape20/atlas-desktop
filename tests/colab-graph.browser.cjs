@@ -109,11 +109,23 @@ app.whenReady().then(async () => {
             name ? 'NOT_PRESENT' : '<head>',
             name ? 'NOT_PRESENT' : '<head><script src="/__test-mock.js"></script>',
           ),
-        { headers: { 'Content-Type': name ? 'application/javascript;charset=utf-8' : 'text/html;charset=utf-8' } },
+        {
+          headers: {
+            'Content-Type': name.endsWith('.css')
+              ? 'text/css'
+              : name
+                ? 'application/javascript;charset=utf-8'
+                : 'text/html;charset=utf-8',
+          },
+        },
       );
     });
     win = new BrowserWindow({ show: false, width: 1400, height: 900, webPreferences: { backgroundThrottling: false } });
     await win.loadURL('atlas://app/');
+    // Deep graph interactions explicitly enter the advanced view; the default summary is covered separately.
+    await win.webContents.executeJavaScript(
+      `document.addEventListener('click',event=>{if(event.target.closest('#colabGraph'))document.querySelector('.graph-view-controls [data-view="graph"]').click();});`,
+    );
     await win.webContents.executeJavaScript(
       `(async()=>{await atlasColab.ready;atlasColab.selectChat('graph-chat');document.querySelector('#colabGraph').click();const dialog=document.querySelector('.colab-graph-dialog');if(!dialog.open||!dialog.textContent.includes('Send a task'))throw Error('Empty graph state missing');dialog.querySelector('header button').click();colabStatus({id:'graph-job',chatId:'graph-chat',status:'Reviewing'});colabStatus({id:'graph-job',chatId:'graph-chat',graph:${JSON.stringify(live)}});document.querySelector('#colabGraph').click();if(!dialog.querySelector('[data-id="active"]'))throw Error('Live review missing');colabStatus({id:'graph-job',chatId:'graph-chat',result:'Parser fixed',outcome:'completed'});colabStatus({id:'graph-job',chatId:'graph-chat',graph:${JSON.stringify(finished)}});if(atlasColab.current().busy)throw Error('Graph-only final update reactivated task');if(dialog.querySelector('[data-id="active"]'))throw Error('Stale active node');if(dialog.querySelector('img'))throw Error('Graph injected markup');dialog.querySelector('[data-id="pass:0"]').dispatchEvent(new MouseEvent('click',{bubbles:true}));if(!dialog.querySelector('.colab-graph-detail').textContent.includes('Updated parser'))throw Error('Node details missing');const search=dialog.querySelector('input');search.value='src/parser.js';search.dispatchEvent(new Event('input'));if(!dialog.querySelector('[data-dim="true"]'))throw Error('Search did not highlight');search.value='';search.dispatchEvent(new Event('input'));const filter=dialog.querySelector('[aria-label="Graph node filter"]');filter.value='check';filter.dispatchEvent(new Event('change'));if(dialog.querySelector('[data-id="file:src/parser.js"]'))throw Error('Filter failed');if(!dialog.querySelector('[data-id="verified:0"]'))throw Error('Executed check missing');filter.value='all';filter.dispatchEvent(new Event('change'));const canvas=dialog.querySelector('svg'),width=parseFloat(canvas.style.width);dialog.querySelector('[aria-label="Zoom in"]').click();if(parseFloat(canvas.style.width)<=width)throw Error('Zoom failed');colabStatus({id:'second-job',chatId:'graph-chat',graph:${JSON.stringify(graph.build({ task: 'Second task', outcome: 'failed' }))}});const picker=dialog.querySelector('[aria-label="Task graph"]');if(picker.options.length!==2||picker.value!=='second-job')throw Error('Latest task not followed');picker.value='graph-job';picker.dispatchEvent(new Event('change'));if(!dialog.querySelector('[data-id="verified:0"]'))throw Error('Earlier task graph lost');colabStatus({id:'resume-job',graphRunId:'graph-job',chatId:'graph-chat',graph:{...atlasColab.current().graphRuns[0].graph,revision:10}});if(atlasColab.current().graphRuns.length!==2)throw Error('Resume split task graph history');colabStatus({id:'interrupted-job',chatId:'graph-chat',graph:{...atlasColab.current().graphRuns[0].graph,outcome:'working',nodes:[{id:'task',kind:'task',label:'Interrupted task',status:'working',origin:'user',rank:0},{id:'active',kind:'stage',label:'Interrupted review',status:'running',origin:'ATLAS recorded',rank:1}],edges:[]}});await atlasColabHistory.flush();})()`,
     );
