@@ -490,6 +490,15 @@ body.atlas-ui {
 :root body.atlas-ui .colab-chat-main {
   padding-block: 16px;
 }
+@media (max-height: 720px) and (min-width: 751px) {
+  :root body.atlas-ui .colab-chat-main {
+    padding-block: 6px;
+  }
+  :root body.atlas-ui .colab-config {
+    margin-top: 2px;
+    padding-bottom: 2px;
+  }
+}
 :root body.atlas-ui .colab-chat-header > div:first-child {
   flex: 1;
   min-width: 180px;
