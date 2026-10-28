@@ -48,6 +48,17 @@ app.whenReady().then(async () => {
     const out = path.join(root, '.handover', 'ui-navigation');
     fs.mkdirSync(out, { recursive: true });
     await win.webContents.executeJavaScript(
+      `window.__reviewJobs=atlas.jobs;window.__reviewChanges=atlas.changes;atlas.jobs=async()=>[{id:'review-demo',prompt:'Improve keyboard navigation',status:'completed',cwd:'C:/Projects/Demo',changeId:'fixture',verification:{status:'passed',results:[{command:'npm test',status:'passed',output:'Fixture checks passed'}]}}];atlas.changes=async()=>({files:[{path:'ui-shell.js'}],added:12,removed:3});atlasUi.open('tasks','Review centre')`,
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    await win.webContents.executeJavaScript(
+      `if(!atlasUi.hub.textContent.includes('npm test · passed')||!atlasUi.hub.textContent.includes('ui-shell.js'))throw Error('Unified review evidence missing')`,
+    );
+    fs.writeFileSync(path.join(out, 'review-centre.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `atlas.jobs=__reviewJobs;atlas.changes=__reviewChanges;atlasUi.hub.close();new Promise(r=>setTimeout(r,30))`,
+    );
+    await win.webContents.executeJavaScript(
       `window.__originalProjects=atlas.projects;atlas.projects=async()=>[{id:'fixture',name:'Demo project',cwd:'C:/Projects/Demo',environmentTools:'Node.js and npm',environmentCommands:'npm ci',environmentPrompt:true}];atlasPower.show('Project environments')`,
     );
     await new Promise((r) => setTimeout(r, 100));

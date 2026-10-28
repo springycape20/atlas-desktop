@@ -2030,6 +2030,7 @@ async function createWindow() {
         '/hardware-ui.js',
         '/planning-ui.js',
         '/environment-ui.js',
+        '/review-center-ui.js',
         '/appearance.js',
         '/appearance-ui.js',
         '/command-menu.js',
