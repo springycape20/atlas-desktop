@@ -6,7 +6,7 @@ const fs = require('node:fs'),
   os = require('node:os'),
   graph = require('../colab-graph');
 const root = path.join(__dirname, '..'),
-  out = path.join(root, 'docs', 'images'),
+  out = process.env.ATLAS_SCREENSHOT_DIR || path.join(root, 'docs', 'images'),
   temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-screenshots-'));
 app.disableHardwareAcceleration();
 app.setPath('userData', path.join(temp, 'data'));
@@ -193,7 +193,7 @@ app.whenReady().then(async () => {
     const shot = async (name) => {
       await wait(600);
       fs.writeFileSync(path.join(out, name), (await win.webContents.capturePage()).toPNG());
-      console.log('wrote docs/images/' + name);
+      console.log('wrote ' + path.join(out, name));
     };
     const run = (code) => win.webContents.executeJavaScript(`(async()=>{${code}})()`);
 

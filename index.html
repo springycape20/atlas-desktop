@@ -2876,6 +2876,70 @@
       :root .colab-message.user {
         background: #18252b;
       }
+      /* Colab uses the same readable type and quiet controls as Assistant. */
+      :root .colab-workspace,
+      :root .colab-workspace :is(button, input, select, textarea, summary, small, label, strong, time),
+      :root .colab-folder-row span {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+      :root .colab-chat-header h1 {
+        font-size: 20px;
+      }
+      :root .colab-workspace :is(input, select, textarea),
+      :root .colab-chat-item span {
+        font-size: 14px;
+      }
+      :root .colab-workspace :is(button, summary, small, label, time),
+      :root .colab-workspace .colab-chat-actions button,
+      :root .colab-workspace #colabNewChat,
+      :root .colab-workspace .field > span,
+      :root
+        .colab-workspace
+        :is(.session-chip, .colab-chat-project, .verify-badge, .colab-run-details, .colab-efficiency),
+      :root .colab-workspace :is(.colab-work-step, .colab-work-note),
+      :root .colab-workspace .colab-recovery,
+      :root .colab-chat-header p,
+      :root .colab-folder-row span,
+      :root .colab-browse > span,
+      :root .colab-compose-footer [role='status'],
+      :root .colab-message strong {
+        font-size: 12px;
+        letter-spacing: 0;
+      }
+      :root .colab-chat-header p,
+      :root
+        .colab-workspace
+        :is(small, time, .session-chip, .colab-chat-project, .colab-run-details, .colab-efficiency),
+      :root .colab-config summary,
+      :root .colab-message strong,
+      :root .colab-compose-footer [role='status'] {
+        color: #9fb3ba;
+      }
+      :root .colab-workspace .session-chip {
+        text-transform: none;
+      }
+      :root .colab-workspace button {
+        background: transparent;
+        box-shadow: none;
+      }
+      :root .colab-workspace #colabStart {
+        background: #15343b;
+      }
+      :root .colab-workspace button:hover:not(:disabled) {
+        background: #1c3038;
+      }
+      :root .colab-workspace button:focus-visible {
+        outline: 2px solid #83d8e4;
+        outline-offset: 2px;
+      }
+      :root .colab-message-actions [aria-pressed='true'] {
+        color: #e7eef0;
+        background: #263940;
+        border-color: #9fb3ba;
+      }
+      :root .colab-graph-node .graph-node-meta {
+        font-size: 12px;
+      }
     </style>
     <style id="beaconMark">
       /* The Beacon in the corner: white at rest, its centre bar orange while anything runs. */
