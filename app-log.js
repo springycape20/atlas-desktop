@@ -8,11 +8,11 @@ function redactDiagnostic(value) {
     .replace(/\bBearer\s+[^\s"'<>]+/gi, 'Bearer [REDACTED]')
     .replace(/\bsk-(?:ant-)?[A-Za-z0-9_-]{12,}/g, '[REDACTED]')
     .replace(
-      /(["']?(?:access[_-]?token|refresh[_-]?token|(?:auth[_-]?)?token|api[_-]?key|password|secret|authorization)["']?\s*[:=]\s*)(["'])(?:\\[\s\S]|(?!\2)[^\\])*(?:\2|\\?$)/gi,
+      /(["'\x60]?(?:access[_-]?token|refresh[_-]?token|(?:auth[_-]?)?token|api[_-]?key|password|secret|authorization)["'\x60]?\s*[:=]\s*)(["'\x60])(?:\\[\s\S]|(?!\2)[^\\])*(?:\2|\\?$)/gi,
       '$1$2[REDACTED]$2',
     )
     .replace(
-      /((?:["']?)(?:access[_-]?token|refresh[_-]?token|(?:auth[_-]?)?token|api[_-]?key|password|secret|authorization)["']?\s*[:=]\s*["']?)[^\s"',}\]]+/gi,
+      /((?:["'\x60]?)(?:access[_-]?token|refresh[_-]?token|(?:auth[_-]?)?token|api[_-]?key|password|secret|authorization)["'\x60]?\s*[:=]\s*["'\x60]?)[^\s"'\x60,}\]]+/gi,
       '$1[REDACTED]',
     )
     .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[REDACTED]@');
