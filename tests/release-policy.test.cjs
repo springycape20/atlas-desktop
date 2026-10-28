@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { assertPublicRelease } = require('../build/release-policy.cjs');
 test('release review binds dependency lock, signing configuration and unsigned owner decision', () => {
   const review = {
+    version: '0.8.3',
     status: 'technical-review-complete',
     reviewedBy: 'Test reviewer',
     reviewedAt: '2026-10-28',
@@ -12,9 +13,9 @@ test('release review binds dependency lock, signing configuration and unsigned o
     signing: 'unsigned-owner-authorized',
   };
   const env = { SIGNING: 'true', UPDATER_PUBLISHER: 'Test publisher' };
-  const lock = { packages: { 'node_modules/example': { license: 'MIT' } } };
+  const lock = { version: '0.8.3', packages: { '': { version: '0.8.3' }, 'node_modules/example': { license: 'MIT' } } };
   const run = (e = env, r = review, lockHash = 'test-lock', dependencyLock = lock) =>
-    assertPublicRelease({ env: e, review: r, lockHash, lock: dependencyLock });
+    assertPublicRelease({ env: e, review: r, lockHash, lock: dependencyLock, version: '0.8.3' });
   assert.doesNotThrow(() => run());
   assert.doesNotThrow(() => run({}));
   assert.throws(() => run({}, { ...review, signing: null }), /unsigned/);
@@ -23,11 +24,23 @@ test('release review binds dependency lock, signing configuration and unsigned o
   assert.throws(() => run(env, { ...review, openItems: ['unresolved source'] }), /review/);
   assert.throws(() => run(env, review, 'different-dependencies'), /review/);
   assert.throws(
-    () => run(env, review, 'test-lock', { packages: { 'node_modules/phonemizer': { license: 'Apache-2.0' } } }),
+    () =>
+      run(env, review, 'test-lock', {
+        ...lock,
+        packages: { ...lock.packages, 'node_modules/phonemizer': { license: 'Apache-2.0' } },
+      }),
     /dependency/,
   );
   assert.throws(
-    () => run(env, review, 'test-lock', { packages: { 'node_modules/other': { license: 'LGPL-3.0' } } }),
+    () =>
+      run(env, review, 'test-lock', {
+        ...lock,
+        packages: { ...lock.packages, 'node_modules/other': { license: 'LGPL-3.0' } },
+      }),
     /dependency/,
   );
+  assert.throws(() => run(env, { ...review, version: '0.8.4' }), /version/);
+  assert.throws(() => run(env, review, 'test-lock', { ...lock, version: '0.8.4' }), /version/);
+  assert.throws(() => run({ ...env, GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'v0.8.4' }), /version/);
+  assert.doesNotThrow(() => run({ ...env, GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'v0.8.3' }));
 });

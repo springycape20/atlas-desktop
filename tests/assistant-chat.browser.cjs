@@ -177,8 +177,10 @@ app.whenReady().then(async () => {
       finally { navigator.mediaDevices.getUserMedia=original; }
       let saved;atlas.saveSettings=async value=>(saved=structuredClone(value));
       settings.wakeWordEnabled=true;settings.autoListenReplies=true;
+      document.querySelector('#wakeWordEnabled').checked=true;document.querySelector('#autoListenReplies').checked=true;
       document.querySelector('#wakeIndicator').click();await new Promise(r=>setTimeout(r,20));
       if(saved?.wakeWordEnabled!==false||saved?.autoListenReplies!==false)throw Error('Pause did not persist both listening opt-outs');
+      if(document.querySelector('#wakeWordEnabled').checked||document.querySelector('#autoListenReplies').checked)throw Error('Pause left stale microphone checkboxes that could re-enable listening on save');
     })()`);
     await win.webContents.executeJavaScript(`localStorage.setItem('atlas.chatListsHidden','1')`);
     const normalMock = mock;

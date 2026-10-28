@@ -107,6 +107,7 @@ const updateConfig = require('js-yaml').load(
 );
 if (process.env.GITHUB_REF_TYPE === 'tag') {
   require('./release-policy.cjs').assertPublicRelease({
+    version,
     review: JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'legal', 'release-review.json'))),
     lockHash: require('node:crypto')
       .createHash('sha256')

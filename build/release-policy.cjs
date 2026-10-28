@@ -1,7 +1,15 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-function assertPublicRelease({ env = process.env, review, lockHash, lock } = {}) {
+function assertPublicRelease({ env = process.env, review, lockHash, lock, version } = {}) {
+  if (
+    !version ||
+    review?.version !== version ||
+    lock?.version !== version ||
+    lock?.packages?.['']?.version !== version ||
+    (env.GITHUB_REF_TYPE === 'tag' && env.GITHUB_REF_NAME !== `v${version}`)
+  )
+    throw Error('Public release blocked: version, tag, lock and release decision must match.');
   if (env.SIGNING === 'true' && !env.UPDATER_PUBLISHER?.trim())
     throw Error('Public release blocked: configure the verified updater publisher when signing.');
   if (env.SIGNING !== 'true' && review?.signing !== 'unsigned-owner-authorized')
@@ -31,6 +39,7 @@ if (require.main === module && process.env.GITHUB_REF_TYPE === 'tag') {
   try {
     const root = path.resolve(__dirname, '..');
     assertPublicRelease({
+      version: JSON.parse(fs.readFileSync(path.join(root, 'package.json'))).version,
       review: JSON.parse(fs.readFileSync(path.join(root, 'legal', 'release-review.json'))),
       lockHash: createHash('sha256')
         .update(fs.readFileSync(path.join(root, 'package-lock.json')))

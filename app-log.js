@@ -4,10 +4,11 @@ const fs = require('node:fs'),
 function redactDiagnostic(value) {
   return String(value)
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----/g, '[REDACTED PRIVATE KEY]')
+    .replace(/(\b(?:proxy-)?authorization\s*:\s*)(?:Basic|Digest|Negotiate|NTLM|Bearer)\s+[^\r\n]+/gi, '$1[REDACTED]')
     .replace(/\bBearer\s+[^\s"'<>]+/gi, 'Bearer [REDACTED]')
     .replace(/\bsk-(?:ant-)?[A-Za-z0-9_-]{12,}/g, '[REDACTED]')
     .replace(
-      /(["']?(?:access[_-]?token|refresh[_-]?token|api[_-]?key|password|secret|authorization)["']?\s*[:=]\s*)(["'])(?:\\.|(?!\2)[\s\S])*\2/gi,
+      /(["']?(?:access[_-]?token|refresh[_-]?token|api[_-]?key|password|secret|authorization)["']?\s*[:=]\s*)(["'])(?:\\[\s\S]|(?!\2)[^\\])*(?:\2|\\?$)/gi,
       '$1$2[REDACTED]$2',
     )
     .replace(

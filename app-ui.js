@@ -114,6 +114,8 @@ function updateWakeIndicator(label, active = false) {
 $('#wakeIndicator').onclick = async () => {
   settings.wakeWordEnabled = false;
   settings.autoListenReplies = false;
+  $('#wakeWordEnabled').checked = false;
+  $('#autoListenReplies').checked = false;
   clearFollowup();
   stopInterruptionMonitor();
   stopWakeListener();

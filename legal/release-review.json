@@ -1,5 +1,6 @@
 {
   "status": "technical-review-complete",
+  "version": "0.8.3",
   "reviewedBy": "Codex automated technical review; not legal counsel",
   "reviewedAt": "2026-10-28",
   "packageLockSha256": "df4759e24d07a863fbcbeb9e2a9d35b663a0e509d69a7b34de4071c8e57716af",
@@ -8,7 +9,7 @@
   "ownerDecision": "Owner explicitly approved removing Kokoro for 0.8.3 and an unsigned release gate with technical dependency, notices, hashes and test checks on 2026-10-28.",
   "openItems": [],
   "verification": {
-    "unitTests": 421,
+    "unitTests": 422,
     "electronSuites": ["assistant", "settings", "release", "colab", "graph", "approvals", "dispute"],
     "productionAudit": "0 vulnerabilities reported 2026-10-28",
     "package": "Unsigned NSIS built and inspected; removed dependencies absent; notices, model hashes, fuses, ASAR and updater hashes verified"
