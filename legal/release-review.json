@@ -1,15 +1,15 @@
 {
   "status": "technical-review-complete",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "reviewedBy": "Codex automated technical review; not legal counsel",
   "reviewedAt": "2026-10-29",
-  "packageLockSha256": "8b9dce43f515dcc52b6f93ddd8024770a1b10f73acabc273a051f12fd5f8762e",
-  "evidence": "docs/RELEASE-0.9.0-REVIEW.md",
+  "packageLockSha256": "bce87d51bb620836ec3a613cfa02a197635279575688e6372f58c4895cc8f8ec",
+  "evidence": "docs/RELEASE-0.9.1-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner requested publication of the completed feature and UI updates on 2026-10-29. The prior explicit unsigned-release gate decision remains in effect; no signing configuration or legal approval is claimed.",
+  "ownerDecision": "Owner requested the 0.9.1 patch push and approved the @hono/node-server dependency update on 2026-10-29. The prior explicit unsigned-release decision remains in effect. Merge/tag/publication awaits passing CI and owner confirmation under repository rules; no signing configuration or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 449,
+    "unitTests": 457,
     "electronSuites": [
       "assistant",
       "settings",
@@ -19,9 +19,11 @@
       "approvals",
       "dispute",
       "power",
-      "navigation"
+      "navigation",
+      "files",
+      "preview"
     ],
     "productionAudit": "0 vulnerabilities reported 2026-10-29",
-    "package": "No new production dependencies; exact lock differs from 0.8.3 only in root version metadata. Final 0.9.0 installer must pass the release verifier before publication."
+    "package": "Only production package change from 0.9.0 is the owner-approved MIT-licensed @hono/node-server update from 1.19.17 to 2.1.5. No new packages. The 0.9.1 installer must pass local and CI release verification before publication."
   }
 }

@@ -17,9 +17,9 @@ Use **Tasks** for running work, the queue, parallel batches, recovery, reminders
 
 These features are included in 0.9.0. Model routing changes model choice, not permissions. Memories, plans, recipes and source excerpts never grant access or authorize tool execution by themselves.
 
-## File and image previews (development)
+## File and image previews
 
-Chat and Colab can display images referenced as `![description](path/to/image.png)` and open project files linked as `[label](path/to/file)` or written as an inline-code filename. Relative paths resolve inside the chat/task project; isolated task outputs use that task's workspace. These additions are in development after 0.9.0 and are not yet in the public installer.
+ATLAS 0.9.1 Chat and Colab can display images referenced as `![description](path/to/image.png)` and open project files linked as `[label](path/to/file)` or written as an inline-code filename. Relative paths resolve inside the chat/task project; isolated task outputs use that task's workspace.
 
 Open **Attach > Browse project files** to browse the project, preview a file, show it in File Explorer or attach it to the next unsent message. Attaching copies the selected file through the existing attachment flow; it is not sent until you send the message. Private credential/configuration paths, recorded file denials, traversal and links outside the project are blocked. Folder lists show up to 200 entries at a time.
 

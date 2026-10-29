@@ -1,6 +1,6 @@
-# Project workbench (development)
+# Project workbench
 
-These changes are available in source after 0.9.0. They are not included in the published 0.9.0 installer.
+These tools are included in ATLAS 0.9.1.
 
 Use **Attach** in Chat or Colab to open **Live project preview**, **Project health**, **Named checkpoints**, or **Browse project files**. Task tools are also available from **Tasks**; health is available under Settings diagnostics.
 
