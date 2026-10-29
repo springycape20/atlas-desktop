@@ -2315,6 +2315,8 @@ async function createWindow() {
         '/project-editor.css',
         '/workflow-tools-ui.js',
         '/advanced-workflows-ui.js',
+        '/terminal-dock-ui.js',
+        '/terminal-dock.css',
         '/progress-ui.js',
         '/search-results.js',
         '/unified-search-ui.js',

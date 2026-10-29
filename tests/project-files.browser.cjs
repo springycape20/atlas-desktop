@@ -303,7 +303,7 @@ app.whenReady().then(async () => {
     await wait(`document.getElementById('colabTask').value.includes('button#target')`);
     assert.equal(await run(`document.getElementById('powerDialog').open`), false);
     await run(
-      `window.advancedCalls=[];window.terminalRows=[];window.repairRows=[];window.atlas.advancedWorkflows=async r=>{advancedCalls.push(r);if(r.tool==='intelligence')return {indexed:3,definitions:[{path:'README.md',name:'renderPage',line:1}],references:[{path:'style.css',line:1,excerpt:'renderPage()'}],imports:['style.css'],affected:[{path:'index.html',distance:1}],tests:[],note:'Static hints only.'};if(r.tool==='terminal'){if(r.action==='start')terminalRows.push({id:'terminal-demo',command:r.command,status:'running',pid:42,output:'Fixture live output',cwd:r.cwd});if(r.action==='stop')terminalRows[0].status='cancelled';if(r.action==='input')terminalRows[0].output+=' input received';return r.action==='start'?terminalRows[0]:terminalRows;}if(r.tool==='repair'){if(r.action==='start')repairRows.push({id:'repair-demo',status:'running',runs:[{attempt:0,results:[{command:'npm test',status:'failed',output:'Fixture failure'}]}]});if(r.action==='stop')repairRows[0].status='cancelled';return r.action==='start'?repairRows[0]:repairRows;}return {verified:true,reason:'Tracked files match.',remaining:'Continue after two recorded stages.'};};window.atlas.jobs=async()=>[{id:'failed-demo',prompt:'Repair fixture',status:'failed',endedAt:1000,cwd:${JSON.stringify(project)},verification:{results:[{command:'npm test',status:'failed'}]},resumeCheckpoint:{id:'saved'}}];void 0;`,
+      `window.advancedCalls=[];window.terminalRows=[];window.repairRows=[];window.atlas.advancedWorkflows=async r=>{advancedCalls.push(r);if(r.tool==='intelligence')return {indexed:3,definitions:[{path:'README.md',name:'renderPage',line:1}],references:[{path:'style.css',line:1,excerpt:'renderPage()'}],imports:['style.css'],affected:[{path:'index.html',distance:1}],tests:[],note:'Static hints only.'};if(r.tool==='terminal'){if(r.action==='start')terminalRows.push({id:'terminal-demo-'+terminalRows.length,command:r.command||'PowerShell',shell:r.shell,status:'running',pid:42,output:'Fixture live output',cwd:r.cwd});if(r.action==='stop')terminalRows.find(x=>x.id===r.id).status='cancelled';if(r.action==='input')terminalRows[0].output+=' input received';return r.action==='start'?terminalRows[0]:terminalRows;}if(r.tool==='repair'){if(r.action==='start')repairRows.push({id:'repair-demo',status:'running',runs:[{attempt:0,results:[{command:'npm test',status:'failed',output:'Fixture failure'}]}]});if(r.action==='stop')repairRows[0].status='cancelled';return r.action==='start'?repairRows[0]:repairRows;}return {verified:true,reason:'Tracked files match.',remaining:'Continue after two recorded stages.'};};window.atlas.jobs=async()=>[{id:'failed-demo',prompt:'Repair fixture',status:'failed',endedAt:1000,cwd:${JSON.stringify(project)},verification:{results:[{command:'npm test',status:'failed'}]},resumeCheckpoint:{id:'saved'}}];void 0;`,
     );
     win.setContentSize(1280, 900);
     await run(`atlasPower.show('Project intelligence')`);
@@ -314,14 +314,36 @@ app.whenReady().then(async () => {
     await new Promise((r) => setTimeout(r, 100));
     fs.writeFileSync(path.join(shots, 'project-intelligence.png'), (await win.webContents.capturePage()).toPNG());
     await run(`atlasPower.show('Terminal')`);
+    await run(`document.querySelector('.terminal-dock button[aria-label="New terminal session"]').click()`);
+    await wait(`document.querySelector('.terminal-dock pre').textContent.includes('Fixture live output')`);
+    await run(`document.querySelector('.terminal-dock button[aria-label="New terminal session"]').click()`);
+    await wait(`document.querySelectorAll('.terminal-dock nav button').length===2`);
     await run(
-      `(()=>{document.querySelector('.power-body textarea').value='echo fixture';[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Run command…').click()})()`,
+      `(()=>{const input=document.querySelector('.terminal-dock textarea');input.value='echo fixture';input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}))})()`,
     );
-    await wait(`document.querySelector('.power-body pre').textContent.includes('Fixture live output')`);
     await new Promise((r) => setTimeout(r, 100));
     fs.writeFileSync(path.join(shots, 'terminal.png'), (await win.webContents.capturePage()).toPNG());
-    await run(`[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Stop process').click()`);
-    await wait(`document.querySelector('.power-body').textContent.includes('cancelled')`);
+    for (const [width, height] of [
+      [1280, 900],
+      [768, 800],
+      [640, 700],
+    ]) {
+      win.setContentSize(width, height);
+      await new Promise((r) => setTimeout(r, 60));
+      assert(
+        await run(
+          `(()=>{const r=document.querySelector('.terminal-dock').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1})()`,
+        ),
+      );
+      fs.writeFileSync(
+        path.join(shots, 'terminal-dock-' + width + '.png'),
+        (await win.webContents.capturePage()).toPNG(),
+      );
+    }
+    win.setContentSize(1280, 900);
+    await run(`[...document.querySelectorAll('.terminal-dock button')].find(x=>x.textContent==='Stop').click()`);
+    await wait(`document.querySelector('.terminal-dock').textContent.includes('cancelled')`);
+    await run(`[...document.querySelectorAll('.terminal-dock button')].find(x=>x.textContent==='Hide').click()`);
     await run(`atlasPower.show('Repair loops')`);
     await run(
       `[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Start bounded repair…').click()`,
@@ -344,7 +366,7 @@ app.whenReady().then(async () => {
       }
     assert(
       await run(
-        `advancedCalls.some(row=>row.tool==='terminal'&&row.action==='start'&&row.command==='echo fixture')&&advancedCalls.some(row=>row.tool==='repair'&&row.action==='start'&&row.commands[0]==='npm test')`,
+        `advancedCalls.some(row=>row.tool==='terminal'&&row.action==='start'&&row.shell)&&advancedCalls.some(row=>row.tool==='terminal'&&row.action==='input'&&row.text==='echo fixture')&&advancedCalls.some(row=>row.tool==='repair'&&row.action==='start'&&row.commands[0]==='npm test')`,
       ),
     );
     assert.deepEqual(await run('fileUiErrors'), []);

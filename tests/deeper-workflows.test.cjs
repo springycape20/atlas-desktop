@@ -159,7 +159,8 @@ test('terminal approval, streaming, input approval and cancellation use one owne
   await until(() => runs === 1);
   assert(options.interactive);
   assert.equal((await terminal.action({ action: 'list' }))[0].output, 'live output');
-  await assert.rejects(terminal.action({ action: 'start', cwd: root, command: 'another' }), /Stop/);
+  await terminal.action({ action: 'start', cwd: root, command: 'another' });
+  assert.equal((await terminal.action({ action: 'list' })).length, 2);
   allow = false;
   await terminal.action({ action: 'input', id: row.id, text: 'no' });
   assert.equal(writes.length, 0);

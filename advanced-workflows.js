@@ -63,7 +63,7 @@ function createAdvancedWorkflows({
         busy: () => busy() || Boolean(repairs?.active()),
         approve: (input) =>
           approve(
-            input.input === undefined ? 'Run a project terminal command?' : 'Send input to the running process?',
+            input.input === undefined ? 'Open a project terminal session?' : 'Run this terminal input?',
             input.cwd +
               '\n\nCommand: ' +
               input.command +
