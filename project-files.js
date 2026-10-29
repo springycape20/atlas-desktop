@@ -92,6 +92,10 @@ function createProjectFiles({
       requested = path.resolve(base, referencePath(reference));
     if (!within(base, requested) || !allowed(path.relative(base, requested)))
       throw Error('This file is outside the project or is private.');
+    for (const value of await denied()) {
+      const canonical = await fs.realpath(value).catch(() => path.resolve(value));
+      if (within(canonical, requested)) throw Error('Access to this file was denied.');
+    }
     const actual = await fs.realpath(requested);
     if (!within(base, actual) || !allowed(path.relative(base, actual)))
       throw Error('This link leaves the project or points to a private file.');
@@ -167,6 +171,42 @@ function createProjectFiles({
     }
     return { ...info, message: 'Inline preview is unavailable for this file type. Use Show in folder to access it.' };
   }
-  return { resolve, list, read };
+  async function search(root, query, contents = false) {
+    query = String(query || '')
+      .trim()
+      .toLowerCase()
+      .slice(0, 200);
+    if (!query) return { entries: [], limited: false };
+    const entries = [],
+      queue = ['.'];
+    let visited = 0,
+      bytes = 0;
+    while (queue.length && visited < 2000 && entries.length < 100 && bytes < 8 * 1024 * 1024) {
+      const folder = await list(root, queue.shift());
+      for (const item of folder.entries) {
+        if (++visited > 2000 || entries.length >= 100) break;
+        if (item.directory) {
+          if (item.path.split('/').length < 12) queue.push(item.path);
+          continue;
+        }
+        if (item.path.toLowerCase().includes(query)) entries.push(item);
+        else if (contents && bytes < 8 * 1024 * 1024) {
+          try {
+            const value = await read(root, item.path);
+            bytes += value.size;
+            if (typeof value.text !== 'string') continue;
+            const lines = value.text.split('\n'),
+              line = lines.findIndex((row) => row.toLowerCase().includes(query));
+            if (line >= 0) entries.push({ ...item, line: line + 1, excerpt: lines[line].trim().slice(0, 180) });
+          } catch {}
+        }
+      }
+    }
+    return {
+      entries,
+      limited: queue.length > 0 || visited >= 2000 || entries.length >= 100 || bytes >= 8 * 1024 * 1024,
+    };
+  }
+  return { resolve, list, read, search };
 }
 module.exports = { createProjectFiles, referencePath, allowed, within, imageType };

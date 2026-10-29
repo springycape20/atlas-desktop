@@ -9,6 +9,14 @@
   const fields = {};
   for (const [key, label, choices] of [
     [
+      'uiMotion',
+      'Motion',
+      [
+        ['system', 'Follow system preference'],
+        ['reduced', 'Reduce motion'],
+      ],
+    ],
+    [
       'uiTheme',
       'Theme',
       [
@@ -54,11 +62,13 @@
       uiTheme: fields.uiTheme.value,
       uiTextScale: Number(fields.uiTextScale.value),
       uiDensity: fields.uiDensity.value,
+      uiMotion: fields.uiMotion.value,
     });
   const apply = (value) => {
     const safe = window.atlasAppearance.clean(value);
     document.documentElement.dataset.uiTheme = safe.uiTheme;
     document.documentElement.dataset.uiDensity = safe.uiDensity;
+    document.documentElement.dataset.uiMotion = safe.uiMotion;
     document.documentElement.style.setProperty('--atlas-text-scale', safe.uiTextScale);
     return safe;
   };

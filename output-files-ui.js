@@ -63,7 +63,8 @@
   status.setAttribute('role', 'status');
   dialog.append(header, tools, content, status);
   let version = 0,
-    returnFocus;
+    returnFocus,
+    keepContent = false;
   const show = () => {
     if (!dialog.open) {
       returnFocus = document.activeElement;
@@ -71,8 +72,10 @@
     }
   };
   dialog.addEventListener('close', () => {
+    if (keepContent) return;
     version++;
     content.replaceChildren();
+    delete dialog.dataset.docked;
     if (returnFocus?.isConnected) returnFocus.focus();
   });
   const assetPath = (file, reference) => {
@@ -217,6 +220,20 @@
     if (!Array.isArray(result.entries)) throw Error('Project files are unavailable. Choose a project folder first.');
     title.textContent = 'Project files · ' + (result.path || '/');
     button('Project root', () => browse(context, '.'), tools);
+    button(
+      'Keep beside chat for dragging',
+      () => {
+        keepContent = true;
+        dialog.close();
+        // Close is queued by the browser; preserve the tree until it has fired.
+        setTimeout(() => {
+          keepContent = false;
+          dialog.show();
+          dialog.dataset.docked = 'true';
+        }, 20);
+      },
+      tools,
+    );
     if (result.path)
       button('Up one folder', () => browse(context, result.path.split('/').slice(0, -1).join('/') || '.'), tools);
     const filter = node('input');
@@ -224,6 +241,28 @@
     filter.placeholder = 'Filter this folder';
     filter.setAttribute('aria-label', 'Filter project files');
     tools.append(filter);
+    const searchProject = async (contents) => {
+      const query = filter.value.trim();
+      if (!query) {
+        status.textContent = 'Enter a search phrase first.';
+        return;
+      }
+      const current = ++version;
+      status.textContent = 'Searching project locally…';
+      const found = await api.projectFile({ ...context, action: 'search', query, contents });
+      if (version !== current || !dialog.open) return;
+      list.replaceChildren();
+      for (const entry of found.entries || []) {
+        const row = button(entry.path + (entry.line ? ':' + entry.line : ''), () => preview(context, entry.path), list);
+        if (entry.excerpt) row.append(node('small', entry.excerpt));
+      }
+      if (!list.children.length) list.append(node('p', 'No matches found.'));
+      status.textContent = found.limited
+        ? 'Search limit reached. Use a more specific phrase.'
+        : 'Project search complete. Private paths are excluded.';
+    };
+    button('Search filenames', () => searchProject(false), tools);
+    button('Search file contents', () => searchProject(true), tools);
     const list = node('div', undefined, 'project-file-list');
     content.replaceChildren(list);
     const paint = () => {
@@ -235,6 +274,14 @@
           list,
         );
         row.title = entry.path;
+        if (!entry.directory) {
+          row.draggable = true;
+          row.ondragstart = (event) =>
+            event.dataTransfer.setData(
+              'application/x-atlas-project-file',
+              JSON.stringify({ context, path: entry.path }),
+            );
+        }
       }
       if (!list.children.length) list.append(node('p', 'No visible files match.'));
     };
@@ -303,6 +350,39 @@
   window.atlasProjectFiles = { reference, preview, browse };
   document.addEventListener('DOMContentLoaded', () => {
     document.body.append(dialog);
+    for (const [scope, selector] of [
+      ['assistant', '.composer'],
+      ['colab', '.colab-composer'],
+    ]) {
+      const composer = document.querySelector(selector);
+      composer?.addEventListener('dragover', (event) => {
+        if ([...event.dataTransfer.types].includes('application/x-atlas-project-file')) event.preventDefault();
+      });
+      composer?.addEventListener(
+        'drop',
+        (event) => {
+          const value = event.dataTransfer.getData('application/x-atlas-project-file');
+          if (!value) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          Promise.resolve()
+            .then(async () => {
+              const data = JSON.parse(value);
+              const current =
+                scope === 'colab'
+                  ? window.atlasColab.current().id
+                  : typeof conversationId === 'string'
+                    ? conversationId
+                    : '';
+              if (data.context.scope !== scope || (data.context.chatId || data.context.conversationId) !== current)
+                throw Error('Drop files into their original conversation.');
+              await window.atlasWorkspace.addAttachments(scope, () => request(data.context, 'attach', data.path));
+            })
+            .catch((error) => window.toast?.(error.message));
+        },
+        true,
+      );
+    }
     for (const scope of ['assistant', 'colab']) {
       const toolbar = document.getElementById('attachmentMenu-' + scope);
       if (!toolbar) continue;

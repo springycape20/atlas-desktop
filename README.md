@@ -1,5 +1,7 @@
 # ATLAS
 
+Development now includes [live project previews, visual feedback, named checkpoints, project search and health checks](docs/PROJECT-WORKBENCH.md). These additions are not in the published 0.9.0 installer.
+
 **A local Windows desktop assistant for Codex and Claude Code.** Chat with either model in one app, talk to it with local speech, or hand a task to **Colab**, where Codex and Claude build, check and review each other's work before you see one reviewed result. Verification labels name the checks ATLAS actually ran; AI output and model review can still be wrong.
 
 [![Latest release](https://img.shields.io/github/v/release/springycape20/atlas-desktop?label=download)](https://github.com/springycape20/atlas-desktop/releases/latest)

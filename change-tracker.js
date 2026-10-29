@@ -68,7 +68,7 @@ async function safePath(root, name) {
   }
   return file;
 }
-async function scan(root, exclude) {
+async function scan(root, exclude, permitted = async () => true) {
   // Match canonical task roots even when Windows supplies an 8.3 name or junction.
   if (exclude) exclude = await fs.realpath(exclude).catch(() => path.resolve(exclude));
   let names,
@@ -117,6 +117,7 @@ async function scan(root, exclude) {
     let name, file, stat;
     try {
       name = safeName(raw);
+      if (!(await permitted(root, name))) continue;
       file = await safePath(root, name);
       stat = await fs.lstat(file);
     } catch (error) {
@@ -195,7 +196,7 @@ function changedFiles(before, after) {
   }
   return { files: rows, added, removed, complete };
 }
-function createChangeTracker(directory) {
+function createChangeTracker(directory, { permitted } = {}) {
   const base = path.join(directory, 'changes'),
     loaded = new Map(),
     reports = new Map(),
@@ -215,7 +216,7 @@ function createChangeTracker(directory) {
   async function capture(id, cwd) {
     const root = await fs.realpath(cwd);
     await fs.mkdir(base, { recursive: true });
-    const snapshot = { cwd: root, createdAt: Date.now(), ...(await scan(root, directory)) };
+    const snapshot = { cwd: root, createdAt: Date.now(), ...(await scan(root, directory, permitted)) };
     await fs.writeFile(idPath(id), JSON.stringify(snapshot), { flag: 'wx' });
     if (loaded.size >= 4) loaded.delete(loaded.keys().next().value);
     loaded.set(id, snapshot);
@@ -228,7 +229,7 @@ function createChangeTracker(directory) {
     const promise = Promise.resolve()
       .then(async () => {
         const snapshot = await load(id),
-          current = await scan(snapshot.cwd, directory);
+          current = await scan(snapshot.cwd, directory, permitted);
         if (current.limited)
           for (const name of Object.keys(snapshot.files))
             if (!Object.hasOwn(current.files, name))
@@ -324,7 +325,7 @@ function createChangeTracker(directory) {
   }
   async function seal(id) {
     const snapshot = await load(id),
-      current = await scan(snapshot.cwd, directory);
+      current = await scan(snapshot.cwd, directory, permitted);
     snapshot.after = Object.fromEntries(
       changedFiles(snapshot.files, current.files).files.map((row) => [
         row.path,
@@ -333,11 +334,11 @@ function createChangeTracker(directory) {
     );
     await fs.writeFile(idPath(id), JSON.stringify(snapshot));
   }
-  async function restorePreview(id) {
+  async function restorePreview(id, selected) {
     const snapshot = await load(id);
     if (!snapshot.after) throw Error('This task has no completed checkpoint yet.');
-    const current = await scan(snapshot.cwd, directory),
-      files = Object.keys(snapshot.after),
+    const current = await scan(snapshot.cwd, directory, permitted),
+      files = Object.keys(snapshot.after).filter((name) => !selected || selected.includes(name)),
       conflicts = [];
     for (const name of files) {
       const expected = snapshot.after[name],
@@ -350,10 +351,15 @@ function createChangeTracker(directory) {
     }
     if (conflicts.length)
       throw Error('Later edits found in ' + conflicts.slice(0, 5).join(', ') + '. Restore cancelled to preserve them.');
-    return { files, cwd: snapshot.cwd, token: hash(JSON.stringify(snapshot.after)), limited: snapshot.limited };
+    return {
+      files,
+      cwd: snapshot.cwd,
+      token: hash(JSON.stringify([snapshot.after, files])),
+      limited: snapshot.limited,
+    };
   }
-  async function restore(id, token) {
-    const preview = await restorePreview(id);
+  async function restore(id, token, selected) {
+    const preview = await restorePreview(id, selected);
     if (preview.token !== token) throw Error('Checkpoint changed. Review it again.');
     const snapshot = await load(id),
       backupId = 'undo-' + randomUUID();
@@ -402,7 +408,7 @@ function createChangeTracker(directory) {
   }
   async function fingerprint(id) {
     const snapshot = await load(id),
-      current = await scan(snapshot.cwd, directory);
+      current = await scan(snapshot.cwd, directory, permitted);
     return {
       value: hash(JSON.stringify(Object.entries(current.files).map(([name, file]) => [name, file.hash, file.mode]))),
       complete: !current.limited,

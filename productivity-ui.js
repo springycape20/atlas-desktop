@@ -683,6 +683,7 @@
       el('pre', job.result?.output || job.error || job.statusText || ''),
     );
     verification(body, job);
+    if (job.status !== 'running') button('Completion report', () => window.atlasReviewCentre.open(job.id));
     const details = el('details');
     details.append(
       el('summary', 'Commands and activity'),

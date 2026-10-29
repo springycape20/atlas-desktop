@@ -51,3 +51,5 @@ jobs:
           npm run test:navigation-ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:files-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:preview-ui

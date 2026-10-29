@@ -1,6 +1,13 @@
 (() => {
   const api = window.atlas,
     power = window.atlasPower;
+  let requestedJob;
+  window.atlasReviewCentre = {
+    open(id) {
+      requestedJob = id;
+      return power.show('Review centre');
+    },
+  };
   power.register('Review centre', async ({ body, node, button, current, status }) => {
     body.append(
       node('h2', 'Changes, checks and review evidence'),
@@ -20,6 +27,8 @@
     for (const job of jobs)
       picker.append(new Option((job.prompt || 'Task').slice(0, 100) + ' · ' + job.status, job.id));
     body.append(picker);
+    if (jobs.some((job) => job.id === requestedJob)) picker.value = requestedJob;
+    requestedJob = null;
     const content = node('div');
     body.append(content);
     let revision = 0;
@@ -28,6 +37,53 @@
         job = jobs.find((row) => row.id === picker.value);
       content.replaceChildren(node('h3', job.prompt || 'Task'), node('p', job.cwd || ''));
       const checks = job.verification || {};
+      content.append(
+        node('h3', 'Completion report'),
+        node('p', 'Task: ' + job.status + ' · checks: ' + (checks.status || 'not run')),
+      );
+      const failed = (checks.results || []).filter((row) => row.status !== 'passed');
+      content.append(
+        node(
+          'p',
+          failed.length
+            ? failed.length + ' checks need attention. Inspect the results below before accepting changes.'
+            : checks.status === 'passed'
+              ? 'Recorded checks passed. Review the diff and model reports below.'
+              : 'Successful verification has not been recorded.',
+        ),
+      );
+      button(
+        'Open task / prepare follow-up',
+        async () => {
+          await api.taskOpen(job.id);
+          power.close();
+        },
+        content,
+      );
+      button(
+        'Prepare Colab follow-up draft',
+        () => {
+          window.atlasColab.applyWorkflow({
+            name: 'Follow-up',
+            cwd: job.originalCwd || job.cwd,
+            mode: 'debug',
+            task:
+              'Follow up on this task: ' +
+              job.prompt +
+              '\n\nRecorded status: ' +
+              job.status +
+              '\nChecks: ' +
+              (checks.status || 'not run') +
+              '\n' +
+              failed
+                .map((row) => row.command + ': ' + (row.error || row.output || row.status).slice(-2000))
+                .join('\n') +
+              '\n\nInspect current files and resolve remaining problems. Do not assume the earlier task succeeded.',
+          });
+          power.close();
+        },
+        content,
+      );
       content.append(node('h3', 'Executed checks · ' + (checks.status || 'not recorded')));
       for (const result of checks.results || []) {
         const row = node('details');

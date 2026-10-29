@@ -249,6 +249,24 @@
   fill: var(--atlas-raised);
   stroke: var(--atlas-line);
 }
+:root[data-ui-motion='reduced'] *,
+:root[data-ui-motion='reduced'] *::before,
+:root[data-ui-motion='reduced'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 @media (max-width: 750px) {
   .command-trigger {
     font-size: 12px !important;
@@ -297,8 +315,18 @@
   flex: 0 1 auto;
   max-height: 60vh;
 }
+.project-file-dialog[data-docked='true'] {
+  position: fixed;
+  inset: 90px 16px auto auto;
+  margin: 0;
+  width: min(430px, calc(100vw - 32px));
+  max-height: 60vh;
+}
 .project-file-dialog::backdrop {
   background: #000a;
+}
+.power-body > button {
+  margin: 4px 8px 4px 0;
 }
 .project-file-dialog header {
   display: flex;

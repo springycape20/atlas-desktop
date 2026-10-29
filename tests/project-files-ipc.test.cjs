@@ -32,3 +32,19 @@ test('project file IPC binds paths to recorded conversations and task workspaces
   assert.equal(attached[0].name, 'result.txt');
   await h.assistantService.flush();
 });
+test('named checkpoint IPC excludes private project data from snapshots', async (t) => {
+  const h = await mainHarness(t);
+  h.setupIpc();
+  const cwd = path.join(h.dir, 'safe-project');
+  await fs.mkdir(path.join(cwd, '.handover'), { recursive: true });
+  await fs.writeFile(path.join(cwd, '.handover', 'private.txt'), 'DO NOT STORE');
+  await fs.writeFile(path.join(cwd, 'public.txt'), 'before');
+  const event = { sender: h.sender, senderFrame: { url: 'atlas://app/' } },
+    call = (request) => h.handlers.get('atlas:project-workbench')(event, { cwd, ...request });
+  const checkpoint = await call({ action: 'capture', name: 'Safe checkpoint' });
+  await fs.writeFile(path.join(cwd, '.handover', 'private.txt'), 'PRIVATE EDIT');
+  await fs.writeFile(path.join(cwd, 'public.txt'), 'after');
+  const report = await call({ action: 'report', id: checkpoint.id });
+  assert.equal(report.files.length, 1);
+  assert.equal(report.files[0].path, 'public.txt');
+});

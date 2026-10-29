@@ -51,7 +51,12 @@ app.whenReady().then(async () => {
     protocol.handle('atlas', async (request) => {
       const url = new URL(request.url),
         file = url.pathname.slice(1);
-      if (file === '__mock.js') return new Response(mock, { headers: { 'Content-Type': 'application/javascript' } });
+      if (file === '__mock.js')
+        return new Response(
+          mock +
+            `window.atlas.projectWorkbench=async request=>request.action==='health'?{name:'Demo project',types:['Node.js'],checks:['npm test'],results:[{name:'Node.js',status:'available',detail:'Fixture tool'}],note:'No scripts executed.'}:request.action==='list'?[]:{id:'checkpoint'};window.atlas.livePreview=async request=>request.action==='capture'?{attachments:[{id:'visual-screenshot',name:'preview.png',type:'image',size:100}],selected:{selector:'button#target',text:'Change this'},cwd:${JSON.stringify(project)}}:{open:true,running:false,output:'src/app.ts:12:3 example compile error'};`,
+          { headers: { 'Content-Type': 'application/javascript' } },
+        );
       if (file === '__file') {
         try {
           const data = JSON.parse(url.searchParams.get('request'));
@@ -59,11 +64,13 @@ app.whenReady().then(async () => {
           const value =
             data.action === 'list'
               ? await files.list(project, data.path)
-              : data.action === 'attach'
-                ? [{ id: 'attached-project', name: path.basename(data.path), type: 'text', size: 100 }]
-                : data.action === 'reveal'
-                  ? { revealed: true }
-                  : await files.read(project, data.path);
+              : data.action === 'search'
+                ? await files.search(project, data.query, data.contents)
+                : data.action === 'attach'
+                  ? [{ id: 'attached-project', name: path.basename(data.path), type: 'text', size: 100 }]
+                  : data.action === 'reveal'
+                    ? { revealed: true }
+                    : await files.read(project, data.path);
           return Response.json(value);
         } catch (error) {
           return Response.json({ error: error.message });
@@ -132,8 +139,11 @@ app.whenReady().then(async () => {
       `[...document.querySelectorAll('.assistant-turn .project-file-link')].find(item=>item.textContent==='Open page').click()`,
     );
     await wait(`Boolean(document.querySelector('.project-file-content iframe'))`);
-    await new Promise((r) => setTimeout(r, 250));
-    const frame = win.webContents.mainFrame.frames.find((item) => item.url === 'about:srcdoc');
+    let frame;
+    for (let attempt = 0; attempt < 150 && !frame; attempt++) {
+      frame = win.webContents.mainFrame.frames.find((item) => item.url === 'about:srcdoc');
+      if (!frame) await new Promise((r) => setTimeout(r, 20));
+    }
     assert(frame, 'Static page frame did not load');
     const page = await run(`document.querySelector('.project-file-content iframe').srcdoc`);
     assert.match(page, /Project dashboard/);
@@ -156,6 +166,19 @@ app.whenReady().then(async () => {
       'Small project folders should not stretch the dialog across the whole window.',
     );
     fs.writeFileSync(path.join(shots, 'file-browser.png'), (await win.webContents.capturePage()).toPNG());
+    await run(
+      `[...document.querySelectorAll('.project-file-tools button')].find(item=>item.textContent==='Keep beside chat for dragging').click()`,
+    );
+    await wait(`document.querySelector('.project-file-dialog[open]')?.dataset.docked==='true'`);
+    assert.equal(await run(`document.querySelector('.project-file-dialog').matches(':modal')`), false);
+    await run(
+      `(()=>{const transfer=new DataTransfer();const file=[...document.querySelectorAll('.project-file-list button')].find(item=>item.textContent==='README.md');file.dispatchEvent(new DragEvent('dragstart',{dataTransfer:transfer,bubbles:true}));document.querySelector('.colab-composer').dispatchEvent(new DragEvent('drop',{dataTransfer:transfer,bubbles:true,cancelable:true}));})()`,
+    );
+    await wait(`document.querySelector('.colab-composer .attachment-chips').textContent.includes('README.md')`);
+    await run(
+      `document.querySelector('.project-file-tools input').value='Read-only source';[...document.querySelectorAll('.project-file-tools button')].find(item=>item.textContent==='Search file contents').click()`,
+    );
+    await wait(`document.querySelector('.project-file-list')?.textContent.includes('README.md:4')`);
     const inspection = await run(
       `(()=>{const copy=document.querySelector('.project-file-dialog').cloneNode(true);const styles=[...document.querySelectorAll('style')].map(item=>item.outerHTML).join('');return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>ATLAS project file browser</title>'+styles+'<style>'+${JSON.stringify(fs.readFileSync(path.join(root, 'ui-shell.css'), 'utf8'))}+'</style><style>body{margin:0;padding:16px;background:#0c171e;min-height:0;height:auto;overflow:auto}.project-file-dialog{position:relative;inset:auto;margin:0 auto;max-width:100%;height:calc(100vh - 32px);box-sizing:border-box}</style></head><body class="atlas-ui"><main>'+copy.outerHTML.replace('<dialog','<section').replace('</dialog>','</section>')+'</main></body></html>';})()`,
     );
@@ -171,6 +194,34 @@ app.whenReady().then(async () => {
       );
       assert(bounds.dialog <= bounds.width + 1 && bounds.overflow <= bounds.width + 1, JSON.stringify(bounds));
     }
+    await run(`document.querySelector('.project-file-dialog').close();new Promise(r=>setTimeout(r,30))`);
+    win.setContentSize(1280, 900);
+    await run(`atlasPower.show('Project health')`);
+    await run(
+      `[...document.querySelectorAll('#powerDialog button')].find(item=>item.textContent==='Run local health check').click()`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('Fixture tool')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'project-health.png'), (await win.webContents.capturePage()).toPNG());
+    await run(`atlasPower.show('Named checkpoints')`);
+    await wait(`document.querySelector('.power-body').textContent.includes('Create checkpoint')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'named-checkpoints.png'), (await win.webContents.capturePage()).toPNG());
+    await run(`atlasPower.show('Live preview')`);
+    await wait(`document.querySelector('.power-body').textContent.includes('Open src/app.ts:12:3')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'live-preview-controls.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(
+      path.join(shots, 'workbench-inspect.html'),
+      await run(
+        `(()=>{const styles=[...document.querySelectorAll('style')].map(x=>x.outerHTML).join('');return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>ATLAS live preview controls</title>'+styles+'<style>'+${JSON.stringify(fs.readFileSync(path.join(root, 'ui-shell.css'), 'utf8'))}+'</style><style>body{margin:0;background:#111;color:#eee;padding:16px}.power-dialog{position:relative;inset:auto;margin:auto;width:min(980px,100%);max-height:calc(100vh - 32px);box-sizing:border-box}</style></head><body class="atlas-ui"><main>'+document.getElementById('powerDialog').outerHTML.replace('<dialog','<section').replace('</dialog>','</section>')+'</main></body></html>';})()`,
+      ),
+    );
+    await run(
+      `[...document.querySelectorAll('#powerDialog button')].find(item=>item.textContent==='Attach screenshot and selection to chat').click()`,
+    );
+    await wait(`document.getElementById('colabTask').value.includes('button#target')`);
+    assert.equal(await run(`document.getElementById('powerDialog').open`), false);
     assert.deepEqual(await run('fileUiErrors'), []);
     console.log(
       'PASS: Chat/Colab inline local images, file links, source preview, explicit attachment, isolated static HTML/CSS/assets, file browsing and narrow layout. Screenshots: ' +

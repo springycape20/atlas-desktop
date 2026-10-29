@@ -1,5 +1,7 @@
 # Privacy and local data
 
+Development after 0.9.0 includes a sandboxed local-site preview and optional screenshot feedback. The preview blocks requests outside its selected local origin. Starting a development server requires confirmation because project configuration runs with your account permissions and may itself access the network. Captures become local attachments and are sent to a provider only when you send the message. Named checkpoints store eligible project text locally and exclude private and denied paths. See [Project workbench](PROJECT-WORKBENCH.md) for limits and controls.
+
 ATLAS is a free, independent Windows application maintained by the Australian publisher [springycape20](https://github.com/springycape20). The publisher operates no ATLAS inference service and the application contains no publisher telemetry, analytics or crash-upload feature. For private security reports use [GitHub private reporting](https://github.com/springycape20/atlas-desktop/security/advisories/new). Avoid private information in public support issues.
 
 ## What leaves your computer

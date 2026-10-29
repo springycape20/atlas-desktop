@@ -1117,6 +1117,54 @@ function persistJobs() {
 }
 
 function setupIpc() {
+  let livePreview;
+  ipcMain.handle('atlas:live-preview', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (!livePreview) {
+      livePreview = require('./live-preview').createLivePreview({
+        electron: require('electron'),
+        directory: app.getPath('userData'),
+        parent: () => mainWindow,
+        importPaths: (paths) => workspace().importPaths(paths),
+        approve: async (message, detail) =>
+          (
+            await dialog.showMessageBox(mainWindow, {
+              type: 'question',
+              message,
+              detail,
+              buttons: ['Cancel', 'Start server'],
+              defaultId: 0,
+              cancelId: 0,
+            })
+          ).response === 1,
+      });
+      app.on('before-quit', () => livePreview.dispose());
+    }
+    return livePreview.action(request);
+  });
+  let projectWorkbench;
+  ipcMain.handle('atlas:project-workbench', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (['capture', 'restore', 'preview'].includes(request.action) && jobsRunning())
+      throw Error('Finish or stop active tasks before changing checkpoints.');
+    projectWorkbench ||= require('./project-workbench').createProjectWorkbench({
+      directory: app.getPath('userData'),
+      tracker: require('./change-tracker').createChangeTracker(app.getPath('userData'), {
+        permitted: async (root, name) => {
+          try {
+            await require('./project-files')
+              .createProjectFiles({ denied: () => integrations().deniedFiles() })
+              .resolve(root, name);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+      }),
+      files: require('./project-files').createProjectFiles({ denied: () => integrations().deniedFiles() }),
+    });
+    return projectWorkbench.action(request);
+  });
   ipcMain.handle('atlas:project-file', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     let root = request.cwd;
@@ -1137,6 +1185,7 @@ function setupIpc() {
       denied: () => integrations().deniedFiles(),
     });
     if (request.action === 'list') return projectFileService.list(root, request.path || '.');
+    if (request.action === 'search') return projectFileService.search(root, request.query, request.contents === true);
     if (request.action === 'reveal') {
       const file = await projectFileService.resolve(root, request.path);
       shell.showItemInFolder(file.actual);
@@ -2076,6 +2125,8 @@ async function createWindow() {
         '/planning-ui.js',
         '/environment-ui.js',
         '/review-center-ui.js',
+        '/project-workbench-ui.js',
+        '/live-preview-ui.js',
         '/progress-ui.js',
         '/search-results.js',
         '/unified-search-ui.js',

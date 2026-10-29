@@ -1559,7 +1559,7 @@
     applyWorkflow: (workflow) => {
       if (!historyReady) throw Error('Colab history is loading. Try again.');
       if (current()?.busy) throw Error('Stop or finish this Colab task before applying a workflow.');
-      const chat = current()?.messages.length ? makeChat() : current();
+      const chat = current()?.messages.length || current()?.draft ? makeChat() : current();
       if (workflow.cwd && projectKey(workflow.cwd) !== projectKey(chat.cwd)) {
         Object.assign(chat, { profileId: '', projectName: '', codexModel: '', claudeModel: '', workspaceId: '' });
         projectFilter = projectKey(workflow.cwd);

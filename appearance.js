@@ -3,12 +3,13 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.atlasAppearance = api;
 })(globalThis, function () {
-  const defaults = { uiTheme: 'dark', uiTextScale: 1, uiDensity: 'comfortable' };
+  const defaults = { uiTheme: 'dark', uiTextScale: 1, uiDensity: 'comfortable', uiMotion: 'system' };
   function clean(value) {
     return {
       uiTheme: ['dark', 'light', 'contrast'].includes(value?.uiTheme) ? value.uiTheme : defaults.uiTheme,
       uiTextScale: [1, 1.15, 1.3].includes(value?.uiTextScale) ? value.uiTextScale : defaults.uiTextScale,
       uiDensity: ['comfortable', 'compact'].includes(value?.uiDensity) ? value.uiDensity : defaults.uiDensity,
+      uiMotion: ['system', 'reduced'].includes(value?.uiMotion) ? value.uiMotion : defaults.uiMotion,
     };
   }
   return { defaults, clean };

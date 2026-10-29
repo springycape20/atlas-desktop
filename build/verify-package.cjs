@@ -39,6 +39,10 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     'unified-search-ui.js',
     'project-files.js',
     'output-files-ui.js',
+    'project-workbench.js',
+    'project-workbench-ui.js',
+    'live-preview.js',
+    'live-preview-ui.js',
   ])
     assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {
