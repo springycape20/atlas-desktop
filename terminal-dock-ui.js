@@ -273,8 +273,11 @@
   }
   power.register('Terminal', async () => open());
   window.atlasTerminal = { open, hide };
-  for (const parent of document.querySelectorAll('.composer,.colab-composer'))
-    button('Terminal', open, parent.querySelector('.attachment-toolbar') || parent);
+  for (const parent of document.querySelectorAll('.composer,.colab-composer')) {
+    const toolbar = parent.querySelector('.shell-composer-tools'),
+      trigger = button('Terminal', open, toolbar || parent);
+    if (toolbar) toolbar.insertBefore(trigger, toolbar.querySelector('.shell-send'));
+  }
   window.addEventListener('resize', () => resize(width, false));
   new MutationObserver(() => {
     if (!pane.hidden && document.body.classList.contains('project-editor-open')) hide();

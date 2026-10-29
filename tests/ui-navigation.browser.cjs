@@ -195,6 +195,48 @@ app.whenReady().then(async () => {
     );
     await new Promise((r) => setTimeout(r, 80));
     fs.writeFileSync(path.join(out, 'search.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(
+      `document.getElementById('commandMenu')?.close();document.querySelectorAll('dialog[open]').forEach(d=>d.close());`,
+    );
+    for (const theme of ['dark', 'light', 'contrast'])
+      for (const scale of [1, 1.3])
+        for (const width of [1280, 1024, 768, 640]) {
+          win.setContentSize(width, 800);
+          for (const scope of ['assistant', 'colab']) {
+            await win.webContents.executeJavaScript(
+              `atlasAppearanceUi.saved({uiTheme:${JSON.stringify(theme)},uiTextScale:${scale}});document.querySelector('[data-chat-workspace="${scope}"]').click();`,
+            );
+            await new Promise((r) => setTimeout(r, 40));
+            const issue = await win.webContents
+              .executeJavaScript(
+                `(()=>{try{
+              const composer=document.querySelector('${scope === 'colab' ? '.colab-composer' : '.composer'}');
+              const visible=e=>e.checkVisibility({visibilityProperty:true,opacityProperty:true})&&e.getClientRects().length&&(!e.closest('details:not([open])')||e.closest('summary'));
+              const buttons=[...composer.querySelectorAll('button')].filter(visible), fields=[...composer.querySelectorAll('textarea')].filter(visible);
+              const intersects=(a,b)=>{a=a.getBoundingClientRect();b=b.getBoundingClientRect();return Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1};
+              const terminal=buttons.find(b=>b.textContent==='Terminal');
+              if(!terminal?.closest('.shell-composer-tools'))throw Error('Terminal outside action row');
+              for(const button of buttons){
+                for(const field of fields)if(intersects(button,field))throw Error('Composer overlap: '+button.textContent);
+                for(const other of buttons)if(button!==other&&intersects(button,other))throw Error('Buttons overlap: '+button.textContent+' / '+other.textContent);
+                const r=button.getBoundingClientRect();if(r.left<0||r.right>innerWidth+1||r.bottom>innerHeight+1)throw Error('Button outside viewport: '+button.textContent);
+              }
+              const controls=[...document.querySelectorAll('input,textarea,select')].filter(visible).filter(e=>e.getBoundingClientRect().width>4&&e.getBoundingClientRect().height>4);
+              for(const button of [...document.querySelectorAll('button')].filter(visible))
+                for(const field of controls)if(intersects(button,field))throw Error('Control overlap: '+button.textContent+' / '+(field.id||field.getAttribute('aria-label')||field.tagName));
+            }catch(error){return error.message}})()`,
+              )
+              .catch((error) => {
+                throw Error(theme + ' scale ' + scale + ' width ' + width + ' ' + scope + ': ' + error.message);
+              });
+            if (issue) throw Error(theme + ' scale ' + scale + ' width ' + width + ' ' + scope + ': ' + issue);
+            if (theme === 'dark' && scale === 1 && [1280, 768, 640].includes(width))
+              fs.writeFileSync(
+                path.join(out, 'composer-' + scope + '-' + width + '.png'),
+                (await win.webContents.capturePage()).toPNG(),
+              );
+          }
+        }
     console.log(
       'PASS: Navigation, embedded tools, keyboard resizing, composers, Ctrl+K search, saved/discarded appearance and three themes at three widths.',
     );
