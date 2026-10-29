@@ -72,6 +72,7 @@ const taskNotifications = require('./task-notifications').createTaskNotification
 let modelCatalogService, updateService, providerUsageService;
 let taskPlanService;
 let projectFileService;
+let projectEditor;
 function providerUsage() {
   return (providerUsageService ||= require('./provider-usage').createProviderUsage({
     codex: async () => {
@@ -1184,6 +1185,13 @@ function setupIpc() {
     projectFileService ||= require('./project-files').createProjectFiles({
       denied: () => integrations().deniedFiles(),
     });
+    if (/^(editor-|replace-)/.test(request.action || '')) {
+      projectEditor ||= require('./project-editor').createProjectEditor({
+        files: projectFileService,
+        busy: jobsRunning,
+      });
+      return projectEditor.action(await require('node:fs/promises').realpath(root), request);
+    }
     if (request.action === 'list') return projectFileService.list(root, request.path || '.');
     if (request.action === 'search') return projectFileService.search(root, request.query, request.contents === true);
     if (request.action === 'reveal') {
@@ -1416,6 +1424,58 @@ function setupIpc() {
     const text = await readFile(appLog.file, 'utf8').catch(() => 'No diagnostic log is available.');
     await writeFile(result.filePath, require('./app-log').redactDiagnostic(text), 'utf8');
     return { exported: true };
+  });
+  let diagnosticDraft;
+  ipcMain.handle('atlas:workflow-tools', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const evidence = require('./workflow-evidence');
+    if (request.action === 'compare') {
+      if (!Array.isArray(request.ids) || request.ids.length !== 2) throw Error('Choose two tasks.');
+      return Promise.all(
+        request.ids.map(async (id) => {
+          const job = jobSnapshots().find((row) => row.id === id);
+          if (!job) throw Error('Task is no longer available.');
+          let report;
+          if (job.changeId)
+            try {
+              report = await changes().report(job.changeId, true);
+            } catch {}
+          return evidence.taskEvidence(job, report);
+        }),
+      );
+    }
+    if (request.action === 'diagnostic-preview') {
+      const jobs = jobSnapshots();
+      const log = request.includeLogs === true ? await readFile(appLog.file, 'utf8').catch(() => '') : '';
+      const bundle = evidence.diagnosticBundle({
+        version: app.getVersion(),
+        platform: process.platform,
+        jobs,
+        log,
+        includeLogs: request.includeLogs === true,
+        includeOutput: request.includeOutput === true,
+        privatePaths: [app.getPath('home'), app.getPath('userData'), ...jobs.map((job) => job.cwd)],
+      });
+      diagnosticDraft = {
+        id: require('node:crypto').randomUUID(),
+        text: JSON.stringify(bundle, null, 2),
+        createdAt: Date.now(),
+      };
+      return diagnosticDraft;
+    }
+    if (request.action === 'diagnostic-export') {
+      if (!diagnosticDraft || diagnosticDraft.id !== request.id || Date.now() - diagnosticDraft.createdAt > 600000)
+        throw Error('Preview the diagnostic bundle again.');
+      const draft = diagnosticDraft;
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Export reviewed diagnostic bundle',
+        defaultPath: 'atlas-diagnostics.json',
+      });
+      if (result.canceled || !result.filePath) return { cancelled: true };
+      await writeFile(result.filePath, draft.text, 'utf8');
+      return { exported: true };
+    }
+    throw Error('Unknown workflow tools action.');
   });
   ipcMain.handle('atlas:show-notices', (event) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -2127,6 +2187,9 @@ async function createWindow() {
         '/review-center-ui.js',
         '/project-workbench-ui.js',
         '/live-preview-ui.js',
+        '/project-editor-ui.js',
+        '/project-editor.css',
+        '/workflow-tools-ui.js',
         '/progress-ui.js',
         '/search-results.js',
         '/unified-search-ui.js',

@@ -2,13 +2,15 @@
 
 These tools are included in ATLAS 0.9.1.
 
+For the editor, find and replace, task prerequisites, permission dashboard, diagnostic bundles, task comparison and additional preview recipes currently in development, see [Project workflow tools](PROJECT-WORKFLOW-TOOLS.md).
+
 Use **Attach** in Chat or Colab to open **Live project preview**, **Project health**, **Named checkpoints**, or **Browse project files**. Task tools are also available from **Tasks**; health is available under Settings diagnostics.
 
 ## Live preview and visual feedback
 
 Open an HTTP URL on `localhost`, `127.0.0.1`, or `::1` in a separate preview window beside chat. Project JavaScript runs in a sandbox without Node.js, the ATLAS API, device permissions, popups, or downloads. Requests outside the selected origin are blocked, including remote APIs, fonts and images. Same-origin WebSockets are allowed for development reloads.
 
-**Start Vite server** supports an already installed `node_modules/vite/bin/vite.js` inside the selected project and Node.js on PATH. A confirmation names the project before executing its Vite configuration/plugins with your account permissions. It binds to `127.0.0.1:5173` with a strict port; it does not install dependencies. Other frameworks can use a server you start separately. Starting the server and opening its URL are separate actions. Stop the managed server from the controls; quitting ATLAS also stops it.
+**Start project server** supports installed Vite and Next.js projects with Node.js on PATH, or Flask in the project's `.venv`. Choose the framework and port; a confirmation names the executable and arguments before executing project code with your account permissions. Managed servers bind to `127.0.0.1`; no dependencies are installed. Other frameworks can use a server you start separately. Starting the server and opening its URL are separate actions. Stop the managed server from the controls; quitting ATLAS also stops it.
 
 Server output refreshes in the controls. Recognised source locations are clickable read-only file previews. Unsupported log formats remain visible as text.
 

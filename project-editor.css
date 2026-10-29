@@ -1,0 +1,108 @@
+.project-editor-panel {
+  position: fixed;
+  right: 0;
+  top: 42px;
+  bottom: 0;
+  z-index: 45;
+  width: min(620px, 52vw);
+  background: #101416;
+  color: #e6eeee;
+  border-left: 1px solid #40545b;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+  box-sizing: border-box;
+  font:
+    13px/1.5 'Segoe UI',
+    sans-serif;
+}
+.project-editor-panel[hidden] {
+  display: none;
+}
+.project-editor-panel header,
+.project-editor-panel nav,
+.project-editor-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.project-editor-panel header h1 {
+  flex: 1;
+  font-size: 16px;
+  margin: 0;
+}
+.project-editor-panel nav {
+  max-height: 100px;
+  overflow: auto;
+}
+.project-editor-panel nav button[aria-selected='true'] {
+  border-color: #8bcec1;
+  color: #8bcec1;
+}
+.project-editor-panel textarea,
+.project-editor-panel pre {
+  flex: 1;
+  min-height: 100px;
+  width: 100%;
+  box-sizing: border-box;
+  background: #080c0e;
+  color: #e6eeee;
+  border: 1px solid #40545b;
+  padding: 12px;
+  font:
+    13px/1.6 Consolas,
+    monospace;
+  tab-size: 2;
+  overflow: auto;
+  white-space: pre;
+}
+.project-editor-panel textarea {
+  resize: none;
+}
+.project-editor-panel :focus-visible {
+  outline: 2px solid #8bcec1;
+  outline-offset: 2px;
+}
+.project-editor-panel p {
+  margin: 0;
+  max-height: 80px;
+  overflow: auto;
+}
+.project-editor-panel [hidden] {
+  display: none;
+}
+@media (min-width: 1150px) {
+  body.project-editor-open .layout {
+    margin-right: min(620px, 52vw);
+  }
+  :root body.atlas-ui.project-editor-open :is(.assistant-workspace, .colab-workspace) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  body.project-editor-open .assistant-workspace > :first-child,
+  body.project-editor-open .colab-workspace > :first-child,
+  body.project-editor-open .shell-chat-resize {
+    display: none !important;
+  }
+}
+@media (max-width: 800px) {
+  .project-editor-panel {
+    width: 100%;
+    top: 32px;
+  }
+}
+.task-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.task-comparison-grid section {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .task-comparison-grid {
+    grid-template-columns: 1fr;
+  }
+}

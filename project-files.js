@@ -166,6 +166,9 @@ function createProjectFiles({
           ...info,
           kind: ['.html', '.htm'].includes(ext) ? 'html' : 'text',
           text: new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+          version: require('node:crypto').createHash('sha256').update(bytes).digest('hex') + ':' + (before.mode & 511),
+          mode: before.mode & 511,
+          bom: bytes.length >= 3 && bytes[0] === 239 && bytes[1] === 187 && bytes[2] === 191,
         };
       } catch {}
     }

@@ -22,6 +22,29 @@
     url.value = 'http://127.0.0.1:5173/';
     url.setAttribute('aria-label', 'Local preview URL');
     body.append(url);
+    const recipe = node('select');
+    recipe.setAttribute('aria-label', 'Preview framework');
+    for (const [id, label] of [
+      ['vite', 'Vite'],
+      ['next', 'Next.js'],
+      ['flask', 'Python · Flask (.venv)'],
+    ])
+      recipe.append(new Option(label, id));
+    const port = node('input');
+    port.type = 'number';
+    port.min = '1024';
+    port.max = '65535';
+    port.value = '5173';
+    port.setAttribute('aria-label', 'Server port');
+    const module = node('input');
+    module.value = 'app';
+    module.setAttribute('aria-label', 'Flask module');
+    module.hidden = true;
+    recipe.onchange = () => {
+      port.value = recipe.value === 'next' ? '3000' : recipe.value === 'flask' ? '5000' : '5173';
+      module.hidden = recipe.value !== 'flask';
+    };
+    body.append(recipe, port, module);
     const actions = node('div');
     actions.className = 'power-actions';
     body.append(actions);
@@ -35,7 +58,7 @@
       if (!current()) return;
       logs.textContent =
         value.output ||
-        'No server output. Automatic start supports installed Vite projects; other servers can be opened by local URL.';
+        'No server output. Choose an installed Vite, Next.js or Flask project. Other servers can be opened by local URL.';
       status.textContent =
         (value.open ? 'Preview open' : 'Preview closed') +
         ' · ' +
@@ -62,9 +85,9 @@
       actions,
     );
     button(
-      'Start Vite server…',
+      'Start project server…',
       async () => {
-        const result = await call('start');
+        const result = await call('start', { recipe: recipe.value, port: Number(port.value), module: module.value });
         if (result.url) url.value = result.url;
         await refresh();
       },
