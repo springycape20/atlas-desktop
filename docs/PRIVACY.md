@@ -1,5 +1,7 @@
 # Privacy and local data
 
+ATLAS 0.9.1 includes a sandboxed local-site preview and optional screenshot feedback. The preview blocks requests outside its selected local origin. Starting a development server requires confirmation because project configuration runs with your account permissions and may itself access the network. Captures become local attachments and are sent to a provider only when you send the message. Named checkpoints store eligible project text locally and exclude private and denied paths. See [Project workbench](PROJECT-WORKBENCH.md) for limits and controls.
+
 ATLAS is a free, independent Windows application maintained by the Australian publisher [springycape20](https://github.com/springycape20). The publisher operates no ATLAS inference service and the application contains no publisher telemetry, analytics or crash-upload feature. For private security reports use [GitHub private reporting](https://github.com/springycape20/atlas-desktop/security/advisories/new). Avoid private information in public support issues.
 
 ## What leaves your computer
@@ -13,6 +15,8 @@ Optional ElevenLabs speech sends the spoken-answer text to ElevenLabs using your
 At startup ATLAS checks GitHub for updates and asks installed providers for available models through supported interfaces. Downloads contact GitHub, Hugging Face and runtime/package hosts when the relevant feature is used. Those hosts receive normal network metadata such as an IP address. Custom MCP servers and programs you authorise have their own behaviour and may make other requests; only enable ones you trust. The publisher does not receive those requests through an ATLAS server.
 
 ## What stays locally
+
+ATLAS 0.9.1 can preview project images, text and static HTML locally in the chat window. Previewing does not send the file to a provider. Static HTML previews disable scripts, forms and network requests and use bounded local image/stylesheet reads. **Attach to next message** creates a local attachment copy through the existing flow; sending that message may share it with the selected provider. Static file previews do not start a development server or execute project code; the separate live-preview controls require an explicit action.
 
 In Project tools, source excerpts are indexed in a bounded in-memory worker cache and are added to provider requests only when enabled for the chat. A basic file-name map can be saved locally. Context exclusions affect ATLAS additions and do not change provider filesystem permissions. Custom workflow templates and batch/task records stay in the current ATLAS data folder; they can contain task text and command names. Parallel batches make multiple provider requests and share subtask work in the combined review.
 

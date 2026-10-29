@@ -1,5 +1,7 @@
 # ATLAS
 
+ATLAS 0.9.1 adds [live project previews, visual feedback, named checkpoints, project search and health checks](docs/PROJECT-WORKBENCH.md).
+
 **A local Windows desktop assistant for Codex and Claude Code.** Chat with either model in one app, talk to it with local speech, or hand a task to **Colab**, where Codex and Claude build, check and review each other's work before you see one reviewed result. Verification labels name the checks ATLAS actually ran; AI output and model review can still be wrong.
 
 [![Latest release](https://img.shields.io/github/v/release/springycape20/atlas-desktop?label=download)](https://github.com/springycape20/atlas-desktop/releases/latest)
@@ -53,6 +55,8 @@ Version 0.9.0 adds local project indexing, context controls, runtime measurement
 The interface also groups tools under Tasks, Library and Settings, adds Ctrl+K navigation search, resizable conversation lists and readable task summaries, and offers theme, text-size and spacing preferences in Settings > Appearance.
 
 Additional tools include editable task plans with approval, opt-in fast/strong model tiers, project-scoped memory, local hardware capacity checks, project environment recipes, a unified review centre, live progress estimates and search across local work. See the [capability guide](docs/PROJECT-TOOLS.md) for locations and limits.
+
+ATLAS 0.9.1 also adds inline project-image previews, clickable file references, static HTML previews and **Attach > Browse project files**. See the [preview guide](docs/PROJECT-TOOLS.md#file-and-image-previews).
 
 ## Install
 

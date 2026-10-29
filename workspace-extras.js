@@ -227,11 +227,13 @@
       attachmentSets[key] = next;
       saveAttachments();
       renderAttachments();
+      return true;
     } catch (error) {
       bar.querySelector('.attachment-error').textContent = error.message.replace(
         /^Error invoking remote method '[^']+': Error: /,
         '',
       );
+      return false;
     }
   }
   function mountAttachments(scope, composer) {
@@ -1096,6 +1098,7 @@
     $id('prompt').focus();
   }
   window.atlasWorkspace = {
+    addAttachments,
     open: { projects: showProjects, history: showHistory, diagnostics: showDiagnostics },
     importChats: showImport,
     refreshProfiles: async () => {

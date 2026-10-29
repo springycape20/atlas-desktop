@@ -136,12 +136,39 @@
     const preview = node('div');
     body.append(preview);
     button(
+      'Draft a conversation handover request',
+      () => {
+        const field = document.getElementById(which === 'colab' ? 'colabTask' : 'prompt');
+        field.value +=
+          (field.value ? '\n\n' : '') +
+          'Prepare a concise handover of this conversation: objective, decisions, changed files, checks, unresolved issues and next steps. Clearly distinguish verified results from assumptions. Do not change files.';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        status.textContent =
+          'Handover request added to the unsent draft. Send it to generate a summary before starting a fresh conversation.';
+      },
+      actions,
+    );
+    button(
       'Refresh preview',
       async () => {
         status.textContent = 'Reading selected context locally…';
         const result = await api.contextPreview({ ...input, selection: selected });
         if (!current()) return;
         preview.replaceChildren();
+        const included =
+          (result.sections || [])
+            .filter((section) => section.included)
+            .map((section) => section.text || '')
+            .join('\n') + (result.indexed?.results || []).map((file) => file.excerpt || '').join('\n');
+        preview.append(
+          node('h3', 'Estimated optional context: ~' + Math.ceil(included.length / 4).toLocaleString() + ' tokens'),
+        );
+        preview.append(
+          node(
+            'p',
+            'Estimate uses four characters per token. Provider sessions, tools and file reads add context; provider compaction is managed by the provider and is not exposed to ATLAS.',
+          ),
+        );
         for (const section of result.sections || []) {
           const details = node('details');
           details.append(
@@ -187,7 +214,8 @@
       },
       actions,
     );
-    if (input.prompt) actions.querySelector('button').click();
+    if (input.prompt)
+      [...actions.querySelectorAll('button')].find((button) => button.textContent === 'Refresh preview').click();
     else
       status.textContent =
         'Write a message first, then refresh the preview. Excerpts are opt-in; the source cache stays in memory on this PC.';
