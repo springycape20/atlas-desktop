@@ -24,6 +24,7 @@
     "test:navigation-ui": "electron tests/ui-navigation.browser.cjs",
     "test:files-ui": "electron tests/project-files.browser.cjs",
     "test:pty-ui": "electron tests/pty.browser.cjs",
+    "test:pty-render-ui": "electron tests/pty-render.browser.cjs",
     "test:restore-ui": "electron tests/restore.browser.cjs",
     "test:preview-ui": "electron tests/live-preview.browser.cjs",
     "test:release-ui": "electron tests/release-screens.browser.cjs",

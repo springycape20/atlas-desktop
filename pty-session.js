@@ -4,7 +4,10 @@ function runPty(
   { signal, onStart, onOutput, onBusy, timeoutMs = 3600000, spawnProcess = require('node-pty').spawn } = {},
 ) {
   return new Promise((resolve) => {
-    const token = 'ATLAS_PROMPT_' + randomUUID().replaceAll('-', ''),
+    // A zero-width terminal title sequence marks prompt readiness without changing
+    // the console cursor coordinates used by PSReadLine to redraw typed input.
+    const marker = 'ATLAS_PROMPT_' + randomUUID().replaceAll('-', ''),
+      token = '\x1b]0;' + marker + '\x07',
       win = process.platform === 'win32';
     let child;
     try {
@@ -16,7 +19,9 @@ function runPty(
               '-NoProfile',
               '-NoExit',
               '-Command',
-              "function global:prompt { [Console]::Write('" + token + "'); 'PS '+(Get-Location).Path+'> ' }",
+              "function global:prompt { [Console]::Write([char]27+']0;" +
+                marker +
+                "'+[char]7); 'PS '+(Get-Location).Path+'> ' }",
             ]
           : [],
         {
