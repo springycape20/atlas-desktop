@@ -71,6 +71,10 @@ async function safePath(root, name) {
 async function scan(root, exclude, permitted = async () => true) {
   // Match canonical task roots even when Windows supplies an 8.3 name or junction.
   if (exclude) exclude = await fs.realpath(exclude).catch(() => path.resolve(exclude));
+  // Managed checkouts live beneath userData/worktrees; exclude the data store only when it is
+  // outside the project. Otherwise every managed task would look like an empty snapshot.
+  if (exclude && inside(path.join(exclude, 'worktrees'), root)) exclude = null;
+  else if (exclude && (root === exclude || inside(exclude, root))) return { files: Object.create(null), limited: true };
   let names,
     limited = false;
   try {
@@ -196,7 +200,7 @@ function changedFiles(before, after) {
   }
   return { files: rows, added, removed, complete };
 }
-function createChangeTracker(directory, { permitted } = {}) {
+function createChangeTracker(directory, { permitted = async () => true } = {}) {
   const base = path.join(directory, 'changes'),
     loaded = new Map(),
     reports = new Map(),
@@ -262,6 +266,7 @@ function createChangeTracker(directory, { permitted } = {}) {
     if (!row) throw Error('This file is no longer changed. Refresh the list.');
     const snapshot = await load(id),
       location = await safePath(snapshot.cwd, name);
+    if (!(await permitted(snapshot.cwd, name))) throw Error('Access to this checkpoint file is excluded or denied.');
     let bytes = null,
       stat = null;
     try {
@@ -341,6 +346,7 @@ function createChangeTracker(directory, { permitted } = {}) {
       files = Object.keys(snapshot.after).filter((name) => !selected || selected.includes(name)),
       conflicts = [];
     for (const name of files) {
+      if (!(await permitted(snapshot.cwd, name))) throw Error('Access to this checkpoint file is excluded or denied.');
       const expected = snapshot.after[name],
         actual = current.files[name];
       if ((expected?.hash || null) !== (actual?.hash || null) || (expected?.mode ?? null) !== (actual?.mode ?? null))
@@ -414,6 +420,17 @@ function createChangeTracker(directory, { permitted } = {}) {
       complete: !current.limited,
     };
   }
-  return { capture, report, file, save, seal, restorePreview, restore, fingerprint };
+  async function verifySnapshot(id) {
+    const snapshot = await load(id),
+      current = await scan(snapshot.cwd, directory, permitted),
+      changed = changedFiles(snapshot.files, current.files).files;
+    return {
+      matches: !changed.length,
+      complete: !snapshot.limited && !current.limited,
+      files: changed.map((row) => row.path),
+      cwd: snapshot.cwd,
+    };
+  }
+  return { capture, report, file, save, seal, restorePreview, restore, fingerprint, verifySnapshot };
 }
 module.exports = { createChangeTracker, changedFiles };

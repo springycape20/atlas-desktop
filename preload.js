@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('atlas', {
   attachmentPreview: (id) => ipcRenderer.invoke('atlas:attachment-preview', { id }),
   projectFile: (request) => ipcRenderer.invoke('atlas:project-file', request),
   workflowTools: (request) => ipcRenderer.invoke('atlas:workflow-tools', request),
+  advancedWorkflows: (request) => ipcRenderer.invoke('atlas:advanced-workflows', request),
   projectWorkbench: (request) => ipcRenderer.invoke('atlas:project-workbench', request),
   livePreview: (request) => ipcRenderer.invoke('atlas:live-preview', request),
   diagnostics: () => ipcRenderer.invoke('atlas:diagnostics'),

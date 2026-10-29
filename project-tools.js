@@ -39,7 +39,18 @@ async function detectProject(folder) {
 // for this command only; the user's command and execution policy are left unchanged.
 const CMD_SHIMS =
   "foreach ($shim in 'npm','npx','pnpm','yarn') { $found = Get-Command ($shim + '.cmd') -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if ($found) { Set-Alias -Name $shim -Value $found.Source } }\n";
-function runCheck(command, cwd, { signal, timeoutMs = 120000, spawnProcess = spawn } = {}) {
+function runCheck(
+  command,
+  cwd,
+  {
+    signal,
+    timeoutMs = 120000,
+    spawnProcess = spawn,
+    interactive = false,
+    onOutput = () => {},
+    onStart = () => {},
+  } = {},
+) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     let output = '',
@@ -67,10 +78,12 @@ function runCheck(command, cwd, { signal, timeoutMs = 120000, spawnProcess = spa
     const child = spawnProcess(executable, args, {
       cwd,
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [interactive ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       env: process.env,
       detached: process.platform !== 'win32',
     });
+    onStart({ pid: child.pid, write: (text) => child.stdin?.write(text) });
+    if (interactive) child.stdin?.on('error', () => onOutput('\nThe process input stream closed.\n'));
     const finish = (status, exitCode, error) => {
       if (settled) return;
       settled = true;
@@ -109,6 +122,7 @@ function runCheck(command, cwd, { signal, timeoutMs = 120000, spawnProcess = spa
     for (const stream of [child.stdout, child.stderr])
       stream.on('data', (part) => {
         output = (output + part.toString()).slice(-16000);
+        onOutput(part.toString());
       });
     child.once('error', (error) => finish('failed', null, error.message));
     child.once('close', (code) =>

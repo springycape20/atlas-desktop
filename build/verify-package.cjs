@@ -49,6 +49,13 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     'project-editor.css',
     'workflow-evidence.js',
     'workflow-tools-ui.js',
+    'advanced-workflows-ui.js',
+    'advanced-workflows.js',
+    'code-intelligence.js',
+    'project-terminal.js',
+    'repair-loop.js',
+    'task-archive.js',
+    'verified-recovery.js',
   ])
     assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {

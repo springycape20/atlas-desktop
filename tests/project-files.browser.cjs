@@ -269,7 +269,7 @@ app.whenReady().then(async () => {
     await new Promise((r) => setTimeout(r, 100));
     fs.writeFileSync(path.join(shots, 'diagnostic-bundle.png'), (await win.webContents.capturePage()).toPNG());
     await run(
-      `window.atlas.jobs=async()=>[{id:'one',prompt:'Build the project',endedAt:1000},{id:'two',prompt:'Improve the project',endedAt:2000}];window.atlas.workflowTools=async r=>r.ids.map((id,i)=>({id,title:i?'Improve the project':'Build the project',provider:'codex',status:'completed',durationMs:1000+i*500,usage:i?{inputTokens:250,outputTokens:80}:null,checks:{status:i?'passed':'failed',results:[{status:i?'passed':'failed',command:'npm test',output:i?'Tests passed':'A check failed'}]},diff:{checkedAt:Date.now(),files:[{path:'app.js',status:'modified',added:1,removed:1,hunks:[{lines:['-old','+new']}]}]}}));atlasPower.show('Task comparison')`,
+      `window.atlas.jobs=async()=>[{id:'one',prompt:'Build the project',endedAt:1000},{id:'two',prompt:'Improve the project',endedAt:2000}];window.atlas.workflowTools=async r=>r.action==='archive-list'?[]:r.ids.map((id,i)=>({id,title:i?'Improve the project':'Build the project',provider:'codex',status:'completed',durationMs:1000+i*500,usage:i?{inputTokens:250,outputTokens:80}:null,checks:{status:i?'passed':'failed',results:[{status:i?'passed':'failed',command:'npm test',output:i?'Tests passed':'A check failed'}]},diff:{checkedAt:Date.now(),files:[{path:'app.js',status:'modified',added:1,removed:1,hunks:[{lines:['-old','+new']}]}]}}));atlasPower.show('Task comparison')`,
     );
     await run(`[...document.querySelectorAll('.power-body button')].find(item=>item.textContent==='Compare').click()`);
     await wait(`document.querySelector('.task-comparison-grid').textContent.includes('input 250')`);
@@ -302,6 +302,51 @@ app.whenReady().then(async () => {
     );
     await wait(`document.getElementById('colabTask').value.includes('button#target')`);
     assert.equal(await run(`document.getElementById('powerDialog').open`), false);
+    await run(
+      `window.advancedCalls=[];window.terminalRows=[];window.repairRows=[];window.atlas.advancedWorkflows=async r=>{advancedCalls.push(r);if(r.tool==='intelligence')return {indexed:3,definitions:[{path:'README.md',name:'renderPage',line:1}],references:[{path:'style.css',line:1,excerpt:'renderPage()'}],imports:['style.css'],affected:[{path:'index.html',distance:1}],tests:[],note:'Static hints only.'};if(r.tool==='terminal'){if(r.action==='start')terminalRows.push({id:'terminal-demo',command:r.command,status:'running',pid:42,output:'Fixture live output',cwd:r.cwd});if(r.action==='stop')terminalRows[0].status='cancelled';if(r.action==='input')terminalRows[0].output+=' input received';return r.action==='start'?terminalRows[0]:terminalRows;}if(r.tool==='repair'){if(r.action==='start')repairRows.push({id:'repair-demo',status:'running',runs:[{attempt:0,results:[{command:'npm test',status:'failed',output:'Fixture failure'}]}]});if(r.action==='stop')repairRows[0].status='cancelled';return r.action==='start'?repairRows[0]:repairRows;}return {verified:true,reason:'Tracked files match.',remaining:'Continue after two recorded stages.'};};window.atlas.jobs=async()=>[{id:'failed-demo',prompt:'Repair fixture',status:'failed',endedAt:1000,cwd:${JSON.stringify(project)},verification:{results:[{command:'npm test',status:'failed'}]},resumeCheckpoint:{id:'saved'}}];void 0;`,
+    );
+    win.setContentSize(1280, 900);
+    await run(`atlasPower.show('Project intelligence')`);
+    await run(
+      `(()=>{document.querySelector('.power-body input').value='README.md';[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Analyze project').click()})()`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('renderPage')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'project-intelligence.png'), (await win.webContents.capturePage()).toPNG());
+    await run(`atlasPower.show('Terminal')`);
+    await run(
+      `(()=>{document.querySelector('.power-body textarea').value='echo fixture';[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Run command…').click()})()`,
+    );
+    await wait(`document.querySelector('.power-body pre').textContent.includes('Fixture live output')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'terminal.png'), (await win.webContents.capturePage()).toPNG());
+    await run(`[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Stop process').click()`);
+    await wait(`document.querySelector('.power-body').textContent.includes('cancelled')`);
+    await run(`atlasPower.show('Repair loops')`);
+    await run(
+      `[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Start bounded repair…').click()`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('Stop this loop')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'repair-loop.png'), (await win.webContents.capturePage()).toPNG());
+    await run(`[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Stop this loop').click()`);
+    await wait(`document.querySelector('.power-body').textContent.includes('cancelled')`);
+    await run(`atlasPower.show('Recovery')`);
+    await run(
+      `(()=>{document.querySelector('.power-body details').open=true;[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Verify saved checkpoint').click()})()`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('Checkpoint verified')`);
+    for (const name of ['Project intelligence', 'Terminal', 'Repair loops'])
+      for (const width of [768, 640]) {
+        win.setContentSize(width, 800);
+        await run('atlasPower.show(' + JSON.stringify(name) + ')');
+        assert(await run(`document.documentElement.scrollWidth<=innerWidth+1`));
+      }
+    assert(
+      await run(
+        `advancedCalls.some(row=>row.tool==='terminal'&&row.action==='start'&&row.command==='echo fixture')&&advancedCalls.some(row=>row.tool==='repair'&&row.action==='start'&&row.commands[0]==='npm test')`,
+      ),
+    );
     assert.deepEqual(await run('fileUiErrors'), []);
     console.log(
       'PASS: Chat/Colab inline local images, file links, source preview, explicit attachment, isolated static HTML/CSS/assets, file browsing and narrow layout. Screenshots: ' +

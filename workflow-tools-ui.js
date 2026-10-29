@@ -85,13 +85,21 @@
     body.append(preview);
   });
   power.register('Task comparison', async ({ body, node, button, current }) => {
-    const jobs = (await api.jobs()).filter((job) => job.endedAt);
+    const [live, archived] = await Promise.all([api.jobs(), api.workflowTools({ action: 'archive-list' })]);
+    const jobs = [
+      ...new Map(
+        [...live.filter((job) => job.endedAt), ...archived.map((row) => ({ ...row, prompt: row.title }))].map((job) => [
+          job.id,
+          job,
+        ]),
+      ).values(),
+    ];
     if (!current()) return;
     body.append(
       node('h2', 'Compare two completed attempts'),
       node(
         'p',
-        'Diffs compare the current working files with each task’s starting checkpoint. Later project edits affect these diffs. Reported usage is shown only when the provider supplied it; account limits and billing are unavailable.',
+        'New tasks use saved completion-time diffs and checks. Older tasks without archives use the current files and are labelled accordingly. Reported usage is shown only when supplied by the provider; account limits and billing are unavailable.',
       ),
     );
     const choose = (label) => {
@@ -113,6 +121,7 @@
       results.replaceChildren();
       for (const row of rows) {
         const column = node('section');
+        column.append(node('p', row.source || 'Evidence source unavailable'));
         column.append(
           node('h3', row.title),
           node(

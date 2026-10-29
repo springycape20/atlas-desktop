@@ -44,4 +44,4 @@ Recipes follow the official [Next.js CLI](https://nextjs.org/docs/app/api-refere
 
 Use **Tasks → Task comparison** and choose two finished tasks retained in ATLAS. The columns show status, elapsed time, executed checks, provider-reported token counts when available and current diffs relative to each task’s starting checkpoint. Missing reports show as unavailable; no billing or subscription usage is inferred.
 
-Diffs are computed from the current project files, so later edits can change them. They are not archived completion-time snapshots. Large/binary or inaccessible files may lack inline patches. Comparing tasks does not call a provider or run checks again.
+New tasks now preserve completion-time evidence; older tasks without archives retain a clearly labelled live filesystem comparison. See [Deeper project workflows](DEEPER-WORKFLOWS.md) for archive, terminal, repair-loop and verified recovery controls. Large/binary or inaccessible files may lack inline patches. Comparing tasks does not call a provider or run checks again.

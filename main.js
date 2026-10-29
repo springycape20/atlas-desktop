@@ -73,6 +73,8 @@ let modelCatalogService, updateService, providerUsageService;
 let taskPlanService;
 let projectFileService;
 let projectEditor;
+let advancedWorkflowsService;
+const repairRequests = new WeakMap();
 function providerUsage() {
   return (providerUsageService ||= require('./provider-usage').createProviderUsage({
     codex: async () => {
@@ -123,8 +125,21 @@ function getAppUpdates() {
   }));
 }
 let changeTrackerService;
+let taskArchiveService;
+function taskArchive() {
+  return (taskArchiveService ||= require('./task-archive').createTaskArchive(app.getPath('userData')));
+}
 function changes() {
-  return (changeTrackerService ||= require('./change-tracker').createChangeTracker(app.getPath('userData')));
+  return (changeTrackerService ||= require('./change-tracker').createChangeTracker(app.getPath('userData'), {
+    permitted: async (root, name) => {
+      const tools = require('./project-files'),
+        target = path.resolve(root, name);
+      if (!tools.allowed(name) || !tools.within(root, target)) return false;
+      for (const denied of await integrations().deniedFiles())
+        if (path.resolve(denied) === target || tools.within(denied, target)) return false;
+      return true;
+    },
+  }));
 }
 async function beginChanges(job, previous) {
   if (!job) return;
@@ -132,11 +147,25 @@ async function beginChanges(job, previous) {
     job.cwd = await require('node:fs/promises').realpath(job.cwd);
     job.changeId =
       previous?.changeId && previous.cwd === job.cwd ? previous.changeId : await changes().capture(job.id, job.cwd);
+    await recordResumeCheckpoint(job, 'Task start');
     await persistJobs();
   } catch (error) {
     job.changesError = 'Change tracking unavailable: ' + error.message;
   }
   emitJobs();
+}
+async function recordResumeCheckpoint(job, label) {
+  if (!job.changeId) return;
+  const id = 'resume-' + randomUUID();
+  await changes().capture(id, job.cwd);
+  const result = await changes().verifySnapshot(id);
+  job.resumeCheckpoint = {
+    id,
+    label,
+    at: Date.now(),
+    stages: job.checkpoints?.length || 0,
+    complete: result.complete && result.matches,
+  };
 }
 const approvals = require('./approval-manager').createApprovalManager((value) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:approvals', value);
@@ -201,19 +230,56 @@ async function withIntegrations(provider, job, settings, signal, run) {
 async function finishTask(job) {
   desktopIndicator?.end(job.id);
   approvals.cancelJob(job.id);
+  if (job.resumeCheckpoint?.id)
+    try {
+      await changes().seal(job.resumeCheckpoint.id);
+    } catch {}
   if (job.changeId)
     try {
       await changes().seal(job.changeId);
     } catch (error) {
       job.changesError = 'Checkpoint could not be finalized: ' + error.message;
     }
+  try {
+    const report = job.changeId ? await changes().report(job.changeId, true) : null;
+    await taskArchive().save(job, report, async (name) => {
+      const tools = require('./project-files'),
+        target = path.resolve(job.cwd, name);
+      if (!tools.allowed(name) || !tools.within(job.cwd, target)) return false;
+      for (const denied of await integrations().deniedFiles())
+        if (tools.within(denied, target) || path.resolve(denied) === target) return false;
+      return true;
+    });
+    job.evidenceArchived = true;
+  } catch (error) {
+    job.evidenceError = error.message;
+  }
 }
 let workspaceService;
 let projectContextService;
 let knowledgeService;
+let knowledgeFacade;
 let workflowService;
 function knowledge() {
-  return (knowledgeService ||= new (require('./knowledge-client').KnowledgeClient)());
+  knowledgeService ||= new (require('./knowledge-client').KnowledgeClient)();
+  const optionsFor = async (cwd, options = {}) => {
+    const root = await require('node:fs/promises').realpath(cwd),
+      excluded = [...(options.excluded || [])],
+      tools = require('./project-files');
+    for (const value of await integrations().deniedFiles()) {
+      const denied = await require('node:fs/promises')
+        .realpath(value)
+        .catch(() => path.resolve(value));
+      if (path.resolve(denied) === root || tools.within(denied, root))
+        throw Error('This project is inside a denied path.');
+      if (tools.within(root, denied)) excluded.push(path.relative(root, denied).split(path.sep).join('/'));
+    }
+    return { ...options, excluded };
+  };
+  return (knowledgeFacade ||= {
+    search: async (cwd, query, options) => knowledgeService.search(cwd, query, await optionsFor(cwd, options)),
+    analyze: async (cwd, options) => knowledgeService.analyze(cwd, await optionsFor(cwd, options)),
+  });
 }
 function projectContext() {
   return (projectContextService ||= require('./project-context').createProjectContext({
@@ -286,6 +352,8 @@ const colabJobs = require('./colab-jobs').createColabJobs({
   jobContext,
   beginChanges,
   finishTask,
+  recordResumeCheckpoint,
+  canStart: () => !advancedWorkflowsService?.active(),
   readSettings: readAppSettings,
   runProvider,
   reportsFolder: () => path.join(app.getPath('userData'), 'colab-reports'),
@@ -408,6 +476,7 @@ app.on('before-quit', (event) => {
   claudeConnections?.close();
   providerHistory.close();
   knowledgeService?.close();
+  advancedWorkflowsService?.dispose();
   clearTimeout(jobsEmitTimer);
   if (integrationService) finishing.push(integrationService.close());
   void (async () => {
@@ -1043,6 +1112,9 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       graphRunId,
       recoveryNote,
       environment,
+      evidenceArchived,
+      evidenceError,
+      resumeCheckpoint,
     } = job;
     return {
       id,
@@ -1075,6 +1147,9 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       graphRunId,
       recoveryNote,
       environment,
+      evidenceArchived,
+      evidenceError,
+      resumeCheckpoint,
       ...(graphs ? { graph } : {}),
       ...(persist ? { preparedProposals } : {}),
       budget: budget
@@ -1088,7 +1163,8 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
   });
 }
 
-const jobsRunning = () => [...activeJobs.values()].some((job) => job.status === 'running');
+const taskJobsRunning = () => [...activeJobs.values()].some((job) => job.status === 'running');
+const jobsRunning = () => taskJobsRunning() || Boolean(advancedWorkflowsService?.active());
 
 let jobsEmitTimer,
   sentJobs = new Map();
@@ -1245,6 +1321,7 @@ function setupIpc() {
     // The queue still waits for tasks you started yourself; its own items count toward its limit instead.
     canRun: () =>
       !quitting &&
+      !advancedWorkflowsService?.active() &&
       mainWindow &&
       !mainWindow.isDestroyed() &&
       ![...activeJobs.values()].some((job) => job.status === 'running' && !job.queued),
@@ -1429,10 +1506,18 @@ function setupIpc() {
   ipcMain.handle('atlas:workflow-tools', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     const evidence = require('./workflow-evidence');
+    if (request.action === 'archive-list') return taskArchive().list();
+    if (request.action === 'archive-read') return taskArchive().read(request.id);
+    if (request.action === 'archive-delete') return taskArchive().remove(request.id);
     if (request.action === 'compare') {
       if (!Array.isArray(request.ids) || request.ids.length !== 2) throw Error('Choose two tasks.');
       return Promise.all(
         request.ids.map(async (id) => {
+          try {
+            return await taskArchive().read(id);
+          } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+          }
           const job = jobSnapshots().find((row) => row.id === id);
           if (!job) throw Error('Task is no longer available.');
           let report;
@@ -1440,7 +1525,7 @@ function setupIpc() {
             try {
               report = await changes().report(job.changeId, true);
             } catch {}
-          return evidence.taskEvidence(job, report);
+          return { ...evidence.taskEvidence(job, report), source: 'live filesystem (legacy task)' };
         }),
       );
     }
@@ -1476,6 +1561,39 @@ function setupIpc() {
       return { exported: true };
     }
     throw Error('Unknown workflow tools action.');
+  });
+  ipcMain.handle('atlas:advanced-workflows', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    advancedWorkflowsService ||= require('./advanced-workflows').createAdvancedWorkflows({
+      jobs: activeJobs,
+      tracker: changes(),
+      knowledge: knowledge(),
+      busy: taskJobsRunning,
+      denied: () => integrations().deniedFiles(),
+      workspace: workspace(),
+      persist: async () => {
+        await persistJobs();
+        emitJobs();
+      },
+      approve: async (title, details) =>
+        (
+          await dialog.showMessageBox(mainWindow, {
+            type: 'question',
+            title,
+            message: title,
+            detail: details,
+            buttons: ['Cancel', 'Approve'],
+            defaultId: 0,
+            cancelId: 0,
+          })
+        ).response === 1,
+      startRepair: (data, verify) => {
+        repairRequests.set(data, { verify });
+        return startAssistant(event, data);
+      },
+      interrupt: (id) => activeJobs.get(id)?.interrupt?.(),
+    });
+    return advancedWorkflowsService.action(request);
   });
   ipcMain.handle('atlas:show-notices', (event) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -1794,6 +1912,8 @@ function setupIpc() {
   });
   startAssistant = async (event, data) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (advancedWorkflowsService?.active() && !repairRequests.has(data))
+      throw Error('Stop the terminal or repair loop before starting another task.');
     const id = typeof data?.requestId === 'string' ? data.requestId : randomUUID();
     if (activeJobs.has(id)) throw Error('Duplicate job');
     const previous = activeJobs.get(data?.resumeJobId),
@@ -1802,6 +1922,7 @@ function setupIpc() {
 
     if (previous?.collaboration || previous?.status === 'running')
       throw Error('Resume a stopped Assistant task, or open its Colab chat.');
+    if (previous) await require('./verified-recovery').requireVerifiedRecovery(previous, changes());
     if (previous?.request)
       data = {
         ...data,
@@ -1819,6 +1940,9 @@ function setupIpc() {
     const controller = new AbortController(),
       job = {
         id,
+        ...(repairRequests.has(data)
+          ? { runVerification: () => repairRequests.get(data).verify(controller.signal) }
+          : {}),
         request: {
           profileId: data.profileId,
           attachments: data.attachments || [],
@@ -2190,6 +2314,7 @@ async function createWindow() {
         '/project-editor-ui.js',
         '/project-editor.css',
         '/workflow-tools-ui.js',
+        '/advanced-workflows-ui.js',
         '/progress-ui.js',
         '/search-results.js',
         '/unified-search-ui.js',
