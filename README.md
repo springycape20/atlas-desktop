@@ -2,10 +2,6 @@
 
 ATLAS 0.9.1 adds [live project previews, visual feedback, named checkpoints, project search and health checks](docs/PROJECT-WORKBENCH.md).
 
-Development after 0.9.1 adds [optional local statistics reports and a separate offline ATLAS Insights admin app](docs/OFFLINE-INSIGHTS.md). Reports require preview and manual saving; nothing is uploaded automatically.
-
-A separate [opt-in statistics prototype](docs/AUTOMATIC-STATISTICS.md) can be tried with synthetic data and a receiver on this computer. No hosted reporting service is configured or deployed; normal builds keep automatic reporting unavailable.
-
 **A local Windows desktop assistant for Codex and Claude Code.** Chat with either model in one app, talk to it with local speech, or hand a task to **Colab**, where Codex and Claude build, check and review each other's work before you see one reviewed result. Verification labels name the checks ATLAS actually ran; AI output and model review can still be wrong.
 
 [![Latest release](https://img.shields.io/github/v/release/springycape20/atlas-desktop?label=download)](https://github.com/springycape20/atlas-desktop/releases/latest)

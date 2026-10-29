@@ -72,7 +72,6 @@ const taskNotifications = require('./task-notifications').createTaskNotification
 let modelCatalogService, updateService, providerUsageService;
 let taskPlanService;
 let projectFileService;
-let automaticStatisticsService;
 function providerUsage() {
   return (providerUsageService ||= require('./provider-usage').createProviderUsage({
     codex: async () => {
@@ -396,7 +395,6 @@ app.on('before-quit', (event) => {
   quitting = true;
   desktopIndicator?.close();
   const finishing = [];
-  if (automaticStatisticsService) finishing.push(automaticStatisticsService.stop());
   for (const job of activeJobs.values())
     if (job.status === 'running') {
       job.stopped = 'paused';
@@ -1119,46 +1117,6 @@ function persistJobs() {
 }
 
 function setupIpc() {
-  const automaticStatistics = (automaticStatisticsService = require('./automatic-statistics').createAutomaticStatistics(
-    {
-      directory: app.getPath('userData'),
-      jobs: () => [...activeJobs.values()],
-      version: require('./package.json').version,
-      config: require('./statistics-config.json'),
-    },
-  ));
-  ipcMain.handle('atlas:automatic-statistics', async (event, request = {}) => {
-    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
-    if (request.action === 'delete') {
-      const choice = await dialog.showMessageBox(mainWindow, {
-        type: 'question',
-        message: 'Turn off reporting and request deletion from the receiver?',
-        detail:
-          'This sends stored report receipts and deletion secrets. Separate imported copies, exports and backups require operator handling.',
-        buttons: ['Cancel', 'Request deletion'],
-        defaultId: 0,
-        cancelId: 0,
-      });
-      if (choice.response !== 1) return automaticStatistics.action({ action: 'status' });
-      return automaticStatistics.action({ ...request, confirmed: true });
-    }
-    return automaticStatistics.action(request);
-  });
-  const statisticsTimer = setInterval(() => void automaticStatistics.tick().catch(() => {}), 3600000);
-  statisticsTimer.unref();
-  app.on('before-quit', () => {
-    clearInterval(statisticsTimer);
-    automaticStatistics.stop();
-  });
-  void automaticStatistics.tick().catch(() => {});
-  require('./statistics-report').registerStatistics({
-    ipcMain,
-    trusted: isTrustedSender,
-    jobs: () => [...activeJobs.values()],
-    version: require('./package.json').version,
-    dialog,
-    window: () => mainWindow,
-  });
   let livePreview;
   ipcMain.handle('atlas:live-preview', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -1478,7 +1436,7 @@ function setupIpc() {
       title: 'Delete local ATLAS data?',
       message: 'Delete saved ATLAS chats, attachments, memories, settings, permissions and logs, then restart?',
       detail:
-        'This cannot be undone. Automatic-report deletion credentials are deleted too; request receiver-side deletion first if wanted. Downloaded tool runtimes are kept. Your project files, Git recovery snapshots, exports, legacy folders and provider histories are not deleted. Export anything you need first.',
+        'This cannot be undone. Downloaded tool runtimes are kept. Your project files, Git recovery snapshots, exports, legacy folders and provider histories are not deleted. Export anything you need first.',
       buttons: ['Cancel', 'Delete data and restart'],
       defaultId: 0,
       cancelId: 0,
@@ -2169,8 +2127,6 @@ async function createWindow() {
         '/review-center-ui.js',
         '/project-workbench-ui.js',
         '/live-preview-ui.js',
-        '/statistics-report-ui.js',
-        '/automatic-statistics-ui.js',
         '/progress-ui.js',
         '/search-results.js',
         '/unified-search-ui.js',

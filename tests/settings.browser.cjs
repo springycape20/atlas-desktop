@@ -63,7 +63,7 @@ app.whenReady().then(async () => {
       const foreground=lum(rgb(hintStyle.color)),background=lum(rgb(getComputedStyle(hint.parentElement).backgroundColor));
       if((Math.max(foreground,background)+.05)/(Math.min(foreground,background)+.05)<4.5)fail('Selected Settings hint contrast is below 4.5:1');
       const order=nav().map(b=>b.dataset.section);
-      const expected=['Provider accounts','Models','Appearance','Provider activity','Assistant','Voice','Microphone','Permissions','Transparency','Startup','App updates','Optional statistics report','Automatic statistics','Tools and data','Diagnostics'];
+      const expected=['Provider accounts','Models','Appearance','Provider activity','Assistant','Voice','Microphone','Permissions','Transparency','Startup','App updates','Tools and data','Diagnostics'];
       if(JSON.stringify(order)!==JSON.stringify(expected))fail('Section order: '+JSON.stringify(order));
       if(JSON.stringify(shown())!=='["Provider accounts"]')fail('Expected only Provider accounts, saw '+JSON.stringify(shown()));
       if(nav()[0].getAttribute('aria-current')!=='true')fail('Current section is not marked');

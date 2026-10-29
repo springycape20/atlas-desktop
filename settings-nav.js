@@ -19,8 +19,6 @@
     'Transparency',
     'Startup',
     'App updates',
-    'Optional statistics report',
-    'Automatic statistics',
     'Tools and data',
   ];
   const HINTS = {
@@ -35,8 +33,6 @@
     Transparency: 'Model reasoning summaries',
     Startup: 'Launch at sign-in',
     'App updates': 'Version and updates',
-    'Optional statistics report': 'Review and save a voluntary local report',
-    'Automatic statistics': 'Off by default; separate opt-in required',
     'Tools and data': 'Plugins, chat import and log',
   };
   const STORAGE_KEY = 'atlas.settings.section';
@@ -183,7 +179,6 @@
   let dirty = false,
     saveClicked = false;
   const markDirty = (event) => {
-    if (event.target.closest('[data-ephemeral-settings]')) return;
     if (event.target === search || !event.target.closest('.settings-body')) return;
     if (!event.target.matches('input, select, textarea')) return;
     dirty = true;
