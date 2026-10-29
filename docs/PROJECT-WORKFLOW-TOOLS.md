@@ -1,6 +1,6 @@
 # Project workflow tools
 
-These changes are in development on `codex/project-workflow-tools`. They have not been published in a release. The unreleased statistics client, report exporter, receiver and Insights admin app have been removed. ATLAS does not send publisher statistics.
+These tools are included in ATLAS 0.10.0. The experimental statistics client, report exporter, receiver and Insights admin app were removed before release. ATLAS does not send publisher statistics. See also [selected power upgrades](SELECTED-POWER-UPGRADES.md) for the interactive terminal, document previews and recovery tools.
 
 ## Edit files beside chat
 

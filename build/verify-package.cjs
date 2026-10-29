@@ -59,6 +59,26 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     'repair-loop.js',
     'task-archive.js',
     'verified-recovery.js',
+    'pty-session.js',
+    'selected-tools.js',
+    'selected-tools-ui.js',
+    'selective-changes.js',
+    'test-results.js',
+    'environment-preflight.js',
+    'local-backups.js',
+    'restore.html',
+    'restore-state.js',
+    'storage-manager.js',
+    'project-services.js',
+    'git-panel.js',
+    'sensitive-context.js',
+    'context-ranking.js',
+    'multi-root-workspaces.js',
+    'task-dependency-graph.js',
+    'document-extract.js',
+    'api-workspace.js',
+    'integration-manifest.js',
+    'update-recovery.js',
   ])
     assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {
@@ -74,10 +94,29 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     );
     assert(!/(?:^|[/\\])(?:voice-worker\.cjs|speech-model\.js)$/.test(file), 'Removed speech code packaged: ' + file);
     assert(!/(?:^|[/\\])ATLAS\.lnk$/i.test(file), 'Development shortcut packaged: ' + file);
+    assert(
+      !/(?:^|[/\\])(?:@napi-rs|LiberationSans[^/\\]*\.ttf|LICENSE_LIBERATION)(?:[/\\]|$)/i.test(file),
+      'Unused PDF rendering assets packaged: ' + file,
+    );
   }
   const notices = fs.readFileSync(path.join(resources, 'compliance', 'THIRD-PARTY-NOTICES.txt'), 'utf8');
   for (const phrase of ['whisper.cpp-MIT.txt', 'Whisper-model-card.md', 'electron-updater', 'lazy-val-MIT-notice.txt'])
     assert(notices.includes(phrase), 'Missing notice material: ' + phrase);
+  for (const phrase of [
+    'node-pty',
+    '@xterm/xterm',
+    '@xterm/addon-fit',
+    'pdfjs-dist',
+    'deps/winpty/LICENSE',
+    'standard_fonts/LICENSE_FOXIT',
+    'wasm/LICENSE_JBIG2',
+  ])
+    assert(notices.includes(phrase), 'Missing terminal/PDF notice: ' + phrase);
+  for (const file of ['conpty.node', 'conpty/conpty.dll', 'conpty/OpenConsole.exe'])
+    assert(
+      fs.statSync(path.join(resources, 'app.asar.unpacked/node_modules/node-pty/prebuilds/win32-x64', file)).size > 0,
+      'Missing native PTY binary: ' + file,
+    );
   for (const name of ['LICENSE.electron.txt', 'LICENSES.chromium.html'])
     assert(fs.statSync(path.join(directory, name)).size > 1000, 'Missing Electron notice: ' + name);
   assert.deepEqual(

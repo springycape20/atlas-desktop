@@ -26,11 +26,17 @@ async function prepare(root = path.resolve(__dirname, '..')) {
     const notices = [];
     const noticeNames = await fs.readdir(folder);
     if (pkg.name === 'node-pty') noticeNames.push('deps/winpty/LICENSE');
+    if (pkg.name === 'pdfjs-dist') {
+      for (const subdir of ['cmaps', 'iccs', 'standard_fonts', 'wasm'])
+        for (const name of await fs.readdir(path.join(folder, subdir)))
+          if (/^LICENSE/.test(name) && name !== 'LICENSE_LIBERATION') noticeNames.push(subdir + '/' + name);
+    }
     for (const name of noticeNames) {
       if (
         !/^(?:licen[cs]e|copying|notice)(?:[._-].*)?$/i.test(name) &&
         !(pkg.name === '@img/sharp-win32-x64' && name === 'README.md') &&
-        !(pkg.name === 'node-pty' && name === 'deps/winpty/LICENSE')
+        !(pkg.name === 'node-pty' && name === 'deps/winpty/LICENSE') &&
+        !(pkg.name === 'pdfjs-dist' && name.includes('/LICENSE'))
       )
         continue;
       const file = path.join(folder, name),
@@ -91,6 +97,7 @@ async function prepare(root = path.resolve(__dirname, '..')) {
     ),
   );
   await fs.copyFile(path.join(root, 'docs', 'PATCH-RELEASE-REVIEW.md'), path.join(out, 'SOURCE-REVIEW.md'));
+  await fs.copyFile(path.join(root, 'docs', 'RELEASE-0.10.0-REVIEW.md'), path.join(out, 'CURRENT-REVIEW.md'));
   await fs.copyFile(path.join(root, 'legal', 'release-review.json'), path.join(out, 'RELEASE-REVIEW.json'));
   await fs.copyFile(path.join(root, 'legal', 'license-sources.json'), path.join(out, 'LICENSE-SOURCES.json'));
   await fs.copyFile(path.join(root, 'docs', 'PRIVACY.md'), path.join(out, 'PRIVACY.md'));

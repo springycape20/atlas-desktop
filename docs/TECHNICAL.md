@@ -2,7 +2,7 @@
 
 Detailed behaviour, limits and design notes. For installation and an overview, see the [README](../README.md).
 
-The next-release [project tools guide](PROJECT-TOOLS.md) covers project excerpts, context selection, performance measurements, task recovery, reusable workflows, parallel batches and local-model text chat.
+The [project tools guide](PROJECT-TOOLS.md), [editing/workflow guide](PROJECT-WORKFLOW-TOOLS.md), [deeper workflows](DEEPER-WORKFLOWS.md) and [0.10.0 power upgrades](SELECTED-POWER-UPGRADES.md) cover the current feature set.
 
 ## Feature reference
 
@@ -26,6 +26,8 @@ Check Settings before use: wake-word listening and automatic follow-up listening
 Reminders require ATLAS to be running. Cancelling a task does not undo changes it already made. Task routing is based on local rules rather than a guarantee that one provider is best.
 
 ## Updating
+
+From 0.10.0, in-app update installation first requests approval for a preserved application copy and managed-record backup. Recovery launches that copy and stages its saved records; it leaves the newer installation available. See [backup and recovery boundaries](SELECTED-POWER-UPGRADES.md#boundaries-and-controls).
 
 Install a newer **ATLAS-Setup** from [GitHub Releases](https://github.com/springycape20/atlas-desktop/releases) over the existing installation. Your settings and conversations are preserved. For source checkouts, close ATLAS, run `git pull`, rerun `Setup-ATLAS.ps1` if dependencies have changed, then launch `Start-ATLAS.cmd`.
 
@@ -89,9 +91,9 @@ Assistant and Colab display live provider progress summaries, plans, and expanda
 
 The main Assistant composer has an Effort button that opens a five-step slider with a live label and a reset-to-default button. It remembers Low, Medium, High, Extra high, or Max for future messages. Project / provider default uses the active project’s effort or the provider’s default. A specific selection overrides the project for that message and is retained when resuming a paused task. Colab keeps its separate shared effort setting.
 
-Bottom-left usage circles show Claude in orange and Codex in green. Hover for remaining allowance; click for session/weekly limits, reset times, and plan details. Each circle reflects the lowest remaining main session/weekly allowance and empties at 0%. Readings refresh at launch, while the app is active, after tasks, and on demand; Codex also supplies live limit updates. Missing limits appear unavailable, and failed refreshes mark previous readings as stale. API-only accounts may not expose subscription limits.
+Provider activity shows local task activity, reported usage where supplied, and provider availability/cooldowns. It does not measure Claude subscription allowance. Missing values remain unavailable; estimates are labelled.
 
-**Open app** opens the provider’s official usage page in your default browser. Codex uses its [App Server account rate limits](https://learn.chatgpt.com/docs/app-server#6-rate-limits-chatgpt). Claude reads the usage endpoint with your existing Claude Code sign-in, only in the main process; credentials are never sent to the renderer or saved in usage data. No inference request is sent to check these limits.
+Provider usage links open the official provider page in your browser. ATLAS does not read Claude OAuth credentials for quota reporting.
 
 New code tasks capture a local before-task snapshot. A bottom-of-screen bubble shows added/removed lines and changed-file counts for the current Assistant or Colab task. Click it to open a movable, resizable change editor with a file list, line-numbered diff, and Edit tab. Both views use syntax colors for keywords, strings, comments, numbers, and functions, with the language detected from the filename. Highlighting works offline for Python, JavaScript/TypeScript, HTML/CSS, JSON, shell scripts, and other common languages. Files over 120,000 characters or 4,000 lines, unsupported languages, and slow or complex highlighting fall back to plain text. Ctrl+S saves explicit edits after agents stop working in that folder; stale files must be reloaded before saving. Isolated Colab edits stay in the worktree until you review and apply them.
 

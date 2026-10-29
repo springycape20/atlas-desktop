@@ -10,3 +10,5 @@ For 0.8.3 the owner authorized removing bundled Kokoro and releasing an unsigned
 6. Reassess Australian and other applicable requirements when the product or distribution changes. Qualified legal review remains useful for fact-specific questions and historical releases; tests cannot guarantee compliance or immunity from claims.
 
 Publish only with owner authorization, passing CI and verified final artifacts. Retain the exact release hashes and review evidence.
+
+The current 0.10.0 dependency and feature review is [RELEASE-0.10.0-REVIEW.md](RELEASE-0.10.0-REVIEW.md). Native terminal and PDF dependencies require their included notices. Public distribution remains unsigned under the recorded owner decision.

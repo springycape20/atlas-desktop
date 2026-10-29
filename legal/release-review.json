@@ -1,29 +1,34 @@
 {
   "status": "technical-review-complete",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "reviewedBy": "Codex automated technical review; not legal counsel",
-  "reviewedAt": "2026-10-29",
-  "packageLockSha256": "bce87d51bb620836ec3a613cfa02a197635279575688e6372f58c4895cc8f8ec",
-  "evidence": "docs/RELEASE-0.9.1-REVIEW.md",
+  "reviewedAt": "2026-10-30",
+  "packageLockSha256": "7c9bc38b11f19116896e82dd634fcea34f9467648b0dcbbd857009d83875790b",
+  "evidence": "docs/RELEASE-0.10.0-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner requested the 0.9.1 patch push and approved the @hono/node-server dependency update on 2026-10-29. The prior explicit unsigned-release decision remains in effect. Merge/tag/publication awaits passing CI and owner confirmation under repository rules; no signing configuration or legal approval is claimed.",
+  "ownerDecision": "Owner requested release of current changes and refreshed documentation on 2026-10-30. Prior explicit unsigned-release authorization remains in effect. Final merge/tag/publication awaits passing CI and owner post-CI confirmation under repository rules.",
   "openItems": [],
   "verification": {
-    "unitTests": 457,
+    "unitTests": 499,
     "electronSuites": [
       "assistant",
-      "settings",
-      "release",
       "colab",
       "graph",
       "approvals",
       "dispute",
+      "settings",
       "power",
       "navigation",
       "files",
-      "preview"
+      "preview",
+      "release",
+      "pty",
+      "pty-render",
+      "restore",
+      "pdf-package"
     ],
-    "productionAudit": "0 vulnerabilities reported 2026-10-29",
-    "package": "Only production package change from 0.9.0 is the owner-approved MIT-licensed @hono/node-server update from 1.19.17 to 2.1.5. No new packages. The 0.9.1 installer must pass local and CI release verification before publication."
+    "productionAudit": "0 vulnerabilities reported 2026-10-30",
+    "package": "Windows x64 unsigned installer and updater assets verified locally; all release checks repeat in CI. Terminal uses pinned upstream N-API prebuilds. Optional native canvas and Liberation fallback fonts excluded; packaged PDF text and native PTY smoke tests passed.",
+    "recovery": "Actual packaged-copy restore/relaunch verified with isolated fixture data and disabled real provider executables. No NSIS install into user profile."
   }
 }

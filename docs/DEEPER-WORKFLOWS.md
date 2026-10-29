@@ -1,6 +1,6 @@
 # Deeper project workflows
 
-These features are in local development on `codex/deeper-workflows`, not in a published release. They use existing local project/task storage and do not add publisher statistics or automatic uploads.
+These features are included in ATLAS 0.10.0. They use local project/task storage and do not add publisher statistics or automatic uploads.
 
 ## Project intelligence
 
@@ -12,11 +12,11 @@ The index retains its limits of 1,500 candidate files, 128,000 bytes per file, 1
 
 ## Project terminal
 
-Open **Tasks → Terminal** or choose **Terminal** below a chat composer. It docks beside chat. Select **+** to approve a persistent PowerShell session (a shell on other platforms), with up to six sessions open at once. Variables and directory changes remain in each session. Type a command and press Enter, or use Shift+Enter for multiple lines. Up/Down recalls that session’s recent submissions. Each input has its own native approval. Commands run with your account permissions and may write files, access accounts or use the network; a project working directory is not an operating-system sandbox.
+Open **Tasks → Terminal** or choose **Terminal** below a chat composer. It docks beside chat. Select **Interactive PTY** and **+** to approve a persistent PowerShell session, with up to six sessions open at once. Variables and directory changes remain in each session. Input, interactive prompts, colours and cursor movement are handled by the terminal emulator. Initial confirmation authorises raw input for that session; there is no separate approval for each typed command. Choose **Text shell** for per-submission confirmation, multiline input and submission history. Commands run with your account permissions and may write files, access accounts or use the network; a project working directory is not an operating-system sandbox.
 
 Drag the left divider, or focus it and use Left/Right, to resize the panel. **Expand** enlarges it; **Hide** preserves sessions, **Stop** ends the selected process tree, and **Close tab** ends and removes that session. Each session has a one-hour lifetime and a latest-64-KiB output buffer. Session status, starting folder and process ID remain visible. The command prompt follows the shell’s actual directory internally; the status path identifies where the session started. Quitting ATLAS stops its shells.
 
-This is a persistent pipe-based shell, not a full PTY terminal emulator. Full-screen programs, cursor-based interfaces and some password/PowerShell prompts may require an external terminal. Input and output are literal text, never rendered HTML. Up to 20 recent sessions remain in memory until exit. Idle shells allow chat/AI tasks; commands currently executing block overlapping AI edits and repair loops. Background programs started by a command and external processes are outside this coordination. Opening a file editor hides the terminal panel while retaining its sessions.
+Interactive PTY uses node-pty and xterm. Text shell uses pipes and may need an external terminal for full-screen/cursor-based programs. Output is terminal text/ANSI, never rendered HTML. Up to 20 recent sessions remain in memory until exit. Idle shells allow chat/AI tasks; commands currently executing block overlapping AI edits and repair loops. Background programs started by a command and external processes are outside this coordination. Opening a file editor hides the terminal panel while retaining its sessions. See [terminal permissions and limits](SELECTED-POWER-UPGRADES.md#boundaries-and-controls).
 
 ## Bounded repair loops
 

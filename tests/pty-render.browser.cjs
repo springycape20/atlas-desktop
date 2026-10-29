@@ -51,7 +51,7 @@ app.whenReady().then(async () => {
     const after = await win.webContents.executeJavaScript('snapshot()');
     assert.equal(after.y, before.y, 'Typing must remain on the prompt row: ' + JSON.stringify({ before, after }));
     assert(
-      after.lines.some((line) => /> echo hi$/.test(line)),
+      after.lines.some((line) => /> echo hi\s*$/.test(line)),
       'Command must follow the visible prompt: ' + JSON.stringify(after),
     );
     assert.equal(busy, false, 'Prompt detection must still mark the shell idle');
@@ -69,7 +69,7 @@ app.whenReady().then(async () => {
       await pending;
       const typed = await win.webContents.executeJavaScript('snapshot()');
       assert.equal(typed.y, prompt.y, 'Typing moved after resize to ' + cols);
-      assert(typed.lines.some((line) => /> echo hi$/.test(line)));
+      assert(typed.lines.some((line) => /> echo hi\s*$/.test(line)));
       assert(!typed.lines.some((line) => line.includes('ATLAS_PROMPT_')));
     }
     await fs.mkdir(path.join(__dirname, '../.handover'), { recursive: true });

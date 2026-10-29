@@ -1,3 +1,5 @@
+> Historical release evidence. For the current release see [0.10.0 review](RELEASE-0.10.0-REVIEW.md). Earlier facts and test counts below are retained as recorded.
+
 # ATLAS 0.9.0 technical release review
 
 Prepared 29 October 2026 for the owner's requested public release. This records technical verification, not legal advice or certification.

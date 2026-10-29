@@ -1,6 +1,6 @@
 # Selected power upgrades
 
-This development branch implements the 17 selected backlog items. Open the named tools from Tasks or Diagnostics, or search for their names in the command palette. Changes are local until a release is published.
+ATLAS 0.10.0 includes the 17 selected backlog items below. Open the named tools from Tasks or Diagnostics, or search for their names in the command palette.
 
 | Backlog | Feature | Where and behaviour |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ An interactive PTY session runs with your Windows account permissions. Its initi
 
 Backups are compressed, **not encrypted**. They can contain chats, memories, paths, settings, attachments, integration/API definitions and task output. Keep exported backups private. A backup includes managed root JSON/encrypted records and attachments, changes, task evidence and Colab reports, plus logical ATLAS browser records. It excludes external project files/worktrees, provider-owned histories, downloaded runtimes, logs and browser cache/cookies. Backups are bounded to 256 MiB of managed file data, 20,000 files and 32 MiB per file. Restore requires a restart. This is an application-record backup, not a complete computer backup.
 
-Recovery keeps the newer installation available and launches a preserved local copy of the earlier version. It does not overwrite the installed executable. Making that copy may require substantial disk space. The workflow has fixture coverage; an actual installed-version upgrade/rollback must still be tested before release. Recovery copies remain local until manually removed.
+Recovery keeps the newer installation available and launches a preserved local copy of the earlier version. It does not overwrite the installed executable. Making that copy may require substantial disk space. Unit/browser tests and an isolated packaged-application smoke test verify restore and relaunch; this does not cover every installer or Windows-policy configuration. Recovery copies remain local until manually removed.
 
 PDF/DOCX extraction is text-only, up to 8 MiB per document and 100,000 extracted characters. Image-only PDFs need OCR, which is not included. DOCX layout, images and tracked-change presentation are not reproduced. Selecting pages creates a new unsent text attachment; remove the original document from the draft to send only the selected text.
 
@@ -38,4 +38,4 @@ Editor checks are basic lexical/JSON checks, not a language server or a substitu
 
 ## Validation
 
-`npm test` covers backend behaviour and safety boundaries. `npm run test:files-ui` exercises the panels at 1280, 768 and 640 pixels and checks xterm rendering. `npm run test:pty-ui` runs a real local PowerShell PTY under Electron without provider accounts. `npm run test:restore-ui` verifies browser/IndexedDB restoration before application loading. Packaged update recovery still needs an installed-build acceptance test before release.
+`npm test` covers backend behaviour and safety boundaries. `npm run test:files-ui` exercises the panels at 1280, 768 and 640 pixels and checks xterm rendering. `npm run test:pty-ui` runs a real local PowerShell PTY under Electron without provider accounts, and `test:pty-render-ui` checks prompt/input alignment after commands and resizing. `npm run test:restore-ui` verifies browser/IndexedDB restoration before application loading. `npm run test:pdf-package-ui` verifies text extraction from the built app without rendering-only canvas/font assets. Packaged recovery also received an isolated copy/restore/relaunch smoke test; no NSIS installation into a user's real profile was performed.

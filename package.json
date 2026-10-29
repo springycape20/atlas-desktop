@@ -1,6 +1,6 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
@@ -25,6 +25,7 @@
     "test:files-ui": "electron tests/project-files.browser.cjs",
     "test:pty-ui": "electron tests/pty.browser.cjs",
     "test:pty-render-ui": "electron tests/pty-render.browser.cjs",
+    "test:pdf-package-ui": "electron tests/pdf-package.browser.cjs",
     "test:restore-ui": "electron tests/restore.browser.cjs",
     "test:preview-ui": "electron tests/live-preview.browser.cjs",
     "test:release-ui": "electron tests/release-screens.browser.cjs",
@@ -49,6 +50,7 @@
   "build": {
     "appId": "com.springycape.atlas",
     "productName": "ATLAS",
+    "npmRebuild": false,
     "directories": {
       "output": "dist"
     },
@@ -76,7 +78,11 @@
       "!.env",
       "!.env.*",
       "!*.enc",
-      "!legal/**"
+      "!legal/**",
+      "!node_modules/@napi-rs/**",
+      "!node_modules/node-pty/build/**",
+      "!node_modules/pdfjs-dist/standard_fonts/Liberation*.ttf",
+      "!node_modules/pdfjs-dist/standard_fonts/LICENSE_LIBERATION"
     ],
     "extraResources": [
       {

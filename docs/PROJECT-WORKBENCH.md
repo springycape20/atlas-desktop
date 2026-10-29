@@ -1,6 +1,6 @@
 # Project workbench
 
-These tools are included in ATLAS 0.9.1.
+These tools are included in ATLAS 0.10.0.
 
 For the editor, find and replace, task prerequisites, permission dashboard, diagnostic bundles, task comparison and additional preview recipes currently in development, see [Project workflow tools](PROJECT-WORKFLOW-TOOLS.md).
 
