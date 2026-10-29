@@ -1,7 +1,7 @@
 .terminal-dock {
   position: fixed;
   right: 0;
-  top: 42px;
+  top: var(--atlas-terminal-top, 86px);
   bottom: 0;
   width: var(--atlas-terminal-width, 520px);
   z-index: 46;
@@ -125,7 +125,6 @@
   .terminal-dock,
   .terminal-dock[data-expanded='true'] {
     width: 100%;
-    top: 32px;
   }
   .terminal-dock-resize {
     display: none;

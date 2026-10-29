@@ -332,7 +332,7 @@ app.whenReady().then(async () => {
       await new Promise((r) => setTimeout(r, 60));
       assert(
         await run(
-          `(()=>{const r=document.querySelector('.terminal-dock').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1})()`,
+          `(()=>{const r=document.querySelector('.terminal-dock').getBoundingClientRect(),h=document.querySelector('.app > header.top').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&r.top>=h.bottom+15})()`,
         ),
       );
       fs.writeFileSync(

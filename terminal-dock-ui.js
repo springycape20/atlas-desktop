@@ -67,6 +67,12 @@
     clearTimeout(timer);
   }
   function resize(value, remember = true) {
+    const top = document.querySelector('.app > header.top');
+    if (top)
+      document.documentElement.style.setProperty(
+        '--atlas-terminal-top',
+        Math.ceil(top.getBoundingClientRect().bottom + 16) + 'px',
+      );
     const actual = Math.max(320, Math.min(value, Math.max(320, innerWidth - 300)));
     if (remember) width = actual;
     document.documentElement.style.setProperty('--atlas-terminal-width', actual + 'px');
@@ -265,6 +271,7 @@
     if (editor) editor.hidden = true;
     document.body.classList.remove('project-editor-open');
     pane.hidden = false;
+    resize(width, false);
     document.body.classList.add('terminal-dock-open');
     clearTimeout(timer);
     await refresh();
@@ -279,6 +286,8 @@
     if (toolbar) toolbar.insertBefore(trigger, toolbar.querySelector('.shell-send'));
   }
   window.addEventListener('resize', () => resize(width, false));
+  const appHeader = document.querySelector('.app > header.top');
+  if (appHeader) new ResizeObserver(() => resize(width, false)).observe(appHeader);
   new MutationObserver(() => {
     if (!pane.hidden && document.body.classList.contains('project-editor-open')) hide();
   }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
