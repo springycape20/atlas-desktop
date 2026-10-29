@@ -1,4 +1,11 @@
-function createAppUpdates({ app, updater, notify = () => {}, busy = () => false, fetchRelease = defaultFetch }) {
+function createAppUpdates({
+  app,
+  updater,
+  notify = () => {},
+  busy = () => false,
+  fetchRelease = defaultFetch,
+  prepareRecovery = async () => {},
+}) {
   const version = app.getVersion(),
     source = !app.isPackaged;
   let state = { status: 'idle', currentVersion: version, source },
@@ -29,6 +36,8 @@ function createAppUpdates({ app, updater, notify = () => {}, busy = () => false,
     if (request.action === 'install') {
       if (source || state.status !== 'downloaded') throw Error('Download an update before restarting.');
       if (busy()) throw Error('Finish or stop running tasks before installing the update.');
+      await prepareRecovery();
+      if (busy()) throw Error('Work started while recovery was being prepared. Stop it before installing.');
       set({ status: 'installing' });
       setImmediate(() => updater.quitAndInstall(false, true));
       return { ...state };

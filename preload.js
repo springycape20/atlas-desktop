@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('atlas', {
     return () => ipcRenderer.removeListener('atlas:response-text', listener);
   },
   taskQueue: (request) => ipcRenderer.invoke('atlas:task-queue', request),
+  selectedTools: (request) => ipcRenderer.invoke('atlas:selected-tools', request),
+  rendererRestore: (request) => ipcRenderer.invoke('atlas:renderer-restore', request),
   approvals: (request) => ipcRenderer.invoke('atlas:approvals', request),
   plugins: (request) => ipcRenderer.invoke('atlas:plugins', request),
   integrations: (request) => ipcRenderer.invoke('atlas:integrations', request),

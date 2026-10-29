@@ -99,6 +99,7 @@ function validateIntegration(value) {
   if (!value || !/^[a-z][a-z0-9_-]{0,47}$/.test(value.id || ''))
     throw Error('Use an integration ID with lowercase letters, numbers, underscores or dashes.');
   const row = { id: value.id, name: String(value.name || value.id).slice(0, 100), enabled: value.enabled === true };
+  if (value.permissions) row.permissions = require('./integration-manifest').cleanPermissions(value.permissions);
   if (value.url) {
     const url = new URL(value.url);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)

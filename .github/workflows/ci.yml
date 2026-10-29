@@ -52,4 +52,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:files-ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:pty-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:restore-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:preview-ui

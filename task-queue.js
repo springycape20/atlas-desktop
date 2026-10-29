@@ -159,6 +159,14 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
           status: 'queued',
           createdAt: Date.now(),
         });
+      } else if (request.action === 'dependencies') {
+        if (!row || row.status !== 'queued' || row.batchId)
+          throw Error('Only ordinary queued tasks can change prerequisites.');
+        const ids = [...new Set(Array.isArray(request.prerequisites) ? request.prerequisites : [])],
+          index = state.items.indexOf(row);
+        if (ids.some((id) => !state.items.slice(0, index).some((item) => item.id === id && item.cwd === row.cwd)))
+          throw Error('Choose earlier tasks from the same project; cycles are not allowed.');
+        row.prerequisites = ids;
       } else if (request.action === 'start') {
         state.paused = false;
         state.pauseBetween = request.pauseBetween !== false;

@@ -35,6 +35,14 @@
     timer,
     historyIndex = 0;
   const histories = new Map();
+  const emulator = node('div'),
+    terminals = new Map(),
+    kind = node('select');
+  emulator.className = 'terminal-emulator';
+  kind.setAttribute('aria-label', 'Terminal type');
+  kind.append(new Option('Interactive PTY', 'pty'), new Option('Text shell', 'text'));
+  if (!window.Terminal) kind.value = 'text';
+  header.append(kind);
   const call = (action, extra = {}) => api.advancedWorkflows({ tool: 'terminal', ...context, action, ...extra });
   const button = (text, action, parent = header) => {
     const item = node('button', text);
@@ -81,7 +89,7 @@
             input.value = '';
             historyIndex = (histories.get(selected) || []).length;
             paint();
-            input.focus();
+            focusSelected();
           },
           tabs,
         );
@@ -92,10 +100,64 @@
   }
   function paint() {
     const row = rows.find((row) => row.id === selected);
+    emulator.hidden = !row?.pty;
+    output.hidden = Boolean(row?.pty);
+    input.hidden = Boolean(row?.pty);
+    commandTools.hidden = Boolean(row?.pty);
+    for (const [id, item] of terminals) {
+      item.host.hidden = id !== selected;
+      if (!rows.some((row) => row.id === id)) {
+        item.observer?.disconnect();
+        item.term.dispose();
+        item.host.remove();
+        terminals.delete(id);
+      }
+    }
+    if (row?.pty && window.Terminal) {
+      let item = terminals.get(row.id);
+      if (!item) {
+        const host = node('div');
+        emulator.append(host);
+        const term = new window.Terminal({
+            cursorBlink: true,
+            fontFamily: 'Consolas, monospace',
+            fontSize: 13,
+            scrollback: 3000,
+            allowProposedApi: false,
+            theme: { background: '#0c0f10', foreground: '#e6eeee' },
+          }),
+          fit = new window.FitAddon.FitAddon();
+        term.loadAddon(fit);
+        term.open(host);
+        item = { term, fit, host, offset: row.bufferStart || 0 };
+        terminals.set(row.id, item);
+        term.onData(
+          (text) => void call('input', { id: row.id, text }).catch((error) => (status.textContent = error.message)),
+        );
+        term.onResize(({ cols, rows }) => void call('resize', { id: row.id, cols, rows }).catch(() => {}));
+        item.observer = new ResizeObserver(() => {
+          if (!host.hidden && !pane.hidden)
+            try {
+              fit.fit();
+            } catch {}
+        });
+        item.observer.observe(emulator);
+      }
+      if (item.offset < (row.bufferStart || 0)) {
+        item.term.reset();
+        item.offset = row.bufferStart;
+      }
+      const next = row.output.slice(Math.max(0, item.offset - (row.bufferStart || 0)));
+      if (next) item.term.write(next);
+      item.offset = row.sequence ?? row.output.length;
+      try {
+        item.fit.fit();
+      } catch {}
+    }
     for (const tab of tabs.children) tab.setAttribute('aria-pressed', String(tab.dataset.session === selected));
     const follow = output.scrollHeight - output.clientHeight - output.scrollTop < 50;
     if (output.textContent !== (row?.output || ''))
-      output.textContent = row?.output || 'Create a terminal session with + to begin.';
+      output.textContent = row?.output || row?.error || 'Create a terminal session with + to begin.';
     if (follow) output.scrollTop = output.scrollHeight;
     input.disabled = !row || row.status !== 'running';
     status.textContent = row
@@ -105,6 +167,11 @@
         ' · PID ' +
         (row.pid || 'starting')
       : 'No terminal session. Chat stays available while shells are idle.';
+  }
+  function focusSelected() {
+    const terminal = terminals.get(selected);
+    if (terminal) terminal.term.focus();
+    else input.focus();
   }
   async function poll() {
     if (pane.hidden) return;
@@ -116,13 +183,13 @@
     if (!pane.hidden) timer = setTimeout(poll, 600);
   }
   async function create() {
-    const result = await call('start', { shell: true, timeoutSeconds: 3600 });
+    const result = await call('start', { shell: true, pty: kind.value === 'pty', timeoutSeconds: 3600 });
     if (result.id) {
       selected = result.id;
       histories.set(selected, []);
       historyIndex = 0;
       await refresh();
-      input.focus();
+      focusSelected();
     }
   }
   async function send() {
@@ -185,7 +252,7 @@
       resize(width + (event.key === 'ArrowLeft' ? 20 : -20));
     }
   };
-  pane.append(handle, header, tabs, output, input, commandTools, status);
+  pane.append(handle, header, tabs, emulator, output, input, commandTools, status);
   document.body.append(pane);
   resize(width, false);
   async function open() {
@@ -206,7 +273,8 @@
   }
   power.register('Terminal', async () => open());
   window.atlasTerminal = { open, hide };
-  for (const parent of document.querySelectorAll('.composer,.colab-composer')) button('Terminal', open, parent);
+  for (const parent of document.querySelectorAll('.composer,.colab-composer'))
+    button('Terminal', open, parent.querySelector('.attachment-toolbar') || parent);
   window.addEventListener('resize', () => resize(width, false));
   new MutationObserver(() => {
     if (!pane.hidden && document.body.classList.contains('project-editor-open')) hide();

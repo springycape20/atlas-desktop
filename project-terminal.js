@@ -20,6 +20,9 @@ function createProjectTerminal({
     endedAt: row.endedAt,
     error: row.error,
     shell: row.shell,
+    pty: row.pty,
+    sequence: row.sequence || 0,
+    bufferStart: (row.sequence || 0) - row.output.length,
     executing: row.executing,
   });
   async function action(request = {}) {
@@ -45,7 +48,8 @@ function createProjectTerminal({
           seconds = Number(request.timeoutSeconds || 300);
         if (!Number.isInteger(seconds) || seconds < 10 || seconds > 3600)
           throw Error('Choose a time limit from 10 to 3600 seconds.');
-        if (!(await approve({ cwd, command, timeoutSeconds: seconds }))) return { cancelled: true };
+        if (!(await approve({ cwd, command, timeoutSeconds: seconds, pty: request.pty === true })))
+          return { cancelled: true };
         if (busy()) throw Error('An ATLAS task started while approval was open.');
         const controller = new AbortController(),
           row = {
@@ -58,6 +62,8 @@ function createProjectTerminal({
             exitCode: null,
             controller,
             shell: request.shell === true,
+            pty: request.pty === true,
+            sequence: 0,
             executing: false,
           };
         sessions.set(row.id, row);
@@ -68,19 +74,26 @@ function createProjectTerminal({
         }
         row.done = Promise.resolve()
           .then(() =>
-            (row.shell ? (_command, root, options) => shellRunner(root, options) : runner)(command, cwd, {
+            (row.pty
+              ? (_command, root, options) => require('./pty-session').runPty(root, options)
+              : row.shell
+                ? (_command, root, options) => shellRunner(root, options)
+                : runner)(command, cwd, {
               signal: controller.signal,
               timeoutMs: seconds * 1000,
               interactive: true,
               onStart: (process) => {
                 row.pid = process.pid;
                 row.write = process.write;
+                row.resize = process.resize;
               },
               onBusy: (value) => {
                 row.executing = value;
               },
               onOutput: (text) => {
-                row.output = (row.output + text.replace(/\x1b\[[0-9;]*m/g, '')).slice(-65536);
+                const value = row.pty ? text : text.replace(/\x1b\[[0-9;]*m/g, '');
+                row.sequence += value.length;
+                row.output = (row.output + value).slice(-65536);
               },
             }),
           )
@@ -105,6 +118,15 @@ function createProjectTerminal({
       }
     }
     if (!row) throw Error('Terminal session is no longer available.');
+    if (request.action === 'resize') {
+      if (!row.pty || !row.resize) throw Error('This session does not support PTY sizing.');
+      const cols = Number(request.cols),
+        rows = Number(request.rows);
+      if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 10 || cols > 400 || rows < 3 || rows > 200)
+        throw Error('Invalid terminal dimensions.');
+      row.resize(cols, rows);
+      return { resized: true };
+    }
     if (request.action === 'stop') {
       row.controller.abort();
       return snapshot(row);
@@ -120,6 +142,11 @@ function createProjectTerminal({
       if (typeof request.text !== 'string' || request.text.length > 4000 || request.text.includes('\0'))
         throw Error('Input is limited to 4000 characters.');
       // Input may contain commands when the launched process is a shell, so it needs its own approval.
+      if (row.pty) {
+        if (busy()) throw Error('Finish active AI work before typing into this terminal.');
+        if (row.status === 'running') row.write(request.text);
+        return snapshot(row);
+      }
       if (row.shell && row.executing) throw Error('Wait for the current command, or stop this session.');
       if (busy()) throw Error('Finish active ATLAS tasks before sending terminal input.');
       if (await approve({ cwd: row.cwd, command: row.command, input: request.text })) {

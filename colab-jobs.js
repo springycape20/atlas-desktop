@@ -222,6 +222,11 @@ function createColabJobs({
             request.workflowChecks,
           );
         job.projectSnapshot = project;
+        if (project?.environmentPreflight) {
+          job.preflight = await require('./environment-preflight').preflight(folder, project.environmentTools);
+          if (job.preflight.status !== 'passed')
+            throw Error('Environment preflight failed. Review required tools and versions in Project environments.');
+        }
         const attachmentContext = await workspace().attachmentContext(request.attachments);
         if (job.workspaceId) {
           const existing = await workspace().tree(job.workspaceId);

@@ -128,7 +128,22 @@ function createKnowledgeIndex({ listFiles } = {}) {
           { file: retained.path },
         )
       : null;
-    return {
+    if (relationship) {
+      for (const name of [...relationship.imports, ...relationship.tests].slice(0, 4)) {
+        if (selected.some((row) => row.path === name) || !cache.has(name)) continue;
+        const row = cache.get(name);
+        selected.push({
+          path: name,
+          line: 1,
+          score: 0,
+          reason: relationship.tests.includes(name) ? 'Related test' : 'Imported dependency',
+          excerpt: row.lines.slice(0, 18).join('\n').slice(0, 2500),
+          symbols: [],
+          dependencies: [],
+        });
+      }
+    }
+    return require('./context-ranking').chooseContext({
       root,
       indexed: cache.size,
       refreshed,
@@ -143,7 +158,7 @@ function createKnowledgeIndex({ listFiles } = {}) {
             tests: relationship.tests,
           }
         : null,
-    };
+    });
   }
   async function analyze(cwd, options = {}) {
     const scan = await search(cwd, '', { excluded: options.excluded || [] });
@@ -165,7 +180,7 @@ function formatKnowledge(result) {
     result.results
       .map(
         (row) =>
-          `${JSON.stringify(row.path)}:${row.line}\n${row.excerpt}\nSymbols: ${row.symbols.map((s) => s.name + ':' + s.line).join(', ')}\nImports: ${row.dependencies.join(', ')}`,
+          `${JSON.stringify(row.path)}:${row.line}\nSelected because: ${row.reason || 'Query relevance'}\n${row.excerpt}\nSymbols: ${row.symbols.map((s) => s.name + ':' + s.line).join(', ')}\nImports: ${row.dependencies.join(', ')}`,
       )
       .join('\n\n') +
     (result.related

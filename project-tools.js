@@ -97,6 +97,7 @@ function runCheck(
         error,
         startedAt,
         durationMs: Date.now() - startedAt,
+        testResults: require('./test-results').parseTestResults(testOutput),
       });
     };
     const stop = () => {
@@ -119,9 +120,11 @@ function runCheck(
       stop();
     }, timeoutMs);
     timer.unref();
+    let testOutput = '';
     for (const stream of [child.stdout, child.stderr])
       stream.on('data', (part) => {
         output = (output + part.toString()).slice(-16000);
+        if (testOutput.length < 524289) testOutput = (testOutput + part.toString()).slice(0, 524289);
         onOutput(part.toString());
       });
     child.once('error', (error) => finish('failed', null, error.message));

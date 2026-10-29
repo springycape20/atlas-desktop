@@ -64,6 +64,7 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow;
 const ownsInstance = require('./startup-lifecycle').singleInstance(app, () => mainWindow);
 if (ownsInstance) require('./local-data').applyPendingReset(app.getPath('userData'), legacyUserDataPath);
+if (ownsInstance) require('./local-backups').applyPendingRestore(app.getPath('userData'));
 if (ownsInstance) require('./startup-lifecycle').configureChromiumCache(app);
 const taskNotifications = require('./task-notifications').createTaskNotifications({
   Notification,
@@ -73,6 +74,7 @@ let modelCatalogService, updateService, providerUsageService;
 let taskPlanService;
 let projectFileService;
 let projectEditor;
+let selectedToolsService, updateRecoveryService;
 let advancedWorkflowsService;
 const repairRequests = new WeakMap();
 function providerUsage() {
@@ -118,9 +120,51 @@ function getAppUpdates() {
   return (updateService ||= require('./app-updates').createAppUpdates({
     app,
     updater: app.isPackaged ? require('electron-updater').autoUpdater : null,
-    busy: jobsRunning,
+    busy: () => jobsRunning() || Boolean(selectedToolsService?.servicesActive()),
+    prepareRecovery: () => updateRecovery().prepare(),
     notify: (value) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:update-status', value);
+    },
+  }));
+}
+async function rendererBackup() {
+  await assistantService?.flush();
+  await mainWindow.webContents.executeJavaScript('window.atlasColabHistory?.flush()');
+  return mainWindow.webContents.executeJavaScript(
+    `(async()=>({localStorage:Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('atlas')).map(key=>[key,localStorage.getItem(key)])),colab:await window.atlasColabHistory.load({chats:[],selected:''})}))()`,
+  );
+}
+function updateRecovery() {
+  return (updateRecoveryService ||= require('./update-recovery').createUpdateRecovery({
+    directory: app.getPath('userData'),
+    appRoot: path.dirname(process.execPath),
+    version: app.getVersion(),
+    isPackaged: app.isPackaged,
+    approve: async (title, detail) =>
+      (
+        await dialog.showMessageBox(mainWindow, {
+          title,
+          message: title,
+          detail,
+          buttons: ['Cancel', 'Approve'],
+          defaultId: 0,
+          cancelId: 0,
+        })
+      ).response === 1,
+    backupData: async () =>
+      require('./local-backups').createBackup(app.getPath('userData'), app.getVersion(), await rendererBackup()),
+    restoreData: async (bytes) => require('./local-backups').stageRestore(app.getPath('userData'), bytes),
+    launch: async (executable) => {
+      const script =
+        "Start-Sleep -Seconds 2; Start-Process -FilePath '" +
+        executable.replaceAll("'", "''") +
+        "' -WindowStyle Hidden";
+      spawn(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+        { detached: true, windowsHide: true, stdio: 'ignore' },
+      ).unref();
+      app.quit();
     },
   }));
 }
@@ -477,6 +521,7 @@ app.on('before-quit', (event) => {
   providerHistory.close();
   knowledgeService?.close();
   advancedWorkflowsService?.dispose();
+  selectedToolsService?.dispose();
   clearTimeout(jobsEmitTimer);
   if (integrationService) finishing.push(integrationService.close());
   void (async () => {
@@ -866,6 +911,24 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   // Compare proposals run two passes at once, so the job keeps a set of listeners.
   if (job && listener) (job.passListeners ||= new Set()).add(listener);
   try {
+    const review = require('./sensitive-context').inspectSensitive(prompt),
+      approved = job ? (job.sensitiveApproved ||= new Set()) : new Set();
+    const fresh = review.findings.filter((row) => !approved?.has(provider + row.fingerprint));
+    if (fresh.length) {
+      const choice = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Review possible sensitive context',
+        message: 'Possible sensitive information is about to be sent to ' + provider + '.',
+        detail:
+          fresh.map((row) => row.kind + ' · line ' + row.line + ' · ' + row.preview).join('\n') +
+          '\n\nDetection is heuristic. Cancel to inspect/edit the prompt, attachments or enabled project context. Sending continues under the provider’s own data policies.',
+        buttons: ['Cancel request', 'Send this context'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (choice.response !== 1) throw Error('Request cancelled during sensitive-context review.');
+      for (const row of fresh) approved?.add(provider + row.fingerprint);
+    }
     return await runtimePerformance.measure('provider', () =>
       runProviderTurn(provider, prompt, cwd, settings, previousSessionId, onText),
     );
@@ -1595,6 +1658,88 @@ function setupIpc() {
     });
     return advancedWorkflowsService.action(request);
   });
+  ipcMain.handle('atlas:selected-tools', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const approve = async (title, detail) =>
+      (
+        await dialog.showMessageBox(mainWindow, {
+          title,
+          message: title,
+          detail,
+          buttons: ['Cancel', 'Approve'],
+          defaultId: 0,
+          cancelId: 0,
+        })
+      ).response === 1;
+    selectedToolsService ||= require('./selected-tools').createSelectedTools({
+      directory: app.getPath('userData'),
+      workspace: workspace(),
+      knowledge: knowledge(),
+      jobs: () => jobSnapshots(),
+      tracker: changes(),
+      integrations: integrations(),
+      busy: jobsRunning,
+      approve,
+      updateRecovery,
+      backup: async () => {
+        if (
+          !(await approve(
+            'Export a complete local-record backup?',
+            'Includes chats, memories, settings, attachments, task evidence and checkpoints, plus logical Colab/browser preferences. Excludes installed runtimes, project worktrees and provider-owned histories. The backup is compressed, not encrypted; store it privately.',
+          ))
+        )
+          return { cancelled: true };
+        const target = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: 'ATLAS-' + new Date().toISOString().slice(0, 10) + '.atlas-backup',
+        });
+        if (target.canceled) return { cancelled: true };
+        const bytes = require('./local-backups').createBackup(
+          app.getPath('userData'),
+          app.getVersion(),
+          await rendererBackup(),
+        );
+        await writeFile(target.filePath, bytes);
+        return { exported: true, bytes: bytes.length };
+      },
+      restore: async () => {
+        const picked = await dialog.showOpenDialog(mainWindow, {
+          properties: ['openFile'],
+          filters: [{ name: 'ATLAS backup', extensions: ['atlas-backup'] }],
+        });
+        if (picked.canceled) return { cancelled: true };
+        const stat = await require('node:fs/promises').stat(picked.filePaths[0]);
+        if (stat.size > 256 * 1024 * 1024) throw Error('Backup exceeds 256 MiB.');
+        const bytes = await readFile(picked.filePaths[0]),
+          value = require('./local-backups').validate(bytes);
+        if (
+          !(await approve(
+            'Restore this local backup?',
+            value.files.length +
+              ' files · version ' +
+              value.version +
+              '\nSaved ' +
+              new Date(value.createdAt).toLocaleString() +
+              '\n\nThe current managed records will be moved into a local recovery backup. ATLAS will restart to restore included records. External project files and provider histories are preserved.',
+          ))
+        )
+          return { cancelled: true };
+        require('./local-backups').stageRestore(app.getPath('userData'), bytes);
+        app.relaunch();
+        app.quit();
+        return { restarting: true };
+      },
+    });
+    return selectedToolsService.action(request);
+  });
+  ipcMain.handle('atlas:renderer-restore', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const file = path.join(app.getPath('userData'), '.renderer-restore.json');
+    if (request.action === 'complete') {
+      await unlink(file);
+      return true;
+    }
+    return JSON.parse(await readFile(file, 'utf8'));
+  });
   ipcMain.handle('atlas:show-notices', (event) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     const file = path.join(
@@ -2041,6 +2186,12 @@ async function handleChat(event, data) {
   const settings = await readAppSettings();
   const project = await workspace().profile(data.profileId);
   if (jobContext.getStore()) jobContext.getStore().projectSnapshot = project;
+  if (project?.environmentPreflight) {
+    const result = await require('./environment-preflight').preflight(cwd, project.environmentTools);
+    if (jobContext.getStore()) jobContext.getStore().preflight = result;
+    if (result.status !== 'passed')
+      throw Error('Environment preflight failed. Review Project environments requirements.');
+  }
   if (project)
     Object.assign(settings, {
       codexModel: project.codexModel || settings.codexModel,
@@ -2317,6 +2468,13 @@ async function createWindow() {
         '/advanced-workflows-ui.js',
         '/terminal-dock-ui.js',
         '/terminal-dock.css',
+        '/selected-tools-ui.js',
+        '/task-dependency-graph.js',
+        '/restore.html',
+        '/restore-state.js',
+        '/node_modules/@xterm/xterm/css/xterm.css',
+        '/node_modules/@xterm/xterm/lib/xterm.js',
+        '/node_modules/@xterm/addon-fit/lib/addon-fit.js',
         '/progress-ui.js',
         '/search-results.js',
         '/unified-search-ui.js',
@@ -2337,7 +2495,10 @@ async function createWindow() {
       stylesheet = url.pathname.endsWith('.css'),
       image = url.pathname.endsWith('.png');
     const html = await readFile(
-      path.join(__dirname, javascript || stylesheet || image ? url.pathname.slice(1) : 'index.html'),
+      path.join(
+        __dirname,
+        javascript || stylesheet || image || url.pathname === '/restore.html' ? url.pathname.slice(1) : 'index.html',
+      ),
     );
     return new Response(html, {
       headers: {
@@ -2387,7 +2548,11 @@ async function createWindow() {
     desktopIndicator?.close();
     desktopIndicator = undefined;
   });
-  await mainWindow.loadURL(`${appOrigin}/`);
+  await mainWindow.loadURL(
+    existsSync(path.join(app.getPath('userData'), '.renderer-restore.json'))
+      ? `${appOrigin}/restore.html`
+      : `${appOrigin}/`,
+  );
 }
 
 app.whenReady().then(async () => {

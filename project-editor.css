@@ -20,6 +20,29 @@
 .project-editor-panel[hidden] {
   display: none;
 }
+.project-editor-surface {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.project-editor-gutter {
+  flex: 0 0 45px !important;
+  width: 45px !important;
+  padding: 12px 6px !important;
+  margin: 0;
+  text-align: right;
+  overflow: hidden !important;
+  color: #a8b7ba !important;
+  border-right: 0 !important;
+  user-select: none;
+}
+.project-editor-surface textarea {
+  margin: 0;
+}
+.project-editor-surface:has(textarea[hidden]) {
+  display: none;
+}
 .project-editor-panel header,
 .project-editor-panel nav,
 .project-editor-actions {

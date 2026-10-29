@@ -20,6 +20,25 @@
 .terminal-dock[hidden] {
   display: none;
 }
+.terminal-emulator {
+  flex: 1;
+  min-height: 100px;
+  overflow: hidden;
+  background: #0c0f10;
+}
+.terminal-emulator > div {
+  height: 100%;
+}
+.terminal-dock [hidden] {
+  display: none !important;
+}
+.terminal-dock select {
+  background: #141718;
+  color: #e6eeee;
+  border: 1px solid #40545b;
+  padding: 6px;
+  max-width: 140px;
+}
 .terminal-dock header,
 .terminal-dock nav,
 .terminal-command-tools {

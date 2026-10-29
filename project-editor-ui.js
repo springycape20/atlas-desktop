@@ -194,6 +194,93 @@
       render();
     }
   };
+  const gutter = node('pre'),
+    surface = node('div');
+  gutter.className = 'project-editor-gutter';
+  gutter.setAttribute('aria-hidden', 'true');
+  surface.className = 'project-editor-surface';
+  const updateLines = () => {
+    gutter.textContent = Array.from({ length: area.value.split('\n').length }, (_, i) => i + 1).join('\n');
+    gutter.scrollTop = area.scrollTop;
+  };
+  area.addEventListener('input', updateLines);
+  area.addEventListener('scroll', () => (gutter.scrollTop = area.scrollTop));
+  const change = (text) => {
+    area.setRangeText(text, area.selectionStart, area.selectionEnd, 'end');
+    area.dispatchEvent(new Event('input'));
+  };
+  area.addEventListener('keydown', (event) => {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      const start = area.selectionStart,
+        end = area.selectionEnd,
+        line = area.value.lastIndexOf('\n', start - 1) + 1;
+      if (start === end && !event.shiftKey) change('  ');
+      else {
+        const text = area.value
+          .slice(line, end)
+          .split('\n')
+          .map((row) => (event.shiftKey ? row.replace(/^(?:  |\t)/, '') : '  ' + row))
+          .join('\n');
+        area.setSelectionRange(line, end);
+        change(text);
+      }
+    } else if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      const prefix = area.value.slice(0, area.selectionStart).split('\n').at(-1),
+        spaces = prefix.match(/^\s*/)[0] + (/[{:[]\s*$/.test(prefix) ? '  ' : '');
+      change('\n' + spaces);
+    }
+  });
+  button(
+    'Go to line',
+    () => {
+      const line = Number(prompt('Line number'));
+      if (!Number.isInteger(line) || line < 1) return;
+      const offset = area.value
+        .split('\n')
+        .slice(0, line - 1)
+        .reduce((sum, row) => sum + row.length + 1, 0);
+      area.setSelectionRange(offset, offset);
+      area.focus();
+      area.scrollTop = (line - 1) * 20;
+    },
+    tools,
+  );
+  button(
+    'Format JSON',
+    () => {
+      if (!active?.path.endsWith('.json'))
+        throw Error('Built-in formatting supports JSON; use a project formatter for other languages.');
+      area.value = JSON.stringify(JSON.parse(area.value), null, 2) + '\n';
+      area.dispatchEvent(new Event('input'));
+    },
+    tools,
+  );
+  button(
+    'Check document',
+    () => {
+      if (active?.path.endsWith('.json')) {
+        JSON.parse(area.value);
+        status.textContent = 'JSON syntax is valid.';
+      } else {
+        const stack = [];
+        for (const [i, char] of [...area.value].entries()) {
+          if ('([{'.includes(char)) stack.push([char, i]);
+          else if (')]}'.includes(char)) {
+            const top = stack.pop();
+            if (!top || '([{'.indexOf(top[0]) !== ')]}'.indexOf(char))
+              throw Error('Unbalanced bracket near line ' + area.value.slice(0, i).split('\n').length);
+          }
+        }
+        status.textContent = stack.length
+          ? 'Unclosed brackets found. This basic check includes strings/comments.'
+          : 'Basic bracket check passed. Use project checks for language diagnostics.';
+      }
+    },
+    tools,
+  );
+  new MutationObserver(updateLines).observe(nav, { childList: true });
   pane.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
@@ -206,7 +293,8 @@
       event.returnValue = '';
     }
   });
-  pane.append(header, nav, tools, area, highlighted, status);
+  surface.append(gutter, area);
+  pane.append(header, nav, tools, surface, highlighted, status);
   document.body.append(pane);
   const context = () => {
     const input = power.request();

@@ -70,7 +70,10 @@ function createAdvancedWorkflows({
               (input.input === undefined
                 ? '\nTime limit: ' + input.timeoutSeconds + ' seconds'
                 : '\nInput: ' + input.input) +
-              '\n\nThis process runs with your account permissions and may change files or access the network.',
+              '\n\nThis process runs with your account permissions and may change files or access the network.' +
+              (input.pty
+                ? '\nInteractive PTY: keystrokes go directly to this shell without per-command approval until it is closed.'
+                : ''),
           ),
       });
       return terminal.action(request);

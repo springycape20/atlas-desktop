@@ -369,6 +369,47 @@ app.whenReady().then(async () => {
         `advancedCalls.some(row=>row.tool==='terminal'&&row.action==='start'&&row.shell)&&advancedCalls.some(row=>row.tool==='terminal'&&row.action==='input'&&row.text==='echo fixture')&&advancedCalls.some(row=>row.tool==='repair'&&row.action==='start'&&row.commands[0]==='npm test')`,
       ),
     );
+    await run(
+      `window.atlas.selectedTools=async r=>r.tool==='git'?{branch:'fixture',files:[{state:' M',path:'README.md'}],history:'abc123 Fixture commit'}:r.tool==='manifest'?[{id:'fixture',name:'Local integration',transport:'stdio',declared:{filesystem:'Project only',network:'None',execution:'Explicit calls'}}]:[];void 0;`,
+    );
+    for (const name of [
+      'Selective changes',
+      'Test results',
+      'Environment preflight',
+      'Backups and recovery',
+      'Storage manager',
+      'Services',
+      'Git',
+      'Sensitive context review',
+      'Context selection',
+      'Multi-root workspaces',
+      'Task dependencies',
+      'Document context',
+      'API requests',
+      'Integration manifests',
+    ]) {
+      for (const width of [1280, 768, 640]) {
+        win.setContentSize(width, 800);
+        await run('atlasPower.show(' + JSON.stringify(name) + ')');
+        await new Promise((r) => setTimeout(r, 40));
+        assert.equal(await run(`document.querySelector('.power-body h2')?.textContent`), name);
+        assert(await run(`document.documentElement.scrollWidth<=innerWidth+1`), name + ' overflow at ' + width);
+        if (width === 1280 && ['Git', 'Backups and recovery', 'API requests', 'Integration manifests'].includes(name))
+          fs.writeFileSync(
+            path.join(shots, name.toLowerCase().replaceAll(' ', '-') + '.png'),
+            (await win.webContents.capturePage()).toPNG(),
+          );
+      }
+    }
+    await run(
+      `atlasPower.close();window.terminalRows=[{id:'pty-fixture',command:'PowerShell',shell:true,pty:true,status:'running',pid:42,output:'\\u001b[32mATLAS interactive terminal\\u001b[0m\\r\\nPS C:\\\\fixture> ',cwd:'C:\\\\fixture'}];void 0;`,
+    );
+    win.setContentSize(1280, 900);
+    await run(`atlasPower.show('Terminal')`);
+    await wait(`document.querySelector('.terminal-dock .xterm-screen')!==null`);
+    await wait(`document.querySelector('.terminal-dock textarea[aria-label="Terminal command"]').hidden===true`);
+    await new Promise((r) => setTimeout(r, 150));
+    fs.writeFileSync(path.join(shots, 'terminal-pty.png'), (await win.webContents.capturePage()).toPNG());
     assert.deepEqual(await run('fileUiErrors'), []);
     console.log(
       'PASS: Chat/Colab inline local images, file links, source preview, explicit attachment, isolated static HTML/CSS/assets, file browsing and narrow layout. Screenshots: ' +
