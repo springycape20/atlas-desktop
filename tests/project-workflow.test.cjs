@@ -123,6 +123,11 @@ test('preview recipes use fixed loopback arguments and reject executable argumen
   const next = await previewRecipe(root, { recipe: 'next', port: 3001 }, { PATH: path.dirname(process.execPath) });
   assert(next.args.includes('127.0.0.1'));
   assert.equal(next.url, 'http://127.0.0.1:3001/');
+  const alias = root + '-alias';
+  await fs.symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  t.after(() => fs.rm(alias, { recursive: true, force: true }));
+  const linked = await previewRecipe(alias, { recipe: 'next', port: 3001 }, { PATH: path.dirname(process.execPath) });
+  assert.equal(linked.args[0], next.args[0], 'A project alias must resolve to the same in-project executable');
   const python = path.join(root, process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
   await fs.mkdir(path.dirname(python), { recursive: true });
   await fs.writeFile(python, 'fixture');

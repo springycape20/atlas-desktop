@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises'),
   path = require('node:path');
 async function previewRecipe(cwd, request = {}, env = process.env) {
+  cwd = await fs.realpath(cwd);
   const recipe = request.recipe || 'vite',
     port = Number(request.port || (recipe === 'next' ? 3000 : recipe === 'flask' ? 5000 : 5173));
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw Error('Choose a port from 1024 to 65535.');

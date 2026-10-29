@@ -72,6 +72,7 @@ test('persistent shell keeps variables and directories across separate multiline
   await wait(() => !busy && output.includes('SECOND_READY'));
   assert.match(output, /42/);
   processHandle.write(process.platform === 'win32' ? 'Write-Output (Get-Location).Path' : 'pwd');
-  await wait(() => !busy && output.includes(path.dirname(root)));
+  const expectedDirectory = await fs.realpath(path.dirname(root));
+  await wait(() => !busy && output.toLowerCase().includes(expectedDirectory.toLowerCase()));
   assert(!output.includes('ATLAS_DONE_'));
 });
