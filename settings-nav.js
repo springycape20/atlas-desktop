@@ -20,6 +20,7 @@
     'Startup',
     'App updates',
     'Optional statistics report',
+    'Automatic statistics',
     'Tools and data',
   ];
   const HINTS = {
@@ -35,6 +36,7 @@
     Startup: 'Launch at sign-in',
     'App updates': 'Version and updates',
     'Optional statistics report': 'Review and save a voluntary local report',
+    'Automatic statistics': 'Off by default; separate opt-in required',
     'Tools and data': 'Plugins, chat import and log',
   };
   const STORAGE_KEY = 'atlas.settings.section';

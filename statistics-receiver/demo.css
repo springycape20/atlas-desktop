@@ -1,0 +1,107 @@
+:root {
+  color-scheme: dark;
+  background: #111214;
+  color: #ededee;
+  font:
+    15px/1.6 'Segoe UI',
+    sans-serif;
+}
+body {
+  margin: 0;
+}
+header {
+  padding: 24px 32px;
+  background: #191b1e;
+}
+h1 {
+  font-size: 24px;
+  margin: 0;
+}
+h3 {
+  font-size: 20px;
+  margin-top: 0;
+}
+header p {
+  margin-bottom: 0;
+  color: #c4c8ce;
+}
+main {
+  max-width: 1000px;
+  padding: 28px 32px;
+  margin: auto;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: #27292c;
+  border: 1px solid #62666c;
+  border-radius: 5px;
+  padding: 8px 12px;
+  margin: 4px 10px 8px 0;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:focus-visible,
+input:focus-visible,
+pre:focus-visible {
+  outline: 2px solid #eee;
+  outline-offset: 3px;
+}
+p {
+  white-space: pre-line;
+}
+.statistics-preview {
+  background: #222528;
+  padding: 16px;
+  overflow: auto;
+  max-height: 300px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    13px/1.55 Consolas,
+    monospace;
+}
+.power-toggle {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px 0;
+}
+.power-toggle input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.power-toggle[hidden],
+[hidden] {
+  display: none;
+}
+#demoStatus {
+  color: #edb6ad;
+}
+.statistics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.statistics-actions > button {
+  margin: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+@media (max-width: 640px) {
+  header,
+  main {
+    padding: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto;
+  }
+}

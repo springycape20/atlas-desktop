@@ -353,6 +353,22 @@
     13px/1.5 Consolas,
     monospace;
 }
+.statistics-recipient {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.statistics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.statistics-actions > button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
 .project-file-dialog header {
   display: flex;
   align-items: center;

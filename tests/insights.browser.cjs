@@ -32,6 +32,15 @@ app.whenReady().then(async () => {
       await fs.writeFile(file, JSON.stringify(report));
       files.push(file);
     }
+    const snapshotFile = path.join(temp, 'receiver-snapshot.json');
+    await fs.writeFile(
+      snapshotFile,
+      JSON.stringify({
+        schema: 'atlas-statistics-batch/v1',
+        reports: await Promise.all(files.map(async (file) => JSON.parse(await fs.readFile(file, 'utf8')))),
+      }),
+    );
+    files.splice(0, files.length, snapshotFile);
     let confirm = 1;
     const store = createReportStore(path.join(temp, 'data'));
     win = createAdminWindow({

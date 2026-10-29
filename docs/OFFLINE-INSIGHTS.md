@@ -1,6 +1,6 @@
 # ATLAS Insights: optional offline statistics
 
-This feature is in source after 0.9.1 and is not part of the published 0.9.1 installer. There is no reporting server, automatic upload, tracking identifier, background collector or new analytics dependency.
+This feature is in source after 0.9.1 and is not part of the published 0.9.1 installer. The manual flow has no reporting server, automatic upload, tracking identifier, background collector or new analytics dependency. A separate [unhosted opt-in prototype](AUTOMATIC-STATISTICS.md) uses a localhost receiver for synthetic testing; normal builds have no receiving service configured. Insights itself remains offline.
 
 ## For an ATLAS user
 
@@ -18,7 +18,7 @@ Release family identifies the app preparing the export, rather than the version 
 
 Run `npm run admin` from the source checkout or double-click `Start-ATLAS-Insights.cmd`. A separate **ATLAS Insights** app opens. It has no ATLAS provider/chat access, account sign-in, publisher endpoint or network access. Import only statistics JSON files users voluntarily choose to share. There is no mailbox/folder scan or automatic import.
 
-The importer accepts at most 100 files per action, 8 KiB each, and reconstructs the exact schema. Unknown fields, invalid values and oversized files are rejected; original file names and rejected contents are not retained in its report store. Duplicate report receipts with identical content are ignored. A conflicting receipt is rejected. This is not a cryptographic authenticity check: people can edit/fabricate reports or export several reports for the same activity.
+The importer accepts at most 100 files per action, with individual reports limited to 8 KiB, receiver snapshots limited to 1 MiB/1,000 reports, and a 10 MiB total import budget. It reconstructs the exact schema. Unknown fields, invalid values and oversized files are rejected; original file names and rejected contents are not retained in its report store. Duplicate report receipts with identical content are ignored. A conflicting receipt is rejected. This is not a cryptographic authenticity check: people can edit/fabricate reports or export several reports for the same activity. A receiver deletion does not automatically delete previously imported local copies or snapshots.
 
 The dashboard shows **reports received**, approximate task counts, outcomes, reported features, month and release-family distributions. It cannot measure unique users, daily/monthly active users, retention, churn, geographic reach, total installations or population-wide success rates. Do not treat the voluntary sample as representative. An app's completed status does not establish code correctness or customer satisfaction. Overlapping feature counters must not be summed as distinct tasks.
 

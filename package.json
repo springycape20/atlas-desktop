@@ -7,6 +7,9 @@
   "scripts": {
     "start": "electron .",
     "admin": "electron admin-panel/main.cjs",
+    "start:statistics-demo": "electron statistics-receiver/client-demo.cjs",
+    "statistics:receiver": "node statistics-receiver/start.cjs",
+    "statistics:snapshot": "node statistics-receiver/snapshot.cjs",
     "dist:admin": "electron-builder --config build/admin-builder.cjs --win portable --x64 --publish never",
     "test": "node --test tests/*.test.cjs",
     "dist:win": "electron-builder --win nsis --x64 --publish never",
@@ -62,6 +65,8 @@
       "!.setup-cache/**",
       "!ATLAS.lnk",
       "!admin-panel/**",
+      "!statistics-receiver/**",
+      "!.statistics-demo/**",
       "!Start-ATLAS-Insights.cmd",
       "!.handover/**",
       "!.agents/**",

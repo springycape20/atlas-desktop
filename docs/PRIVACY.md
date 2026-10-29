@@ -32,6 +32,12 @@ Diagnostic logs remain local unless you share them. Export redacted diagnostic l
 
 ## Choices and limitations
 
+### Opt-in reporting prototype (unhosted development)
+
+A separate source-only local prototype explores automatic reporting. Normal builds have no configured recipient and reporting is disabled. The prototype demo uses synthetic counters, a separate profile and a receiver bound to this computer only. It never uses normal chats or provider accounts. See [the prototype guide](AUTOMATIC-STATISTICS.md).
+
+Future public enablement requires a named operator, fixed HTTPS endpoint, privacy/contact notice and fresh affirmative opt-in after reviewing the payload and recipient. The proposed schedule sends a rounded retained-task sample for the previous completed UTC month, with no stable user/device identifier. Hosts and proxies can still process IP/network metadata. Withdrawal stops future reports and aborts requests where possible; already received data needs a separate receipt-based deletion request. Local deletion credentials must be kept if the user wants that route; resetting app data loses them. Server exports, Insights imports and backups require operator handling too. This prototype has no public server, deployment approval, anonymity guarantee or legal certification. Existing manual consent does not enable it.
+
 ### Optional statistics reports (development after 0.9.1)
 
 Settings → Optional statistics report prepares a report only after you choose a month and acknowledge its notice. Review the exact JSON and separately confirm saving. It includes a report-specific random receipt, UTC month, release family and rounded fixed-category counters from retained finished tasks. It omits chats, prompts, replies, files/paths, commands, raw errors, accounts, provider names, IP/location, device details, exact event times and persistent installation IDs. There is no new background tracking history. Report counts are approximate samples and do not measure unique users or retention.

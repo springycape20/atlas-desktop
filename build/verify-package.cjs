@@ -46,6 +46,9 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     'statistics-schema.js',
     'statistics-report.js',
     'statistics-report-ui.js',
+    'automatic-statistics.js',
+    'automatic-statistics-ui.js',
+    'statistics-config.json',
   ])
     assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {
