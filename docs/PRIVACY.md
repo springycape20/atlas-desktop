@@ -14,6 +14,8 @@ At startup ATLAS checks GitHub for updates and asks installed providers for avai
 
 ## What stays locally
 
+Development builds after 0.9.0 can preview project images, text and static HTML locally in the chat window. Previewing does not send the file to a provider. HTML previews disable scripts, forms and network requests and use bounded local image/stylesheet reads. **Attach to next message** creates a local attachment copy through the existing flow; sending that message may share it with the selected provider. Project previews do not start a development server or execute project code.
+
 In Project tools, source excerpts are indexed in a bounded in-memory worker cache and are added to provider requests only when enabled for the chat. A basic file-name map can be saved locally. Context exclusions affect ATLAS additions and do not change provider filesystem permissions. Custom workflow templates and batch/task records stay in the current ATLAS data folder; they can contain task text and command names. Parallel batches make multiple provider requests and share subtask work in the combined review.
 
 Optional local-model text chat sends selected text to a user-configured loopback API and never automatically falls back to a cloud provider. That local server may have its own cloud routing, logs and retention; choose an installed local model for offline inference. Optional ElevenLabs speech and GitHub update checks remain separate. ATLAS does not bundle or download additional language models for this feature.

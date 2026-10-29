@@ -276,6 +276,179 @@
   color: #d1e1e6;
   font: inherit;
 }
+.project-file-dialog {
+  width: min(1100px, calc(100vw - 32px));
+  height: min(850px, 92vh);
+  padding: 0;
+  border: 1px solid #47616d;
+  border-radius: 10px;
+  color: #d1e1e6;
+  background: #0c171e;
+}
+.project-file-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.project-file-dialog[data-mode='browser'] {
+  height: fit-content;
+  max-height: 90vh;
+}
+.project-file-dialog[data-mode='browser'] .project-file-content {
+  flex: 0 1 auto;
+  max-height: 60vh;
+}
+.project-file-dialog::backdrop {
+  background: #000a;
+}
+.project-file-dialog header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+}
+.project-file-dialog h1 {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 20px;
+  margin: 0;
+}
+.project-file-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 20px 12px;
+}
+.project-file-tools input {
+  min-width: 120px;
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #47616d;
+  border-radius: 6px;
+  background: #142730;
+  color: inherit;
+  font: inherit;
+}
+.project-file-content {
+  padding: 16px 20px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-block: 1px solid #47616d;
+}
+.project-file-content iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  border: 0;
+  background: white;
+}
+.project-file-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  margin: auto;
+}
+.project-file-source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    14px/1.6 Consolas,
+    monospace;
+  margin: 0;
+}
+.project-file-status {
+  padding: 12px 20px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.project-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.project-file-list button {
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+:root body.atlas-ui .project-file-link {
+  display: inline;
+  background: transparent;
+  color: #a6e1e9;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.project-output-card {
+  display: block;
+  max-width: 640px;
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid #47616d;
+  border-radius: 8px;
+  white-space: normal;
+}
+:root body.atlas-ui .assistant-turn .answer {
+  max-height: none;
+  overflow: visible;
+}
+.project-output-card img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  cursor: zoom-in;
+  margin-bottom: 10px;
+}
+.project-output-card p {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.project-output-card figcaption {
+  font-size: 13px;
+}
+:root body.atlas-ui .colab-message-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: calc(15px * var(--atlas-text-scale));
+  line-height: 1.7;
+}
+:root body.atlas-ui .colab-message-content strong {
+  display: inline;
+  font-size: inherit;
+  color: inherit;
+  margin: 0;
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast'])
+  body.atlas-ui
+  :is(.project-file-dialog, .project-output-card) {
+  background: var(--atlas-surface);
+  color: var(--atlas-ink);
+  border-color: var(--atlas-line);
+}
+:root:is([data-ui-theme='light'], [data-ui-theme='contrast']) body.atlas-ui .project-file-link {
+  color: var(--atlas-focus) !important;
+}
+@media (max-width: 750px) {
+  .project-file-dialog {
+    width: calc(100vw - 16px);
+  }
+  .project-file-dialog header,
+  .project-file-content {
+    padding: 12px;
+  }
+  .project-file-tools {
+    padding-inline: 12px;
+  }
+}
 .provider-activity-row h4 {
   font-size: calc(16px * var(--atlas-text-scale));
   margin: 8px 0;

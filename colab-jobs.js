@@ -379,7 +379,9 @@ function createColabJobs({
           preparedProposals: job.preparedProposals,
           instructions: request.contextSelection.instructions ? project?.instructions || '' : '',
           attachmentContext,
-          projectContext: navigation,
+          projectContext:
+            navigation +
+            '\n\nFor project deliverables, use Markdown file links [filename](relative/path) and image references ![description](relative/image.png) so the user can preview saved files. Do not invent file paths.',
           signal: controller.signal,
         });
         if (job.stopped || controller.signal.aborted) throw Error('Collaboration stopped.');

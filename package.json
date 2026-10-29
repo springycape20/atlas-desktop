@@ -22,6 +22,7 @@
     "test:settings-ui": "electron tests/settings.browser.cjs",
     "test:power-ui": "electron tests/power-tools.browser.cjs",
     "test:navigation-ui": "electron tests/ui-navigation.browser.cjs",
+    "test:files-ui": "electron tests/project-files.browser.cjs",
     "test:release-ui": "electron tests/release-screens.browser.cjs",
     "build:compliance": "node build/prepare-compliance.cjs"
   },

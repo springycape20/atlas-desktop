@@ -54,6 +54,8 @@ The interface also groups tools under Tasks, Library and Settings, adds Ctrl+K n
 
 Additional tools include editable task plans with approval, opt-in fast/strong model tiers, project-scoped memory, local hardware capacity checks, project environment recipes, a unified review centre, live progress estimates and search across local work. See the [capability guide](docs/PROJECT-TOOLS.md) for locations and limits.
 
+Development builds after 0.9.0 also add inline project-image previews, clickable file references, static HTML previews and **Attach > Browse project files**. See the [preview guide](docs/PROJECT-TOOLS.md#file-and-image-previews-development). These changes are not yet in the published 0.9.0 installer.
+
 ## Install
 
 1. Download **ATLAS-Setup-*version*.exe** from the [latest release](https://github.com/springycape20/atlas-desktop/releases/latest) (about 440 MB, Windows 10/11 x64) and run it.

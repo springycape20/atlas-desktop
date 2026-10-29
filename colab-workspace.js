@@ -748,6 +748,9 @@
         (message.id || 'legacy') + ':' + messageIndex,
         [
           message.role,
+          chat.id,
+          chat.cwd,
+          message.jobId,
           message.error,
           message.provider,
           message.content,
@@ -763,7 +766,7 @@
           article.className =
             'colab-message ' + (message.error ? 'error' : message.role === 'user' ? 'user' : 'assistant');
           const label = document.createElement('strong'),
-            content = document.createElement('p');
+            content = document.createElement('div');
           label.textContent =
             message.role === 'user'
               ? 'You'
@@ -772,7 +775,16 @@
                 : message.provider
                   ? message.provider.toUpperCase() + ' · Imported'
                   : 'Colab · Codex + Claude';
-          content.textContent = message.content;
+          content.className = 'colab-message-content';
+          if (message.role === 'assistant' && !message.error)
+            renderAnswer(message.content, content, {
+              scope: 'colab',
+              cwd: chat.cwd,
+              conversationId: '',
+              chatId: chat.id,
+              jobId: message.jobId || '',
+            });
+          else content.textContent = message.content;
           if (message.at && Number.isFinite(new Date(message.at).getTime())) {
             const time = document.createElement('time');
             time.dateTime = new Date(message.at).toISOString();
@@ -903,7 +915,9 @@
     const query = el('colabFind').value.trim().toLowerCase();
     matches = [];
     for (const node of el('colabTranscript').querySelectorAll('.colab-message')) {
-      const match = Boolean(query && node.querySelector('p').textContent.toLowerCase().includes(query));
+      const match = Boolean(
+        query && node.querySelector('.colab-message-content').textContent.toLowerCase().includes(query),
+      );
       node.dataset.match = String(match);
       if (match) matches.push(node);
     }

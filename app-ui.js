@@ -2061,9 +2061,16 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) scheduleWorkspaceSync();
 });
 syncWorkspace();
-function renderAnswer(text, target = output) {
+function renderAnswer(text, target = output, fileContext) {
   if (target === output) cancelStreamPaint();
   target.replaceChildren();
+  const context = {
+    scope: 'assistant',
+    cwd: typeof cwd === 'string' ? cwd : '',
+    conversationId: typeof conversationId === 'string' ? conversationId : '',
+    ...(fileContext || {}),
+    previewCount: 0,
+  };
   const blocks = String(text || '').split(/(```[\s\S]*?```)/g);
   for (const block of blocks) {
     if (block.startsWith('```')) {
@@ -2073,8 +2080,14 @@ function renderAnswer(text, target = output) {
       target.append(pre);
       continue;
     }
-    const parts = block.split(/(\[[^\]]+\]\(https?:\/\/[^)]+\)|\*\*[^*]+\*\*|`[^`]+`)/g);
+    const parts = block.split(/(!?\[[^\]]*\]\((?:<[^>]+>|[^)\n]+)\)|\*\*[^*]+\*\*|`[^`]+`)/g);
     for (const part of parts) {
+      const file = part.match(/^(!?)\[([^\]]*)\]\((.+)\)$/);
+      const fileNode = file && window.atlasProjectFiles?.reference(file[2], file[3], Boolean(file[1]), context);
+      if (fileNode) {
+        target.append(fileNode);
+        continue;
+      }
       const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/);
       if (link) {
         const a = document.createElement('a');
@@ -2092,6 +2105,8 @@ function renderAnswer(text, target = output) {
       } else if (part.startsWith('`') && part.endsWith('`')) {
         const code = document.createElement('code');
         code.textContent = part.slice(1, -1);
+        const fileLink = window.atlasProjectFiles?.reference(code.textContent, code.textContent, false, context);
+        if (fileLink) code.replaceChildren(fileLink);
         target.append(code);
       } else target.append(document.createTextNode(part));
     }

@@ -176,7 +176,7 @@
           }
           article.append(label, body);
           if (turn.role === 'assistant') {
-            renderAnswer(turn.content, body);
+            renderAnswer(turn.content, body, { conversationId: selected });
             const actions = node('div', undefined, 'assistant-turn-actions'),
               copy = node('button', 'Copy result', 'quiet-button');
             copy.type = 'button';

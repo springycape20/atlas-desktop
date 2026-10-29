@@ -17,6 +17,16 @@ Use **Tasks** for running work, the queue, parallel batches, recovery, reminders
 
 These features are included in 0.9.0. Model routing changes model choice, not permissions. Memories, plans, recipes and source excerpts never grant access or authorize tool execution by themselves.
 
+## File and image previews (development)
+
+Chat and Colab can display images referenced as `![description](path/to/image.png)` and open project files linked as `[label](path/to/file)` or written as an inline-code filename. Relative paths resolve inside the chat/task project; isolated task outputs use that task's workspace. These additions are in development after 0.9.0 and are not yet in the public installer.
+
+Open **Attach > Browse project files** to browse the project, preview a file, show it in File Explorer or attach it to the next unsent message. Attaching copies the selected file through the existing attachment flow; it is not sent until you send the message. Private credential/configuration paths, recorded file denials, traversal and links outside the project are blocked. Folder lists show up to 200 entries at a time.
+
+PNG, JPEG, GIF and WebP previews are limited to 8 MiB. Text/code previews are read-only UTF-8 and limited to 256 KiB. Unsupported or larger files can be located with **Show in folder**. Previews read the current file, so changes after a response can change its preview; use Refresh to read it again. At most 12 linked previews are enhanced per rendered message. Automatic image reads run two at a time with a bounded queue and a 32 MiB encoded-image budget across visible chat cards; filenames still open individually when that budget is reached.
+
+HTML files have a **Page preview (scripts off)** and a Source view. The page runs in a sandbox without scripts, forms, navigation to other pages or network requests. Up to eight local stylesheets and eight local images are considered, with bounded image data. Remote assets are omitted. This is a static preview, not a running React/Vite/server application; interactive behavior and missing build assets may not display. No development server or project command is launched.
+
 ## Navigation and readability
 
 The main sidebar contains Chat, Colab, Projects, Tasks, Library and Settings. Press **Ctrl+K**, or choose **Search** in the top bar, to find a destination. Search only opens screens; it does not start a provider task. Arrow keys and Enter select a result; Escape closes the menu.

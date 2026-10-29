@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('atlas', {
   droppedFiles: (files) =>
     ipcRenderer.invoke('atlas:attachments', { paths: Array.from(files).map((file) => webUtils.getPathForFile(file)) }),
   attachmentPreview: (id) => ipcRenderer.invoke('atlas:attachment-preview', { id }),
+  projectFile: (request) => ipcRenderer.invoke('atlas:project-file', request),
   diagnostics: () => ipcRenderer.invoke('atlas:diagnostics'),
   showLog: () => ipcRenderer.invoke('atlas:show-log'),
   exportDiagnostics: () => ipcRenderer.invoke('atlas:export-diagnostics'),
