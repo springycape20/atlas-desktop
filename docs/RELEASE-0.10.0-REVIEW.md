@@ -24,6 +24,8 @@ Local validation passed 499 unit tests and the Assistant, Colab, graph, approval
 
 CI exposed Windows short-path aliases in temporary folders. Preview recipes now canonicalize their project root before checking executable containment; a junction-based regression test reproduces the original failure and passes with the fix. The persistent-shell test compares its returned directory to the canonical path, preserving the same behavioural assertion.
 
+At the runner's 1024-pixel window width, Colab's Stop/Terminal actions caused Send to wrap onto another row. Reducing action gaps from 8 to 6 pixels keeps the default-text toolbar on one row and preserves transcript space. The approval UI test explicitly checks composer height at that width, alongside existing overflow and text-size checks.
+
 An isolated smoke test preserved the actual packaged 0.10.0 application, changed fixture records to simulate a later version, then relaunched the preserved copy and verified that old records were restored before application load and newer records retained in recovery storage. Provider executable overrides pointed to Windows `where.exe`, with no real provider accounts. The hidden fixture was terminated after assertions because it had no visible main-window handle; this is not evidence about graceful shutdown. The test did not install NSIS into the user's real profile, and it cannot cover every update/Windows-policy configuration.
 
 The owner-authorized unsigned policy remains in effect following SignPath denial. The final release still requires passing CI, verified installer/updater assets and the owner's post-CI confirmation. Hashes provide integrity checks, not authenticated publisher signing. Historical legal/source questions remain in the dated research documents.

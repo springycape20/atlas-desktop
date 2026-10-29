@@ -740,6 +740,9 @@ body.atlas-ui {
   flex: 1 0 100%;
   width: 100%;
 }
+.colab-composer .shell-composer-tools {
+  gap: 6px;
+}
 :root body.atlas-ui .system-state {
   display: none;
 }
