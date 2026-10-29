@@ -20,7 +20,9 @@ Local-record backups include managed files and logical ATLAS browser/Colab histo
 
 ## Validation record
 
-Local validation passed 499 unit tests and the Assistant, Colab, graph, approvals, disputes, Settings, power, navigation, files, preview, release, PTY, PTY-rendering, restore and packaged-PDF Electron suites. Formatting and production audit passed. The Windows x64 installer, updater hashes, package version, private-path exclusions, notices, speech hashes, native PTY files, binary fuses and ASAR hash were verified locally. CI repeats the required checks for the proposed release.
+Local validation passed 500 unit tests and the Assistant, Colab, graph, approvals, disputes, Settings, power, navigation, files, preview, release, PTY, PTY-rendering, restore and packaged-PDF Electron suites. Formatting and production audit passed. The Windows x64 installer, updater hashes, package version, private-path exclusions, notices, speech hashes, native PTY files, binary fuses and ASAR hash were verified locally. CI repeats the required checks for the proposed release.
+
+The first v0.10.0 tag build stopped before publication because the recorded lock checksum had been computed before Git converted the local CRLF lockfile to its required LF bytes. No release assets were uploaded. The corrected record hashes the exact LF file and is verified from a fresh staged checkout; the normal unit suite now enforces this actual review/lock pairing before a tag is pushed. The owner explicitly chose to keep 0.10.0 and replace its unpublished tag after this correction.
 
 CI exposed Windows short-path aliases in temporary folders. Preview recipes now canonicalize their project root before checking executable containment; a junction-based regression test reproduces the original failure and passes with the fix. The persistent-shell test compares its returned directory to the canonical path, preserving the same behavioural assertion.
 

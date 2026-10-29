@@ -1,6 +1,28 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { assertPublicRelease } = require('../build/release-policy.cjs');
+
+test('current release review matches the exact LF lockfile shipped by Git', () => {
+  const fs = require('node:fs'),
+    path = require('node:path'),
+    { createHash } = require('node:crypto');
+  const root = path.resolve(__dirname, '..'),
+    bytes = fs.readFileSync(path.join(root, 'package-lock.json'));
+  assert(
+    !bytes.includes(Buffer.from('\r\n')),
+    'package-lock.json must use the LF bytes enforced by .gitattributes before review hashing',
+  );
+  const version = require('../package.json').version;
+  assert.doesNotThrow(() =>
+    assertPublicRelease({
+      env: { SIGNING: 'false', GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'v' + version },
+      version,
+      lock: JSON.parse(bytes),
+      lockHash: createHash('sha256').update(bytes).digest('hex'),
+      review: JSON.parse(fs.readFileSync(path.join(root, 'legal/release-review.json'), 'utf8')),
+    }),
+  );
+});
 test('release review binds dependency lock, signing configuration and unsigned owner decision', () => {
   const review = {
     version: '0.8.3',
