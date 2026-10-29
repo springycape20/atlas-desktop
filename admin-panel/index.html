@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';"
+    />
+    <title>ATLAS Insights</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <img src="../assets/beacon.png" alt="" /><strong>ATLAS Insights</strong><span>Local reports</span>
+      </div>
+      <button id="import">Import reports…</button>
+    </header>
+    <main>
+      <div class="heading">
+        <div>
+          <h1>Understand reported app use</h1>
+          <p id="finding">Import voluntarily shared reports to see reported activity.</p>
+        </div>
+        <label
+          >Reporting month<select id="month">
+            <option value="">All retained months</option>
+          </select></label
+        >
+      </div>
+      <section class="notice" aria-label="Measurement limitations">
+        <strong>Reports are not people.</strong> No unique-user count, retention estimate or population-wide success
+        rate is available. Counts are rounded samples of retained tasks, supplied voluntarily and not independently
+        verified.
+      </section>
+      <section class="metrics" aria-label="Reported totals">
+        <div><span>Reports received</span><strong id="reports">0</strong></div>
+        <div><span>Approx. task records</span><strong id="tasks">0</strong></div>
+        <div><span>Reported completed</span><strong id="completed">0</strong></div>
+        <div><span>Release families</span><strong id="versions">0</strong></div>
+      </section>
+      <div class="grid">
+        <section>
+          <h2>Task outcomes</h2>
+          <p>Rounded counts; completion is an app status, not proof of correctness.</p>
+          <div id="outcomes" class="bars"></div>
+        </section>
+        <section>
+          <h2>Reported feature use</h2>
+          <p>Tasks can use several features. Counts overlap.</p>
+          <div id="features" class="bars"></div>
+        </section>
+        <section>
+          <h2>Reports by month</h2>
+          <div id="months" class="bars"></div>
+        </section>
+        <section>
+          <h2>Reports by exporter release family</h2>
+          <div id="families" class="bars"></div>
+        </section>
+      </div>
+      <section class="receipts">
+        <div class="heading">
+          <h2>Report receipts</h2>
+          <label>Find receipt<input id="receiptSearch" type="search" placeholder="Report receipt ID" /></label>
+        </div>
+        <p>
+          Repeated imports of the same receipt are ignored. Different exports from one person can count as separate
+          reports.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Report receipt</th>
+                <th>Month</th>
+                <th>Release family</th>
+                <th class="number">Approx. tasks</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="receipts"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="privacy">
+        <h2>Local data controls</h2>
+        <p>
+          No server, tracking endpoint, account list or automatic uploads. This app retains eligible reports for the
+          latest twelve calendar months and removes expired reports when opened or used. Up to 5,000 reports are
+          retained.
+        </p>
+        <p>
+          Reports and their summaries are stored on this computer under its account permissions; they are not encrypted
+          by this app. Sharing channels can identify a sender. Do not join receipts to contact lists or publish small
+          groups. Review originals, messages, exports and backups separately when deleting data.
+        </p>
+        <div class="actions">
+          <button id="export">Save aggregate summary…</button><button id="refresh">Refresh reports</button
+          ><button id="clear" class="danger">Delete all imported reports…</button>
+        </div>
+      </section>
+      <p id="status" role="status" aria-live="polite">Nothing is transmitted by this admin app.</p>
+    </main>
+    <script src="../statistics-schema.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

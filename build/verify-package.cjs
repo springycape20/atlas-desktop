@@ -43,6 +43,9 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     'project-workbench-ui.js',
     'live-preview.js',
     'live-preview-ui.js',
+    'statistics-schema.js',
+    'statistics-report.js',
+    'statistics-report-ui.js',
   ])
     assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {

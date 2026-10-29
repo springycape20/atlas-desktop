@@ -1,0 +1,31 @@
+module.exports = {
+  appId: 'com.springycape.atlas.insights',
+  productName: 'ATLAS Insights',
+  extraMetadata: { name: 'atlas-insights', main: 'admin-panel/main.cjs', version: '0.1.0' },
+  directories: { output: 'dist/insights' },
+  files: [
+    'admin-panel/**/*',
+    'statistics-schema.js',
+    'statistics-report.js',
+    'atomic-store.js',
+    'assets/beacon.png',
+    'LICENSE',
+    'docs/STATISTICS-PRIVACY-ASSESSMENT.md',
+    'docs/OFFLINE-INSIGHTS.md',
+    'package.json',
+    '!node_modules/**/*',
+  ],
+  win: {
+    target: [{ target: 'portable', arch: ['x64'] }],
+    icon: 'build/icon.ico',
+    signAndEditExecutable: true,
+    artifactName: 'ATLAS-Insights-${version}.exe',
+  },
+  electronFuses: {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true,
+  },
+};

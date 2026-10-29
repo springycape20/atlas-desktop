@@ -328,6 +328,31 @@
 .power-body > button {
   margin: 4px 8px 4px 0;
 }
+.setting-section .power-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 16px 0;
+}
+.setting-section .power-toggle[hidden] {
+  display: none;
+}
+.setting-section .power-toggle input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.statistics-preview {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 16px;
+  background: #222426;
+  font:
+    13px/1.5 Consolas,
+    monospace;
+}
 .project-file-dialog header {
   display: flex;
   align-items: center;

@@ -1117,6 +1117,14 @@ function persistJobs() {
 }
 
 function setupIpc() {
+  require('./statistics-report').registerStatistics({
+    ipcMain,
+    trusted: isTrustedSender,
+    jobs: () => [...activeJobs.values()],
+    version: require('./package.json').version,
+    dialog,
+    window: () => mainWindow,
+  });
   let livePreview;
   ipcMain.handle('atlas:live-preview', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -2127,6 +2135,7 @@ async function createWindow() {
         '/review-center-ui.js',
         '/project-workbench-ui.js',
         '/live-preview-ui.js',
+        '/statistics-report-ui.js',
         '/progress-ui.js',
         '/search-results.js',
         '/unified-search-ui.js',

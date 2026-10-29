@@ -2,7 +2,7 @@
 
 ATLAS 0.9.1 includes a sandboxed local-site preview and optional screenshot feedback. The preview blocks requests outside its selected local origin. Starting a development server requires confirmation because project configuration runs with your account permissions and may itself access the network. Captures become local attachments and are sent to a provider only when you send the message. Named checkpoints store eligible project text locally and exclude private and denied paths. See [Project workbench](PROJECT-WORKBENCH.md) for limits and controls.
 
-ATLAS is a free, independent Windows application maintained by the Australian publisher [springycape20](https://github.com/springycape20). The publisher operates no ATLAS inference service and the application contains no publisher telemetry, analytics or crash-upload feature. For private security reports use [GitHub private reporting](https://github.com/springycape20/atlas-desktop/security/advisories/new). Avoid private information in public support issues.
+ATLAS is a free, independent Windows application maintained by the Australian publisher [springycape20](https://github.com/springycape20). The publisher operates no ATLAS inference or analytics service and the application contains no automatic publisher telemetry or crash-upload feature. Development after 0.9.1 adds an optional, locally previewed statistics report that users can independently choose to share; it never uploads automatically. For private security reports use [GitHub private reporting](https://github.com/springycape20/atlas-desktop/security/advisories/new). Avoid private information in public support issues.
 
 ## What leaves your computer
 
@@ -32,6 +32,12 @@ Diagnostic logs remain local unless you share them. Export redacted diagnostic l
 
 ## Choices and limitations
 
+### Optional statistics reports (development after 0.9.1)
+
+Settings → Optional statistics report prepares a report only after you choose a month and acknowledge its notice. Review the exact JSON and separately confirm saving. It includes a report-specific random receipt, UTC month, release family and rounded fixed-category counters from retained finished tasks. It omits chats, prompts, replies, files/paths, commands, raw errors, accounts, provider names, IP/location, device details, exact event times and persistent installation IDs. There is no new background tracking history. Report counts are approximate samples and do not measure unique users or retention.
+
+Saving creates a local file only. Sharing that file outside ATLAS is optional; your email, GitHub account or delivery service can identify you or add metadata, so no anonymity guarantee is made. The recipient may receive a voluntarily shared report and delivery-channel information. You can decline without affecting normal app use. Keep the receipt if requesting deletion. The separate offline Insights app accepts only schema-validated reports, stores no source filenames, provides individual/full deletion and retains reports within the latest twelve calendar months when accessed. Originals, messages, exports and backups are separate copies. Neither the report nor the admin store is encrypted by ATLAS. See [the offline report guide](OFFLINE-INSIGHTS.md) and [privacy assessment](STATISTICS-PRIVACY-ASSESSMENT.md).
+
 You can type instead of using a microphone, choose local speech, remove a saved ElevenLabs key, revoke screen/shell permissions per chat, stop tasks, export chats, and reset current app records. AI replies can be wrong. A reviewer acceptance or passing test is evidence about the reported review/checks, not a guarantee that an answer is correct. A project worktree and remembered command permission are not an operating-system sandbox. Do not enable provider approval bypass for untrusted work.
 
-This explanation describes the application, not every third-party CLI's internal traffic. There is no blanket waiver of rights that Australian law does not permit to be excluded. The publisher should reassess this statement before adding hosted features, analytics, support uploads or a website with data-collection features. Updated: 28 October 2026.
+This explanation describes the application, not every third-party CLI's internal traffic. There is no blanket waiver of rights that Australian law does not permit to be excluded. The publisher should reassess this statement before adding hosted features, analytics, support uploads or a website with data-collection features. Updated: 29 October 2026.

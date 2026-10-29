@@ -1,0 +1,270 @@
+:root {
+  color-scheme: dark;
+  font:
+    15px/1.55 'Segoe UI',
+    sans-serif;
+  background: #111214;
+  color: #ededee;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+  background: #25272a;
+  border: 1px solid #53565b;
+  border-radius: 5px;
+  padding: 9px 12px;
+  min-height: 40px;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:hover {
+  background: #303339;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #f3f3f3;
+  outline-offset: 3px;
+}
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px;
+  background: #191b1e;
+  gap: 20px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+.brand span {
+  color: #a9adb4;
+  font-size: 13px;
+}
+main {
+  max-width: 1344px;
+  margin: auto;
+  padding: 28px 32px 36px;
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+h1 {
+  font-size: 26px;
+  line-height: 1.25;
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+h2 {
+  font-size: 18px;
+  line-height: 1.4;
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+p {
+  color: #b7bac0;
+  margin: 0 0 16px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+select {
+  min-width: 180px;
+}
+.notice {
+  background: #202327;
+  padding: 16px 20px;
+  margin: 20px 0;
+  color: #c8cbd0;
+  font-size: 14px;
+}
+.notice strong {
+  color: #ededee;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  padding: 6px 0 28px;
+}
+.metrics span {
+  display: block;
+  color: #b7bac0;
+  font-size: 14px;
+}
+.metrics strong {
+  display: block;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.grid {
+  display: grid;
+  align-items: start;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.grid > section {
+  background: #191b1e;
+  padding: 20px;
+}
+.grid p {
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 2fr 55px;
+  align-items: center;
+  gap: 14px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+.bar-row meter {
+  width: 100%;
+  height: 12px;
+  accent-color: #9eb9b0;
+}
+.bar-row meter::-webkit-meter-optimum-value {
+  background: var(--bar, #9eb9b0);
+}
+.bar-row[data-kind='failed'] {
+  --bar: #d6a7a0;
+}
+.bar-row[data-kind='cancelled'] {
+  --bar: #9298a1;
+}
+.bar-row strong {
+  text-align: right;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.empty {
+  color: #a9adb4;
+  padding: 16px 0;
+}
+.receipts,
+.privacy {
+  margin-top: 28px;
+}
+.receipts > p,
+.privacy p {
+  max-width: 90ch;
+}
+.table-wrap {
+  overflow: auto;
+  max-height: 340px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+th {
+  text-align: left;
+  color: #b7bac0;
+  font-size: 13px;
+  font-weight: 400;
+}
+td,
+th {
+  padding: 10px 12px;
+  border-bottom: 1px solid #34373c;
+}
+td:first-child {
+  overflow-wrap: anywhere;
+  max-width: 300px;
+}
+.number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.danger {
+  color: #edb6ad;
+}
+#status {
+  margin-top: 24px;
+  color: #c8cbd0;
+}
+.privacy {
+  background: #191b1e;
+  padding: 20px;
+}
+input {
+  max-width: 260px;
+}
+@media (max-width: 850px) {
+  main {
+    padding: 24px 20px;
+  }
+  .app-header {
+    padding: 16px 20px;
+  }
+  .brand span {
+    display: none;
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .bar-row {
+    grid-template-columns: minmax(115px, 1fr) 1fr 45px;
+  }
+  h1 {
+    font-size: 24px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+@media (forced-colors: active) {
+  button,
+  input,
+  select {
+    border: 1px solid ButtonText;
+  }
+}

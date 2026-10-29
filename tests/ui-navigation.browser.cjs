@@ -18,7 +18,12 @@ app.whenReady().then(async () => {
   try {
     protocol.handle('atlas', (request) => {
       const file = new URL(request.url).pathname.slice(1);
-      if (file === '__mock.js') return new Response(mock, { headers: { 'Content-Type': 'application/javascript' } });
+      if (file === '__mock.js')
+        return new Response(
+          mock +
+            `window.__reportCalls=[];window.atlas.statisticsReport=async request=>{__reportCalls.push(request);if(request.action==='months')return ['2026-10'];if(request.action==='preview')return {token:'review-token',report:{schema:'atlas-statistics/v1',reportId:'12345678-1234-4234-8234-123456789012',period:'2026-10',versionFamily:'0.9',coverage:'retained-task-sample',rounding:5,outcomes:{completed:10,failed:0,cancelled:0},features:{colabTasks:5,isolatedTasks:0,tasksWithChecks:5,tasksWithSetup:0}}};return {saved:request.action==='export'};};`,
+          { headers: { 'Content-Type': 'application/javascript' } },
+        );
       const content = fs.readFileSync(path.join(root, file || 'index.html'));
       return new Response(
         file ? content : content.toString().replace('<head>', '<head><script src="/__mock.js"></script>'),
@@ -147,6 +152,21 @@ app.whenReady().then(async () => {
       if(document.getElementById('uiTheme').value!=='contrast')throw Error('Saved appearance lost on reopen');
       if(__uiErrors.length)throw Error(__uiErrors.join('; '));
     })()`);
+    await win.webContents.executeJavaScript(`(async()=>{
+      const wait=()=>new Promise(r=>setTimeout(r,100));await atlasUi.settings('Optional statistics report');await wait();
+      const section=[...document.querySelectorAll('.setting-section')].find(x=>x.querySelector('h3')?.textContent==='Optional statistics report');
+      const buttons=[...section.querySelectorAll('button')],preview=buttons.find(x=>x.textContent==='Preview optional report'),save=buttons.find(x=>x.textContent==='Save reviewed report…'),checks=section.querySelectorAll('input[type=checkbox]');
+      if(!preview.disabled||!save.disabled)throw Error('Statistics must require explicit choice');
+      if(document.querySelector('.settings-footer').classList.contains('settings-dirty'))throw Error('Report opened as unsaved preferences');
+      checks[0].click();preview.click();await wait();
+      if(!section.querySelector('pre').textContent.includes('retained-task-sample')||!save.disabled)throw Error('Exact report review was not required');
+      if(document.querySelector('.settings-footer').classList.contains('settings-dirty'))throw Error('Report choice should not require Save settings');
+      checks[1].click();save.click();await wait();
+      if(!__reportCalls.some(x=>x.action==='export'&&x.token==='review-token'))throw Error('Reviewed report was not saved');
+      if(!save.disabled)throw Error('Export token reused');
+    })()`);
+    fs.writeFileSync(path.join(out, 'statistics-report.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(`atlasSettings.show('Appearance')`);
     for (const theme of ['light', 'contrast', 'dark']) {
       await win.webContents.executeJavaScript(
         `document.getElementById('uiTheme').value='${theme}';document.getElementById('uiTextScale').value='1.3';document.getElementById('uiTextScale').dispatchEvent(new Event('change',{bubbles:true}));`,
