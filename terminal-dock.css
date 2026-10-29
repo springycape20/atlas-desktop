@@ -1,0 +1,132 @@
+.terminal-dock {
+  position: fixed;
+  right: 0;
+  top: var(--atlas-terminal-top, 86px);
+  bottom: 0;
+  width: var(--atlas-terminal-width, 520px);
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 16px;
+  background: #141718;
+  color: #e6eeee;
+  border-left: 1px solid #40545b;
+  font:
+    13px/1.6 'Segoe UI',
+    sans-serif;
+}
+.terminal-dock[hidden] {
+  display: none;
+}
+.terminal-emulator {
+  flex: 1;
+  min-height: 100px;
+  overflow: hidden;
+  background: #0c0f10;
+}
+.terminal-emulator > div {
+  height: 100%;
+}
+.terminal-dock [hidden] {
+  display: none !important;
+}
+.terminal-dock select {
+  background: #141718;
+  color: #e6eeee;
+  border: 1px solid #40545b;
+  padding: 6px;
+  max-width: 140px;
+}
+.terminal-dock header,
+.terminal-dock nav,
+.terminal-command-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.terminal-dock header strong {
+  flex: 1;
+}
+.terminal-dock nav {
+  max-height: 110px;
+  overflow: auto;
+}
+.terminal-dock nav [aria-pressed='true'] {
+  border-color: #8bcec1;
+}
+.terminal-dock pre {
+  flex: 1;
+  min-height: 100px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font:
+    13px/1.6 Consolas,
+    monospace;
+  background: #0c0f10;
+  padding: 12px;
+}
+.terminal-dock textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  max-height: 180px;
+  background: #0c0f10;
+  color: inherit;
+  border: 1px solid #40545b;
+  padding: 10px;
+  font:
+    14px/1.5 Consolas,
+    monospace;
+}
+.terminal-dock p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  max-height: 65px;
+  overflow: auto;
+}
+.terminal-command-tools span {
+  color: #a8b7ba;
+  font-size: 12px;
+}
+.terminal-dock-resize {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+}
+.terminal-dock :focus-visible {
+  outline: 2px solid #8bcec1;
+  outline-offset: 2px;
+}
+.terminal-dock[data-expanded='true'] {
+  width: calc(100% - 184px);
+}
+@media (min-width: 1100px) {
+  body.terminal-dock-open .layout {
+    margin-right: var(--atlas-terminal-width, 520px);
+  }
+  :root body.atlas-ui.terminal-dock-open :is(.assistant-workspace, .colab-workspace) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  body.terminal-dock-open .assistant-workspace > :first-child,
+  body.terminal-dock-open .colab-workspace > :first-child,
+  body.terminal-dock-open .shell-chat-resize {
+    display: none !important;
+  }
+}
+@media (max-width: 800px) {
+  .terminal-dock,
+  .terminal-dock[data-expanded='true'] {
+    width: 100%;
+  }
+  .terminal-dock-resize {
+    display: none;
+  }
+}

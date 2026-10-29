@@ -1,4 +1,4 @@
-> Current decision: the owner authorized unsigned 0.8.3 releases after SignPath denial, with dependency removal and a documented technical review. Signing instructions below describe a future option. See [release checks](RELEASE-SECURITY.md).
+> Current decision: the owner authorized unsigned releases beginning with 0.8.3 after SignPath denial, with dependency removal and a documented technical review. Signing instructions below describe a future option. See [release checks](RELEASE-SECURITY.md).
 
 # Code signing with SignPath
 

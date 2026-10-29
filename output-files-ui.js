@@ -164,6 +164,14 @@
     content.replaceChildren();
     button('Refresh', () => preview(context, reference, back), tools);
     button('Show in folder', () => request(context, 'reveal', reference), tools);
+    button(
+      'Open in editor',
+      async () => {
+        await window.atlasProjectEditor.open(context, reference);
+        dialog.close();
+      },
+      tools,
+    );
     button('Copy relative path', () => navigator.clipboard.writeText(value.path || reference), tools);
     button('Browse project files', () => browse(context, back || '.'), tools);
     button(

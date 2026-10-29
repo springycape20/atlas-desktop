@@ -40,6 +40,17 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
     const row = state.items[index],
       limit = state.pauseBetween ? 1 : state.concurrency || 1,
       others = [...running].map((id) => state.items.find((r) => r.id === id));
+    for (const id of row.prerequisites || []) {
+      const required = state.items.find((item) => item.id === id);
+      if (!required || ['failed', 'interrupted', 'needs-review'].includes(required.status)) {
+        state.paused = true;
+        row.blockedReason = 'Required task needs review: ' + (required?.prompt?.slice(0, 100) || 'missing task');
+        await save();
+        return null;
+      }
+      if (!required || required.status !== 'completed' || !(await settled(structuredClone(required)))) return null;
+    }
+    delete row.blockedReason;
     if (
       row.dependsOn?.length &&
       !row.dependsOn.every((id) =>
@@ -133,6 +144,9 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
         const cwd = await fs.realpath(p.cwd);
         if (!(await fs.stat(cwd)).isDirectory()) throw Error('Select a project folder.');
         if (state.items.length >= 100) throw Error('Remove completed tasks before adding more (100 maximum).');
+        const prerequisites = [...new Set(Array.isArray(p.prerequisites) ? p.prerequisites : [])];
+        if (prerequisites.some((id) => !state.items.some((item) => item.id === id && item.cwd === cwd)))
+          throw Error('Dependencies must be existing tasks in the same project.');
         state.items.push({
           id: randomUUID(),
           prompt: p.prompt.trim(),
@@ -141,9 +155,18 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
           provider: p.provider === 'colab' ? 'colab' : 'assistant',
           roles: ['codex-builds', 'claude-builds', 'proposals'].includes(p.roles) ? p.roles : 'codex-builds',
           waitForPrevious: p.waitForPrevious === true,
+          prerequisites,
           status: 'queued',
           createdAt: Date.now(),
         });
+      } else if (request.action === 'dependencies') {
+        if (!row || row.status !== 'queued' || row.batchId)
+          throw Error('Only ordinary queued tasks can change prerequisites.');
+        const ids = [...new Set(Array.isArray(request.prerequisites) ? request.prerequisites : [])],
+          index = state.items.indexOf(row);
+        if (ids.some((id) => !state.items.slice(0, index).some((item) => item.id === id && item.cwd === row.cwd)))
+          throw Error('Choose earlier tasks from the same project; cycles are not allowed.');
+        row.prerequisites = ids;
       } else if (request.action === 'start') {
         state.paused = false;
         state.pauseBetween = request.pauseBetween !== false;
@@ -160,9 +183,24 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
         if (!row || row.status !== 'queued') throw Error('Only waiting tasks can be reordered.');
         const index = state.items.indexOf(row),
           next = index + (request.direction === 'up' ? -1 : 1);
-        if (next >= 0 && next < state.items.length && state.items[next].status === 'queued')
+        if (next >= 0 && next < state.items.length && state.items[next].status === 'queued') {
+          const other = state.items[next];
+          if ((row.prerequisites || []).includes(other.id) || (other.prerequisites || []).includes(row.id))
+            throw Error('Required tasks must stay before the tasks that depend on them.');
           [state.items[index], state.items[next]] = [state.items[next], row];
+        }
       } else if (request.action === 'remove') {
+        const removing = new Set(
+          row?.batchId
+            ? state.items.filter((item) => item.batchId === row.batchId).map((item) => item.id)
+            : [request.id],
+        );
+        if (
+          state.items.some(
+            (item) => !removing.has(item.id) && (item.prerequisites || []).some((id) => removing.has(id)),
+          )
+        )
+          throw Error('Remove dependent tasks first.');
         if (row?.batchId) {
           if (state.items.some((item) => item.batchId === row.batchId && item.status === 'running'))
             throw Error('Stop the batch tasks before removing the batch.');
@@ -171,7 +209,7 @@ function createTaskQueue({ directory, run, canRun = () => true, settled = async 
         if (row?.status === 'running') throw Error('Stop the running task in Tasks first.');
         state.items = state.items.filter((r) => r.id !== request.id);
       } else if (request.action === 'retry') {
-        if (!row || !['failed', 'interrupted'].includes(row.status))
+        if (!row || !['failed', 'interrupted', 'needs-review'].includes(row.status))
           throw Error('Only failed or interrupted tasks can be retried.');
         row.status = 'queued';
         delete row.error;

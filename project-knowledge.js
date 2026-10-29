@@ -30,17 +30,33 @@ function createKnowledgeIndex({ listFiles } = {}) {
     let refreshed = 0;
     const results = [];
     for (const name of candidates) {
-      if (excluded.includes(name)) continue;
+      if (
+        excluded.some((prefix) => {
+          const key = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
+          return key(name) === key(prefix) || key(name).startsWith(key(prefix.replace(/\/$/, '')) + '/');
+        })
+      ) {
+        cache.delete(name);
+        continue;
+      }
       try {
         const file = path.join(root, name);
         const real = await fs.realpath(file);
-        if (!real.startsWith(root + path.sep)) continue;
+        if (!real.startsWith(root + path.sep)) {
+          cache.delete(name);
+          continue;
+        }
         const stat = await fs.lstat(file);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 128000) continue;
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 128000) {
+          cache.delete(name);
+          truncated = true;
+          continue;
+        }
         let row = cache.get(name);
         if (!row || row.mtime !== stat.mtimeMs || row.ctime !== stat.ctimeMs || row.size !== stat.size) {
           if (bytesRead + stat.size > 12000000) {
             truncated = true;
+            cache.delete(name);
             continue;
           }
           bytesRead += stat.size;
@@ -57,6 +73,7 @@ function createKnowledgeIndex({ listFiles } = {}) {
             for (const [key, item] of entries) {
               if (retained <= 32 * 1048576) break;
               entries.delete(key);
+              truncated = true;
               retained -= item.bytes;
             }
           }
@@ -101,18 +118,60 @@ function createKnowledgeIndex({ listFiles } = {}) {
         /* Deleted or unreadable files are omitted on this refresh. */ cache.delete(name);
       }
     }
-    return {
+    const selected = results
+      .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+      .slice(0, Math.min(12, Math.max(1, limit)));
+    const retained = selected.find((row) => cache.has(row.path));
+    const relationship = retained
+      ? require('./code-intelligence').analyzeRecords(
+          [...cache].map(([path, row]) => ({ path, text: row.lines.join('\n') })),
+          { file: retained.path },
+        )
+      : null;
+    if (relationship) {
+      for (const name of [...relationship.imports, ...relationship.tests].slice(0, 4)) {
+        if (selected.some((row) => row.path === name) || !cache.has(name)) continue;
+        const row = cache.get(name);
+        selected.push({
+          path: name,
+          line: 1,
+          score: 0,
+          reason: relationship.tests.includes(name) ? 'Related test' : 'Imported dependency',
+          excerpt: row.lines.slice(0, 18).join('\n').slice(0, 2500),
+          symbols: [],
+          dependencies: [],
+        });
+      }
+    }
+    return require('./context-ranking').chooseContext({
       root,
       indexed: cache.size,
       refreshed,
       bytesRead,
       truncated,
-      results: results
-        .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
-        .slice(0, Math.min(12, Math.max(1, limit))),
-    };
+      results: selected,
+      related: relationship
+        ? {
+            file: retained.path,
+            imports: relationship.imports,
+            affected: relationship.affected.map((row) => row.path),
+            tests: relationship.tests,
+          }
+        : null,
+    });
   }
-  return { search };
+  async function analyze(cwd, options = {}) {
+    const scan = await search(cwd, '', { excluded: options.excluded || [] });
+    const cache = roots.get(scan.root);
+    const result = require('./code-intelligence').analyzeRecords(
+      [...cache]
+        .filter(([name]) => !(options.excluded || []).includes(name))
+        .map(([path, row]) => ({ path, text: row.lines.join('\n') })),
+      options,
+    );
+    return { ...result, truncated: scan.truncated, root: scan.root };
+  }
+  return { search, analyze };
 }
 function formatKnowledge(result) {
   if (!result?.results?.length) return '';
@@ -121,9 +180,20 @@ function formatKnowledge(result) {
     result.results
       .map(
         (row) =>
-          `${JSON.stringify(row.path)}:${row.line}\n${row.excerpt}\nSymbols: ${row.symbols.map((s) => s.name + ':' + s.line).join(', ')}\nImports: ${row.dependencies.join(', ')}`,
+          `${JSON.stringify(row.path)}:${row.line}\nSelected because: ${row.reason || 'Query relevance'}\n${row.excerpt}\nSymbols: ${row.symbols.map((s) => s.name + ':' + s.line).join(', ')}\nImports: ${row.dependencies.join(', ')}`,
       )
       .join('\n\n') +
+    (result.related
+      ? '\n\nStatic relationship hints for ' +
+        JSON.stringify(result.related.file) +
+        ':\nImports: ' +
+        result.related.imports.join(', ') +
+        '\nPotentially affected: ' +
+        result.related.affected.join(', ') +
+        '\nRelated tests: ' +
+        result.related.tests.join(', ') +
+        '\nThese are bounded static hints, not a complete language analysis.'
+      : '') +
     (result.truncated ? '\nIndex scan was limited; these results do not cover the whole project.' : '')
   );
 }

@@ -1,6 +1,6 @@
 # ATLAS
 
-ATLAS 0.9.1 adds [live project previews, visual feedback, named checkpoints, project search and health checks](docs/PROJECT-WORKBENCH.md).
+ATLAS 0.10.0 adds [interactive side terminals, file editing, local backups, Git tools and stronger task workflows](docs/SELECTED-POWER-UPGRADES.md).
 
 **A local Windows desktop assistant for Codex and Claude Code.** Chat with either model in one app, talk to it with local speech, or hand a task to **Colab**, where Codex and Claude build, check and review each other's work before you see one reviewed result. Verification labels name the checks ATLAS actually ran; AI output and model review can still be wrong.
 
@@ -16,6 +16,8 @@ ATLAS 0.9.1 adds [live project previews, visual feedback, named checkpoints, pro
 - **Talk to it.** Local Whisper speech recognition, Windows speech, an optional wake word, and short spoken replies with the full answer on screen. Recognition runs on your PC; recognised prompts go to your chosen AI provider.
 - **Let two models work together in Colab.** One builds and the other reviews. Your project's checks run automatically, and the task only finishes when the reviewer accepts the work.
 - **Keep your work organised.** Project profiles, file and screenshot attachments, memories, reminders, and a task list.
+- **Work on projects beside chat.** Edit file tabs, find and replace across a project, preview images and PDF/DOCX text, inspect Git changes, and run multiple interactive PowerShell terminals in a resizable side dock.
+- **Check and recover work.** Choose individual diff sections, inspect structured test results, check tool versions, connect task prerequisites and export local-record backups. Services and HTTP requests run only after confirmation.
 - **Control your PC, with permission.** Optional Windows computer control through the open-source [Windows-MCP](https://github.com/CursorTouch/Windows-MCP) server. ATLAS asks before each kind of action and shows a border while it is in control.
 
 ## Colab: Codex and Claude, working together
@@ -48,19 +50,27 @@ Also in Colab:
 - **Effort and cost controls.** Economy, Balanced and Thorough presets, an optional pass limit, and an optional token warning.
 - **Resumable runs.** Stopped or paused tasks continue from their saved stages.
 
-## Project tools in 0.9.0
+## Project tools in 0.10.0
 
-Version 0.9.0 adds local project indexing, context controls, runtime measurements, a task recovery view, reusable Colab workflows, parallel batches with combined integration checks, and optional local-model text chat. These features are included in 0.9.0. See the [project tools guide](docs/PROJECT-TOOLS.md) for usage and limits.
+Project tools include local project indexing, context controls, runtime measurements, task recovery, reusable Colab workflows, parallel batches with combined integration checks, and optional local-model text chat. See the [project tools guide](docs/PROJECT-TOOLS.md) for usage and limits.
 
 The interface also groups tools under Tasks, Library and Settings, adds Ctrl+K navigation search, resizable conversation lists and readable task summaries, and offers theme, text-size and spacing preferences in Settings > Appearance.
 
 Additional tools include editable task plans with approval, opt-in fast/strong model tiers, project-scoped memory, local hardware capacity checks, project environment recipes, a unified review centre, live progress estimates and search across local work. See the [capability guide](docs/PROJECT-TOOLS.md) for locations and limits.
 
-ATLAS 0.9.1 also adds inline project-image previews, clickable file references, static HTML previews and **Attach > Browse project files**. See the [preview guide](docs/PROJECT-TOOLS.md#file-and-image-previews).
+Inline project-image previews, clickable file references, static HTML previews and **Attach > Browse project files** keep outputs accessible. See the [preview guide](docs/PROJECT-TOOLS.md#file-and-image-previews).
+
+New in 0.10.0:
+
+- [Editing and workflow tools](docs/PROJECT-WORKFLOW-TOOLS.md): editable tabs, previewed find/replace, permission revocation, redacted diagnostics, more preview recipes and task comparison.
+- [Deeper workflows](docs/DEEPER-WORKFLOWS.md): project intelligence, bounded repair attempts, completion-time evidence and verified recovery.
+- [Selected power upgrades](docs/SELECTED-POWER-UPGRADES.md): interactive PTY terminals, selective changes, structured checks, preflight, backups and storage management, services, Git, sensitive-context review, explained context ranking, multi-root workspaces, dependency graphs, editor helpers, document text selection, HTTP requests, integration declarations and update recovery.
+
+![Interactive PowerShell terminal beside chat](docs/images/terminal-pty.png)
 
 ## Install
 
-1. Download **ATLAS-Setup-*version*.exe** from the [latest release](https://github.com/springycape20/atlas-desktop/releases/latest) (about 440 MB, Windows 10/11 x64) and run it.
+1. Download **ATLAS-Setup-*version*.exe** from the [latest release](https://github.com/springycape20/atlas-desktop/releases/latest) (Windows 10/11 x64) and run it.
 2. Install and sign in to **Codex** and/or **Claude Code** with their official installers. Colab needs both. In ATLAS, **Settings → Provider accounts → Test connections and dependencies** checks that they're found and signed in.
 3. Choose a working folder, then set up your microphone and voice in **Settings**. Settings lists its sections on the left and has a search box, so you can type, for example, "wake word" to go straight to that option.
 
@@ -76,6 +86,8 @@ ATLAS installs for your Windows account in `%LOCALAPPDATA%\Programs\atlas-local-
 ### Updating
 
 ATLAS checks for new releases when it starts. Open **Settings → App updates**, download the update, then choose **Restart and install**. Updates never install while a task is running, and your settings and conversations are kept.
+
+Starting with 0.10.0, later in-app updates offer to preserve the current app and a local-record backup first. **Diagnostics → Backups and recovery** can export records or launch the preserved version. Backups are compressed, not encrypted, and exclude external project worktrees and provider-owned histories. Keep them private. Updating an older ATLAS release to 0.10.0 uses that older release's update flow.
 
 ## Your data and privacy
 
@@ -108,6 +120,8 @@ Setup installs dependencies, downloads the speech runtime and models (checksum-v
 |---|---|
 | `npm test` | Unit tests |
 | `npm run test:colab-ui`, `test:assistant-ui`, `test:graph-ui`, `test:approvals-ui`, `test:dispute-ui`, `test:settings-ui` | Electron UI checks |
+| `npm run test:files-ui`, `test:navigation-ui`, `test:preview-ui`, `test:power-ui` | Project tools, layout and preview checks |
+| `npm run test:pty-ui`, `test:pty-render-ui`, `test:restore-ui` | Native terminal, prompt alignment and browser-record restoration |
 | `npm run format` / `npm run format:check` | Prettier formatting |
 | `npm run dist:win` | Build the Windows installer into `dist/` |
 | `npx electron build/capture-screenshots.cjs` | Re-capture the README screenshots with demo data |
@@ -115,6 +129,8 @@ Setup installs dependencies, downloads the speech runtime and models (checksum-v
 **CI** runs formatting, unit tests and the UI checks on every push and pull request, and `main` requires them to pass. **Releases** are built by pushing a `vX.Y.Z` tag that matches `package.json`. The release workflow builds the installer, verifies the packaged app (including the security fuses in `ATLAS.exe`), and publishes the installer, its blockmap and `latest.yml` for the in-app updater.
 
 For detailed behaviour, limits and design notes, see the [technical reference](docs/TECHNICAL.md).
+
+For existing usage controls and proposed improvements, see [model usage efficiency](docs/TOKEN-EFFICIENCY.md).
 
 ## Code signing policy
 
@@ -130,7 +146,7 @@ If signing becomes available, it will be limited to artifacts built by this repo
 ATLAS has no developer-operated application server and collects no publisher telemetry, analytics or crash reports. See the [full privacy and local-data explanation](docs/PRIVACY.md), including retention, deletion and third-party requests. The main built-in connections are listed below. Enabled tools, provider CLIs and programs you authorise may make their own requests:
 
 - **Update checks:** at launch, ATLAS asks GitHub (`api.github.com`) for the latest release. Updates download only when you choose to.
-- **Your AI providers:** when you send a message or a Colab task, your prompt and attached files go to Codex (OpenAI) and/or Claude (Anthropic) through their command-line tools and your own accounts. At launch ATLAS also refreshes each provider's model list and your usage allowance (Claude allowance is available through its provider usage page; ATLAS does not read Claude sign-in tokens). Each provider's own privacy policy applies.
+- **Your AI providers:** when you send a message or a Colab task, your prompt and selected context go to Codex (OpenAI) and/or Claude (Anthropic) through their command-line tools and your own accounts. At launch ATLAS also refreshes provider model lists. Provider activity shows reported local task activity and availability; it does not claim to measure Claude subscription quota or read Claude sign-in tokens. Each provider's own privacy policy applies.
 - **Optional services you turn on:** ElevenLabs voices (with your own API key), and Windows computer control, whose runtime is downloaded from pinned GitHub resources and Python's package index when you install it.
 
 Your conversations, memories, reminders and settings stay in `%LOCALAPPDATA%\ATLAS` on your PC.

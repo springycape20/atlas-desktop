@@ -57,6 +57,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:files-ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:pty-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:pty-render-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:restore-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:preview-ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:release-ui
@@ -125,6 +131,8 @@ jobs:
         run: node build/finalize-signed-installer.cjs dist/signed
       - name: Verify packaged version and new app files
         run: node build/verify-release.cjs
+      - name: Verify packaged PDF text extraction without rendering-only assets
+        run: npm run test:pdf-package-ui
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           draft: ${{ github.ref_type != 'tag' }}

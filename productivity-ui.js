@@ -217,6 +217,17 @@
     wait.type = 'checkbox';
     waitLabel.prepend(wait);
     form.append(waitLabel);
+    const prerequisites = field('Required tasks (Ctrl or Shift to select several)', 'select', form);
+    prerequisites.multiple = true;
+    prerequisites.size = 3;
+    const updateDependencies = () => {
+      const selected = profiles.find((p) => p.id === project.value);
+      prerequisites.replaceChildren();
+      for (const item of state.items.filter((item) => item.cwd === selected?.cwd))
+        prerequisites.append(new Option(item.prompt.slice(0, 80) + ' · ' + item.status, item.id));
+    };
+    project.addEventListener('change', updateDependencies);
+    updateDependencies();
     roles.disabled = true;
     provider.onchange = () => (roles.disabled = provider.value !== 'colab');
     button(
@@ -233,6 +244,7 @@
             provider: provider.value,
             roles: roles.value,
             waitForPrevious: wait.checked,
+            prerequisites: [...prerequisites.selectedOptions].map((option) => option.value),
           },
         });
         await open('Queue');
@@ -271,6 +283,20 @@
         ),
       );
       if (item.error) node.append(el('p', item.error));
+      if (item.blockedReason) node.append(el('p', item.blockedReason));
+      if (item.prerequisites?.length)
+        node.append(
+          el(
+            'p',
+            'Requires: ' +
+              item.prerequisites
+                .map((id) => {
+                  const required = state.items.find((row) => row.id === id);
+                  return required ? required.prompt.slice(0, 70) + ' (' + required.status + ')' : 'missing task';
+                })
+                .join('; '),
+          ),
+        );
       const actions = el('div', undefined, 'workspace-actions');
       node.append(actions);
       if (item.status === 'queued')
@@ -295,7 +321,7 @@
             },
             actions,
           );
-      if (['failed', 'interrupted'].includes(item.status))
+      if (['failed', 'interrupted', 'needs-review'].includes(item.status))
         button(
           'Retry after review',
           async () => {

@@ -102,9 +102,10 @@ app.whenReady().then(async () => {
       assert(bounds.outer <= bounds.height + 1 && bounds.bottom <= bounds.height + 1, JSON.stringify(bounds));
       if (width === 1024) {
         const compactRoom = await win.webContents.executeJavaScript(
-          `({main:document.querySelector('.colab-chat-main').clientHeight,transcript:document.querySelector('#colabTranscript').clientHeight})`,
+          `({main:document.querySelector('.colab-chat-main').clientHeight,transcript:document.querySelector('#colabTranscript').clientHeight,composer:document.querySelector('#colabForm').offsetHeight})`,
         );
         assert(compactRoom.transcript > compactRoom.main * 0.5, JSON.stringify(compactRoom));
+        assert(compactRoom.composer < 155, JSON.stringify(compactRoom));
       }
     }
     console.log(

@@ -1,3 +1,5 @@
+> Historical release evidence. For the current release see [0.10.0 review](RELEASE-0.10.0-REVIEW.md). Earlier facts and test counts below are retained as recorded.
+
 # ATLAS 0.8.3 technical release review
 
 Prepared 28 October 2026 for the owner's requested free public patch. This is a technical risk-reduction review, not a lawyer's opinion, global compliance certification or assurance against claims and fines.

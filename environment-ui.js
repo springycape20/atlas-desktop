@@ -19,18 +19,24 @@
     picker.setAttribute('aria-label', 'Project profile');
     for (const p of profiles) picker.append(new Option(p.name, p.id));
     body.append(picker);
-    const tools = field(body, 'Required tools and versions (documentation only)', '', true),
+    const tools = field(body, 'Required tools and versions (node >=22, git >=2; one per line)', '', true),
       commands = field(body, 'Setup commands (one per line, maximum 8)', '', true);
     const enabled = document.createElement('input');
     enabled.type = 'checkbox';
     const label = node('label', 'Ask to run setup for isolated editing tasks');
     label.append(enabled);
     body.append(label);
+    const verify = document.createElement('input');
+    verify.type = 'checkbox';
+    const verifyLabel = node('label', 'Run tool/version preflight before model work (supported tools only)');
+    verifyLabel.prepend(verify);
+    body.append(verifyLabel);
     const fill = () => {
       const p = profiles.find((row) => row.id === picker.value);
       tools.value = p.environmentTools || '';
       commands.value = p.environmentCommands || '';
       enabled.checked = p.environmentPrompt === true;
+      verify.checked = p.environmentPreflight === true;
     };
     picker.onchange = fill;
     fill();
@@ -43,6 +49,7 @@
           environmentTools: tools.value,
           environmentCommands: commands.value,
           environmentPrompt: enabled.checked,
+          environmentPreflight: verify.checked,
         },
       });
       Object.assign(original, saved);

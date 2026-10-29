@@ -34,6 +34,25 @@ function registerChangeIpc({ ipcMain, trusted, findJob, jobs, tracker, workspace
       const result = await service.save(job.changeId, request.path, request.content, request.version);
       return result;
     }
+    if (request.action === 'hunks-preview' || request.action === 'hunks-apply') {
+      if (!canEdit) throw Error(readOnlyReason);
+      const file = await service.file(job.changeId, request.path);
+      if (!file.editable || file.truncated) throw Error('This text diff cannot be selected in parts.');
+      const selected = require('./selective-changes').selectHunks(
+        file.originalContent || '',
+        file.content,
+        request.selected || [],
+      );
+      if (request.action === 'hunks-preview') return { ...selected, version: file.version, path: request.path };
+      if (file.version !== request.version) throw Error('File changed. Review its hunks again.');
+      const id = 'hunks-' + require('node:crypto').randomUUID();
+      await service.capture(id, job.cwd);
+      await service.save(job.changeId, request.path, selected.content, file.version);
+      await service.seal(id);
+      job.recoveryChangeId = id;
+      await persist();
+      return { saved: true, backupId: id };
+    }
     if (request.action === 'restore-preview' || request.action === 'restore') {
       if (!canEdit) throw Error(readOnlyReason);
       const snapshotId = request.recovery === true ? job.recoveryChangeId : job.changeId;

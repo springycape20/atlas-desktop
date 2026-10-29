@@ -41,6 +41,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 const files = createProjectFiles(),
   calls = [];
+const editor = require('../project-editor').createProjectEditor({ files });
 let win;
 const timeout = setTimeout(() => {
   console.error('Project-file UI timed out');
@@ -61,8 +62,9 @@ app.whenReady().then(async () => {
         try {
           const data = JSON.parse(url.searchParams.get('request'));
           calls.push(data);
-          const value =
-            data.action === 'list'
+          const value = /^(editor-|replace-)/.test(data.action)
+            ? await editor.action(project, data)
+            : data.action === 'list'
               ? await files.list(project, data.path)
               : data.action === 'search'
                 ? await files.search(project, data.query, data.contents)
@@ -99,7 +101,13 @@ app.whenReady().then(async () => {
       webPreferences: { offscreen: true, backgroundThrottling: false },
     });
     await win.loadURL('atlas://app/');
-    const run = (source) => win.webContents.executeJavaScript(source);
+    const run = async (source) => {
+      try {
+        return await win.webContents.executeJavaScript(source);
+      } catch (error) {
+        throw Error(source.slice(0, 300) + ': ' + error.message);
+      }
+    };
     const wait = async (source) => {
       for (let i = 0; i < 150; i++) {
         if (await run(source)) return;
@@ -196,6 +204,78 @@ app.whenReady().then(async () => {
     }
     await run(`document.querySelector('.project-file-dialog').close();new Promise(r=>setTimeout(r,30))`);
     win.setContentSize(1280, 900);
+    await run(`atlasProjectEditor.open({cwd:${JSON.stringify(project)}},'README.md')`);
+    await wait(`document.querySelector('.project-editor-panel:not([hidden])')`);
+    await run(
+      `(()=>{const input=document.querySelector('.project-editor-panel textarea');input.value+='\\nEdited locally';input.dispatchEvent(new Event('input'));[...document.querySelectorAll('.project-editor-panel button')].find(item=>item.textContent==='Save').click()})()`,
+    );
+    await wait(`document.querySelector('.project-editor-panel [role=status]').textContent.includes('Saved README.md')`);
+    assert(fs.readFileSync(path.join(project, 'README.md'), 'utf8').includes('Edited locally'));
+    await run(`atlasProjectEditor.open({cwd:${JSON.stringify(project)}},'style.css')`);
+    assert.equal(await run(`document.querySelectorAll('.project-editor-panel [role=tab]').length`), 2);
+    await run(
+      `[...document.querySelectorAll('.project-editor-panel button')].find(item=>item.textContent==='Syntax preview').click()`,
+    );
+    await wait(`document.querySelector('.project-editor-panel pre .token')`);
+    for (const [width, height] of [
+      [1280, 900],
+      [768, 800],
+      [640, 700],
+    ]) {
+      win.setContentSize(width, height);
+      await new Promise((r) => setTimeout(r, 80));
+      assert(
+        await run(
+          `(()=>{const r=document.querySelector('.project-editor-panel').getBoundingClientRect();return r.right<=innerWidth+1&&r.left>=0&&r.bottom<=innerHeight+1})()`,
+        ),
+      );
+      fs.writeFileSync(path.join(shots, 'editor-' + width + '.png'), (await win.webContents.capturePage()).toPNG());
+    }
+    fs.writeFileSync(
+      path.join(shots, 'editor-inspect.html'),
+      await run(
+        `(()=>{const styles=[...document.querySelectorAll('style')].map(x=>x.outerHTML).join('');return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>ATLAS project editor</title>'+styles+'<style>'+${JSON.stringify(fs.readFileSync(path.join(root, 'project-editor.css'), 'utf8'))}+'</style><style>body{margin:0;padding:16px;background:#111;color:#eee}.project-editor-panel{position:relative;inset:auto;width:100%;height:calc(100vh - 32px)}</style></head><body class="atlas-ui"><main>'+document.querySelector('.project-editor-panel').outerHTML+'</main></body></html>'})()`,
+      ),
+    );
+    await run(
+      `[...document.querySelectorAll('.project-editor-panel button')].find(item=>item.textContent==='Hide editor').click()`,
+    );
+    win.setContentSize(1280, 900);
+    await run(`atlasPower.show('Find and replace')`);
+    await run(
+      `(()=>{const fields=document.querySelectorAll('.power-body input');fields[0].value='Edited locally';document.querySelector('.power-body textarea').value='Replaced locally';[...document.querySelectorAll('#powerDialog button')].find(item=>item.textContent==='Preview replacements').click()})()`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('Review README.md')`);
+    await run(
+      `[...document.querySelectorAll('.power-body button')].find(item=>item.textContent==='Review README.md').click()`,
+    );
+    await wait(`document.querySelector('.power-body pre')?.textContent.includes('Replaced locally')`);
+    await run(
+      `(()=>{const box=[...document.querySelectorAll('.power-body input[type=checkbox]')].find(x=>!x.disabled&&x.parentElement.textContent.includes('README.md'));box.click();[...document.querySelectorAll('.power-body button')].find(item=>item.textContent==='Apply selected replacements').click()})()`,
+    );
+    await wait(`document.querySelector('.power-status').textContent.includes('1 files written')`);
+    assert(fs.readFileSync(path.join(project, 'README.md'), 'utf8').includes('Replaced locally'));
+    await run(
+      `window.atlas.integrations=async r=>r.action==='desktop-permissions'?[{owner:'assistant:fixture',grantedAt:Date.now()}]:[];window.atlas.workflowTools=async r=>r.action==='diagnostic-preview'?{id:'draft',text:JSON.stringify({appVersion:'0.9.1',failedChecks:[]})}:r.action==='diagnostic-export'?{exported:true}:[];atlasPower.show('Permissions')`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('Revoke assistant:fixture')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'permissions.png'), (await win.webContents.capturePage()).toPNG());
+    await run(`atlasPower.show('Diagnostic bundle')`);
+    await run(
+      `[...document.querySelectorAll('.power-body button')].find(item=>item.textContent==='Preview bundle').click()`,
+    );
+    await wait(`document.querySelector('.power-body pre').textContent.includes('appVersion')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'diagnostic-bundle.png'), (await win.webContents.capturePage()).toPNG());
+    await run(
+      `window.atlas.jobs=async()=>[{id:'one',prompt:'Build the project',endedAt:1000},{id:'two',prompt:'Improve the project',endedAt:2000}];window.atlas.workflowTools=async r=>r.action==='archive-list'?[]:r.ids.map((id,i)=>({id,title:i?'Improve the project':'Build the project',provider:'codex',status:'completed',durationMs:1000+i*500,usage:i?{inputTokens:250,outputTokens:80}:null,checks:{status:i?'passed':'failed',results:[{status:i?'passed':'failed',command:'npm test',output:i?'Tests passed':'A check failed'}]},diff:{checkedAt:Date.now(),files:[{path:'app.js',status:'modified',added:1,removed:1,hunks:[{lines:['-old','+new']}]}]}}));atlasPower.show('Task comparison')`,
+    );
+    await run(`[...document.querySelectorAll('.power-body button')].find(item=>item.textContent==='Compare').click()`);
+    await wait(`document.querySelector('.task-comparison-grid').textContent.includes('input 250')`);
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(await run(`document.querySelectorAll('.task-comparison-grid>section').length`), 2);
+    fs.writeFileSync(path.join(shots, 'task-comparison.png'), (await win.webContents.capturePage()).toPNG());
     await run(`atlasPower.show('Project health')`);
     await run(
       `[...document.querySelectorAll('#powerDialog button')].find(item=>item.textContent==='Run local health check').click()`,
@@ -222,6 +302,114 @@ app.whenReady().then(async () => {
     );
     await wait(`document.getElementById('colabTask').value.includes('button#target')`);
     assert.equal(await run(`document.getElementById('powerDialog').open`), false);
+    await run(
+      `window.advancedCalls=[];window.terminalRows=[];window.repairRows=[];window.atlas.advancedWorkflows=async r=>{advancedCalls.push(r);if(r.tool==='intelligence')return {indexed:3,definitions:[{path:'README.md',name:'renderPage',line:1}],references:[{path:'style.css',line:1,excerpt:'renderPage()'}],imports:['style.css'],affected:[{path:'index.html',distance:1}],tests:[],note:'Static hints only.'};if(r.tool==='terminal'){if(r.action==='start')terminalRows.push({id:'terminal-demo-'+terminalRows.length,command:r.command||'PowerShell',shell:r.shell,status:'running',pid:42,output:'Fixture live output',cwd:r.cwd});if(r.action==='stop')terminalRows.find(x=>x.id===r.id).status='cancelled';if(r.action==='input')terminalRows[0].output+=' input received';return r.action==='start'?terminalRows[0]:terminalRows;}if(r.tool==='repair'){if(r.action==='start')repairRows.push({id:'repair-demo',status:'running',runs:[{attempt:0,results:[{command:'npm test',status:'failed',output:'Fixture failure'}]}]});if(r.action==='stop')repairRows[0].status='cancelled';return r.action==='start'?repairRows[0]:repairRows;}return {verified:true,reason:'Tracked files match.',remaining:'Continue after two recorded stages.'};};window.atlas.jobs=async()=>[{id:'failed-demo',prompt:'Repair fixture',status:'failed',endedAt:1000,cwd:${JSON.stringify(project)},verification:{results:[{command:'npm test',status:'failed'}]},resumeCheckpoint:{id:'saved'}}];void 0;`,
+    );
+    win.setContentSize(1280, 900);
+    await run(`atlasPower.show('Project intelligence')`);
+    await run(
+      `(()=>{document.querySelector('.power-body input').value='README.md';[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Analyze project').click()})()`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('renderPage')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'project-intelligence.png'), (await win.webContents.capturePage()).toPNG());
+    await run(`atlasPower.show('Terminal')`);
+    await run(`document.querySelector('.terminal-dock button[aria-label="New terminal session"]').click()`);
+    await wait(`document.querySelector('.terminal-dock pre').textContent.includes('Fixture live output')`);
+    await run(`document.querySelector('.terminal-dock button[aria-label="New terminal session"]').click()`);
+    await wait(`document.querySelectorAll('.terminal-dock nav button').length===2`);
+    await run(
+      `(()=>{const input=document.querySelector('.terminal-dock textarea');input.value='echo fixture';input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}))})()`,
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'terminal.png'), (await win.webContents.capturePage()).toPNG());
+    for (const [width, height] of [
+      [1280, 900],
+      [768, 800],
+      [640, 700],
+    ]) {
+      win.setContentSize(width, height);
+      await new Promise((r) => setTimeout(r, 60));
+      assert(
+        await run(
+          `(()=>{const r=document.querySelector('.terminal-dock').getBoundingClientRect(),h=document.querySelector('.app > header.top').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&r.top>=h.bottom+15})()`,
+        ),
+      );
+      fs.writeFileSync(
+        path.join(shots, 'terminal-dock-' + width + '.png'),
+        (await win.webContents.capturePage()).toPNG(),
+      );
+    }
+    win.setContentSize(1280, 900);
+    await run(`[...document.querySelectorAll('.terminal-dock button')].find(x=>x.textContent==='Stop').click()`);
+    await wait(`document.querySelector('.terminal-dock').textContent.includes('cancelled')`);
+    await run(`[...document.querySelectorAll('.terminal-dock button')].find(x=>x.textContent==='Hide').click()`);
+    await run(`atlasPower.show('Repair loops')`);
+    await run(
+      `[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Start bounded repair…').click()`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('Stop this loop')`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(shots, 'repair-loop.png'), (await win.webContents.capturePage()).toPNG());
+    await run(`[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Stop this loop').click()`);
+    await wait(`document.querySelector('.power-body').textContent.includes('cancelled')`);
+    await run(`atlasPower.show('Recovery')`);
+    await run(
+      `(()=>{document.querySelector('.power-body details').open=true;[...document.querySelectorAll('.power-body button')].find(x=>x.textContent==='Verify saved checkpoint').click()})()`,
+    );
+    await wait(`document.querySelector('.power-body').textContent.includes('Checkpoint verified')`);
+    for (const name of ['Project intelligence', 'Terminal', 'Repair loops'])
+      for (const width of [768, 640]) {
+        win.setContentSize(width, 800);
+        await run('atlasPower.show(' + JSON.stringify(name) + ')');
+        assert(await run(`document.documentElement.scrollWidth<=innerWidth+1`));
+      }
+    assert(
+      await run(
+        `advancedCalls.some(row=>row.tool==='terminal'&&row.action==='start'&&row.shell)&&advancedCalls.some(row=>row.tool==='terminal'&&row.action==='input'&&row.text==='echo fixture')&&advancedCalls.some(row=>row.tool==='repair'&&row.action==='start'&&row.commands[0]==='npm test')`,
+      ),
+    );
+    await run(
+      `window.atlas.selectedTools=async r=>r.tool==='git'?{branch:'fixture',files:[{state:' M',path:'README.md'}],history:'abc123 Fixture commit'}:r.tool==='manifest'?[{id:'fixture',name:'Local integration',transport:'stdio',declared:{filesystem:'Project only',network:'None',execution:'Explicit calls'}}]:[];void 0;`,
+    );
+    for (const name of [
+      'Selective changes',
+      'Test results',
+      'Environment preflight',
+      'Backups and recovery',
+      'Storage manager',
+      'Services',
+      'Git',
+      'Sensitive context review',
+      'Context selection',
+      'Multi-root workspaces',
+      'Task dependencies',
+      'Document context',
+      'API requests',
+      'Integration manifests',
+    ]) {
+      for (const width of [1280, 768, 640]) {
+        win.setContentSize(width, 800);
+        await run('atlasPower.show(' + JSON.stringify(name) + ')');
+        await new Promise((r) => setTimeout(r, 40));
+        assert.equal(await run(`document.querySelector('.power-body h2')?.textContent`), name);
+        assert(await run(`document.documentElement.scrollWidth<=innerWidth+1`), name + ' overflow at ' + width);
+        if (width === 1280 && ['Git', 'Backups and recovery', 'API requests', 'Integration manifests'].includes(name))
+          fs.writeFileSync(
+            path.join(shots, name.toLowerCase().replaceAll(' ', '-') + '.png'),
+            (await win.webContents.capturePage()).toPNG(),
+          );
+      }
+    }
+    await run(
+      `atlasPower.close();window.terminalRows=[{id:'pty-fixture',command:'PowerShell',shell:true,pty:true,status:'running',pid:42,output:'\\u001b[32mATLAS interactive terminal\\u001b[0m\\r\\nPS C:\\\\fixture> ',cwd:'C:\\\\fixture'}];void 0;`,
+    );
+    win.setContentSize(1280, 900);
+    await run(`atlasPower.show('Terminal')`);
+    await wait(`document.querySelector('.terminal-dock .xterm-screen')!==null`);
+    await wait(`document.querySelector('.terminal-dock textarea[aria-label="Terminal command"]').hidden===true`);
+    await new Promise((r) => setTimeout(r, 150));
+    fs.writeFileSync(path.join(shots, 'terminal-pty.png'), (await win.webContents.capturePage()).toPNG());
     assert.deepEqual(await run('fileUiErrors'), []);
     console.log(
       'PASS: Chat/Colab inline local images, file links, source preview, explicit attachment, isolated static HTML/CSS/assets, file browsing and narrow layout. Screenshots: ' +

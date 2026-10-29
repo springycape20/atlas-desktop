@@ -28,6 +28,8 @@ function createColabJobs({
   jobContext,
   beginChanges,
   finishTask,
+  recordResumeCheckpoint,
+  canStart = () => true,
   readSettings,
   runProvider,
   reportsFolder,
@@ -48,9 +50,11 @@ function createColabJobs({
   // queued marks a job the task queue started; only runQueued sets it, never the window's request.
   async function start(event, input, { queued = false, preparedWorkspace = null } = {}) {
     if (!trusted(event)) throw Error('Untrusted app window.');
+    if (!canStart()) throw Error('Stop the terminal or repair loop before starting another task.');
     const previous = input?.resumeJobId ? jobs.get(input.resumeJobId) : null;
     if (input?.resumeJobId && (!previous?.collaboration || !previous.request || previous.status === 'running'))
       throw Error('Choose a stopped Colab task with a saved checkpoint.');
+    if (previous) await require('./verified-recovery').requireVerifiedRecovery(previous, changes());
     const source = previous
       ? {
           ...previous.request,
@@ -218,6 +222,11 @@ function createColabJobs({
             request.workflowChecks,
           );
         job.projectSnapshot = project;
+        if (project?.environmentPreflight) {
+          job.preflight = await require('./environment-preflight').preflight(folder, project.environmentTools);
+          if (job.preflight.status !== 'passed')
+            throw Error('Environment preflight failed. Review required tools and versions in Project environments.');
+        }
         const attachmentContext = await workspace().attachmentContext(request.attachments);
         if (job.workspaceId) {
           const existing = await workspace().tree(job.workspaceId);
@@ -367,6 +376,7 @@ function createColabJobs({
             job.checkpoints = reports;
             // Seal only at a completed stage. A crash mid-stage leaves mismatching files that restore refuses.
             if (job.changeId) await changes().seal(job.changeId);
+            if (recordResumeCheckpoint) await recordResumeCheckpoint(job, 'Completed stage ' + reports.length);
             await persist();
             await flush();
           },

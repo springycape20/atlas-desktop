@@ -5,7 +5,7 @@ class KnowledgeClient {
     this.pending = new Map();
     this.next = 0;
   }
-  search(cwd, query, options) {
+  search(cwd, query, options, action = 'search') {
     clearTimeout(this.idle);
     if (!this.worker) {
       const worker = (this.worker = new Worker(path.join(__dirname, 'knowledge-worker.cjs')));
@@ -26,8 +26,11 @@ class KnowledgeClient {
       const id = ++this.next;
       const timer = setTimeout(() => this.close(Error('Project index timed out.')), 30000);
       this.pending.set(id, { resolve, reject, timer });
-      this.worker.postMessage({ id, cwd, query: String(query).slice(0, 20000), options });
+      this.worker.postMessage({ id, cwd, query: String(query).slice(0, 20000), options, action });
     });
+  }
+  analyze(cwd, options) {
+    return this.search(cwd, '', options, 'analyze');
   }
   close(error = Error('Project index closed.')) {
     clearTimeout(this.idle);

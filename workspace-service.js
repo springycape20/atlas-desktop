@@ -104,6 +104,7 @@ function createWorkspaceService(directory, options = {}) {
           environmentTools: trim(p.environmentTools ?? previous?.environmentTools, 2000),
           environmentCommands: trim(p.environmentCommands ?? previous?.environmentCommands, 4000),
           environmentPrompt: (p.environmentPrompt ?? previous?.environmentPrompt) === true,
+          environmentPreflight: (p.environmentPreflight ?? previous?.environmentPreflight) === true,
           commands: trim(p.commands, 4000),
           checkCommands: trim(p.checkCommands, 4000),
           autoCheck: p.autoCheck === true,
@@ -220,7 +221,7 @@ function createWorkspaceService(directory, options = {}) {
           ext = path.extname(name).toLowerCase();
         if (!bytes.length || bytes.length > 8 * 1024 * 1024)
           throw Error(name + ': choose a file between 1 byte and 8 MB.');
-        if (!textTypes.has(ext) && !imageTypes.has(ext))
+        if (!textTypes.has(ext) && !imageTypes.has(ext) && !['.pdf', '.docx'].includes(ext))
           throw Error(name + ': use a text/code file or PNG, JPEG, GIF, or WebP image.');
         const image = imageTypes.has(ext);
         if (
@@ -235,13 +236,14 @@ function createWorkspaceService(directory, options = {}) {
           )
         )
           throw Error(name + ': image format does not match its extension.');
-        if (!image && (bytes.includes(0) || bytes.toString('utf8').length > 150000))
+        const document = ['.pdf', '.docx'].includes(ext);
+        if (!image && !document && (bytes.includes(0) || bytes.toString('utf8').length > 150000))
           throw Error(name + ': choose a UTF-8 text file under 150,000 characters.');
         prepared.push({
           id: randomUUID(),
           name,
           size: bytes.length,
-          type: image ? 'image' : 'text',
+          type: image ? 'image' : document ? 'document' : 'text',
           extension: ext,
           sha256: hash(bytes),
           bytes,
@@ -285,16 +287,34 @@ function createWorkspaceService(directory, options = {}) {
   }
   async function attachmentContext(ids) {
     const rows = await attachments(ids);
-    return rows
+    return (
+      await Promise.all(
+        rows.map(async (item) =>
+          item.type === 'document'
+            ? { ...item, extracted: await require('./document-extract').extractDocument(item.bytes, item.extension) }
+            : item,
+        ),
+      )
+    )
       .map((item) =>
         item.type === 'image'
           ? `USER-SELECTED IMAGE: ${item.name}\nInspect this local image using your image/file reading tools: ${item.file}`
-          : `ATTACHMENT: ${item.name}\n<untrusted-file-content>\n${item.bytes.toString('utf8')}\n</untrusted-file-content>`,
+          : `ATTACHMENT: ${item.name}\n<untrusted-file-content>\n${item.extracted ? item.extracted.pages.map((row) => 'Page ' + row.number + '\n' + row.text).join('\n\n') : item.bytes.toString('utf8')}\n</untrusted-file-content>`,
       )
       .join('\n\n');
   }
   async function preview(id) {
     const [a] = await attachments([id]);
+    if (a.type === 'document') {
+      const extracted = await require('./document-extract').extractDocument(a.bytes, a.extension);
+      return {
+        ...a,
+        bytes: undefined,
+        file: undefined,
+        preview: extracted.pages.map((row) => 'Page ' + row.number + '\n' + row.text).join('\n\n'),
+        document: extracted,
+      };
+    }
     return a.type === 'image'
       ? {
           ...a,

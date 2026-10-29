@@ -106,45 +106,30 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
     await win.loadURL(url.href);
     return state();
   }
-  async function start(cwd) {
+  async function start(cwd, request) {
     if (child) throw Error('Stop the current preview server first.');
     cwd = await guard.assertProject(cwd);
-    const vite = await fs.realpath(path.join(cwd, 'node_modules/vite/bin/vite.js')).catch(() => null);
-    if (!vite || !require('./project-files').within(cwd, vite))
-      throw Error(
-        'Automatic start supports an already installed Vite project. Start other servers yourself, then open their local URL here.',
-      );
-    let node;
-    for (const folder of (process.env.PATH || '').split(path.delimiter)) {
-      if (!path.isAbsolute(folder)) continue;
-      const candidate = path.join(folder, process.platform === 'win32' ? 'node.exe' : 'node');
-      if (
-        await fs.stat(candidate).then(
-          (s) => s.isFile(),
-          () => false,
-        )
-      ) {
-        node = candidate;
-        break;
-      }
-    }
-    if (!node) throw Error('Install Node.js and add it to PATH before starting a Vite preview.');
+    const recipe = await require('./preview-recipes').previewRecipe(cwd, request);
     if (
       !(await approve(
         'Start a local development server?',
         cwd +
-          '\n\nRuns installed Vite with Node.js on 127.0.0.1:5173. Project configuration and plugins execute with your account permissions. No dependencies are installed.',
+          '\n\nRuns ' +
+          recipe.executable +
+          '\n' +
+          recipe.args.join(' ') +
+          '\nProject configuration and plugins execute with your account permissions. No dependencies are installed.',
       ))
     )
       return { cancelled: true };
     root = cwd;
     output = '';
     stopped = false;
-    child = spawnProcess(node, [vite, '--host', '127.0.0.1', '--port', '5173', '--strictPort'], {
+    child = spawnProcess(recipe.executable, recipe.args, {
       cwd,
       windowsHide: true,
       detached: process.platform !== 'win32',
-      env: { ...process.env, BROWSER: 'none' },
+      env: { ...process.env, BROWSER: 'none', NEXT_TELEMETRY_DISABLED: '1', FLASK_DEBUG: '0', FLASK_SKIP_DOTENV: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const current = child;
@@ -160,7 +145,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       output += '\nPreview server ' + (stopped ? 'stopped.' : 'exited (' + code + ').');
       if (child === current) child = null;
     });
-    return { ...state(), url: 'http://127.0.0.1:5173/' };
+    return { ...state(), url: recipe.url };
   }
   async function action(request) {
     if (request.action === 'status') return state();
@@ -172,7 +157,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       if (win && !win.isDestroyed()) win.destroy();
       return state();
     }
-    if (request.action === 'start') return start(request.cwd);
+    if (request.action === 'start') return start(request.cwd, request);
     if (request.action === 'open') return open(request.cwd, request.url);
     if (!win || win.isDestroyed()) throw Error('Open a live preview first.');
     if ((await guard.assertProject(request.cwd)) !== root)

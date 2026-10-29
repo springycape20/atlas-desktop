@@ -64,6 +64,7 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow;
 const ownsInstance = require('./startup-lifecycle').singleInstance(app, () => mainWindow);
 if (ownsInstance) require('./local-data').applyPendingReset(app.getPath('userData'), legacyUserDataPath);
+if (ownsInstance) require('./local-backups').applyPendingRestore(app.getPath('userData'));
 if (ownsInstance) require('./startup-lifecycle').configureChromiumCache(app);
 const taskNotifications = require('./task-notifications').createTaskNotifications({
   Notification,
@@ -72,6 +73,10 @@ const taskNotifications = require('./task-notifications').createTaskNotification
 let modelCatalogService, updateService, providerUsageService;
 let taskPlanService;
 let projectFileService;
+let projectEditor;
+let selectedToolsService, updateRecoveryService;
+let advancedWorkflowsService;
+const repairRequests = new WeakMap();
 function providerUsage() {
   return (providerUsageService ||= require('./provider-usage').createProviderUsage({
     codex: async () => {
@@ -115,15 +120,70 @@ function getAppUpdates() {
   return (updateService ||= require('./app-updates').createAppUpdates({
     app,
     updater: app.isPackaged ? require('electron-updater').autoUpdater : null,
-    busy: jobsRunning,
+    busy: () => jobsRunning() || Boolean(selectedToolsService?.servicesActive()),
+    prepareRecovery: () => updateRecovery().prepare(),
     notify: (value) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:update-status', value);
     },
   }));
 }
+async function rendererBackup() {
+  await assistantService?.flush();
+  await mainWindow.webContents.executeJavaScript('window.atlasColabHistory?.flush()');
+  return mainWindow.webContents.executeJavaScript(
+    `(async()=>({localStorage:Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('atlas')).map(key=>[key,localStorage.getItem(key)])),colab:await window.atlasColabHistory.load({chats:[],selected:''})}))()`,
+  );
+}
+function updateRecovery() {
+  return (updateRecoveryService ||= require('./update-recovery').createUpdateRecovery({
+    directory: app.getPath('userData'),
+    appRoot: path.dirname(process.execPath),
+    version: app.getVersion(),
+    isPackaged: app.isPackaged,
+    approve: async (title, detail) =>
+      (
+        await dialog.showMessageBox(mainWindow, {
+          title,
+          message: title,
+          detail,
+          buttons: ['Cancel', 'Approve'],
+          defaultId: 0,
+          cancelId: 0,
+        })
+      ).response === 1,
+    backupData: async () =>
+      require('./local-backups').createBackup(app.getPath('userData'), app.getVersion(), await rendererBackup()),
+    restoreData: async (bytes) => require('./local-backups').stageRestore(app.getPath('userData'), bytes),
+    launch: async (executable) => {
+      const script =
+        "Start-Sleep -Seconds 2; Start-Process -FilePath '" +
+        executable.replaceAll("'", "''") +
+        "' -WindowStyle Hidden";
+      spawn(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+        { detached: true, windowsHide: true, stdio: 'ignore' },
+      ).unref();
+      app.quit();
+    },
+  }));
+}
 let changeTrackerService;
+let taskArchiveService;
+function taskArchive() {
+  return (taskArchiveService ||= require('./task-archive').createTaskArchive(app.getPath('userData')));
+}
 function changes() {
-  return (changeTrackerService ||= require('./change-tracker').createChangeTracker(app.getPath('userData')));
+  return (changeTrackerService ||= require('./change-tracker').createChangeTracker(app.getPath('userData'), {
+    permitted: async (root, name) => {
+      const tools = require('./project-files'),
+        target = path.resolve(root, name);
+      if (!tools.allowed(name) || !tools.within(root, target)) return false;
+      for (const denied of await integrations().deniedFiles())
+        if (path.resolve(denied) === target || tools.within(denied, target)) return false;
+      return true;
+    },
+  }));
 }
 async function beginChanges(job, previous) {
   if (!job) return;
@@ -131,11 +191,25 @@ async function beginChanges(job, previous) {
     job.cwd = await require('node:fs/promises').realpath(job.cwd);
     job.changeId =
       previous?.changeId && previous.cwd === job.cwd ? previous.changeId : await changes().capture(job.id, job.cwd);
+    await recordResumeCheckpoint(job, 'Task start');
     await persistJobs();
   } catch (error) {
     job.changesError = 'Change tracking unavailable: ' + error.message;
   }
   emitJobs();
+}
+async function recordResumeCheckpoint(job, label) {
+  if (!job.changeId) return;
+  const id = 'resume-' + randomUUID();
+  await changes().capture(id, job.cwd);
+  const result = await changes().verifySnapshot(id);
+  job.resumeCheckpoint = {
+    id,
+    label,
+    at: Date.now(),
+    stages: job.checkpoints?.length || 0,
+    complete: result.complete && result.matches,
+  };
 }
 const approvals = require('./approval-manager').createApprovalManager((value) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:approvals', value);
@@ -200,19 +274,56 @@ async function withIntegrations(provider, job, settings, signal, run) {
 async function finishTask(job) {
   desktopIndicator?.end(job.id);
   approvals.cancelJob(job.id);
+  if (job.resumeCheckpoint?.id)
+    try {
+      await changes().seal(job.resumeCheckpoint.id);
+    } catch {}
   if (job.changeId)
     try {
       await changes().seal(job.changeId);
     } catch (error) {
       job.changesError = 'Checkpoint could not be finalized: ' + error.message;
     }
+  try {
+    const report = job.changeId ? await changes().report(job.changeId, true) : null;
+    await taskArchive().save(job, report, async (name) => {
+      const tools = require('./project-files'),
+        target = path.resolve(job.cwd, name);
+      if (!tools.allowed(name) || !tools.within(job.cwd, target)) return false;
+      for (const denied of await integrations().deniedFiles())
+        if (tools.within(denied, target) || path.resolve(denied) === target) return false;
+      return true;
+    });
+    job.evidenceArchived = true;
+  } catch (error) {
+    job.evidenceError = error.message;
+  }
 }
 let workspaceService;
 let projectContextService;
 let knowledgeService;
+let knowledgeFacade;
 let workflowService;
 function knowledge() {
-  return (knowledgeService ||= new (require('./knowledge-client').KnowledgeClient)());
+  knowledgeService ||= new (require('./knowledge-client').KnowledgeClient)();
+  const optionsFor = async (cwd, options = {}) => {
+    const root = await require('node:fs/promises').realpath(cwd),
+      excluded = [...(options.excluded || [])],
+      tools = require('./project-files');
+    for (const value of await integrations().deniedFiles()) {
+      const denied = await require('node:fs/promises')
+        .realpath(value)
+        .catch(() => path.resolve(value));
+      if (path.resolve(denied) === root || tools.within(denied, root))
+        throw Error('This project is inside a denied path.');
+      if (tools.within(root, denied)) excluded.push(path.relative(root, denied).split(path.sep).join('/'));
+    }
+    return { ...options, excluded };
+  };
+  return (knowledgeFacade ||= {
+    search: async (cwd, query, options) => knowledgeService.search(cwd, query, await optionsFor(cwd, options)),
+    analyze: async (cwd, options) => knowledgeService.analyze(cwd, await optionsFor(cwd, options)),
+  });
 }
 function projectContext() {
   return (projectContextService ||= require('./project-context').createProjectContext({
@@ -285,6 +396,8 @@ const colabJobs = require('./colab-jobs').createColabJobs({
   jobContext,
   beginChanges,
   finishTask,
+  recordResumeCheckpoint,
+  canStart: () => !advancedWorkflowsService?.active(),
   readSettings: readAppSettings,
   runProvider,
   reportsFolder: () => path.join(app.getPath('userData'), 'colab-reports'),
@@ -407,6 +520,8 @@ app.on('before-quit', (event) => {
   claudeConnections?.close();
   providerHistory.close();
   knowledgeService?.close();
+  advancedWorkflowsService?.dispose();
+  selectedToolsService?.dispose();
   clearTimeout(jobsEmitTimer);
   if (integrationService) finishing.push(integrationService.close());
   void (async () => {
@@ -796,6 +911,24 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
   // Compare proposals run two passes at once, so the job keeps a set of listeners.
   if (job && listener) (job.passListeners ||= new Set()).add(listener);
   try {
+    const review = require('./sensitive-context').inspectSensitive(prompt),
+      approved = job ? (job.sensitiveApproved ||= new Set()) : new Set();
+    const fresh = review.findings.filter((row) => !approved?.has(provider + row.fingerprint));
+    if (fresh.length) {
+      const choice = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Review possible sensitive context',
+        message: 'Possible sensitive information is about to be sent to ' + provider + '.',
+        detail:
+          fresh.map((row) => row.kind + ' · line ' + row.line + ' · ' + row.preview).join('\n') +
+          '\n\nDetection is heuristic. Cancel to inspect/edit the prompt, attachments or enabled project context. Sending continues under the provider’s own data policies.',
+        buttons: ['Cancel request', 'Send this context'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (choice.response !== 1) throw Error('Request cancelled during sensitive-context review.');
+      for (const row of fresh) approved?.add(provider + row.fingerprint);
+    }
     return await runtimePerformance.measure('provider', () =>
       runProviderTurn(provider, prompt, cwd, settings, previousSessionId, onText),
     );
@@ -1042,6 +1175,9 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       graphRunId,
       recoveryNote,
       environment,
+      evidenceArchived,
+      evidenceError,
+      resumeCheckpoint,
     } = job;
     return {
       id,
@@ -1074,6 +1210,9 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
       graphRunId,
       recoveryNote,
       environment,
+      evidenceArchived,
+      evidenceError,
+      resumeCheckpoint,
       ...(graphs ? { graph } : {}),
       ...(persist ? { preparedProposals } : {}),
       budget: budget
@@ -1087,7 +1226,8 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
   });
 }
 
-const jobsRunning = () => [...activeJobs.values()].some((job) => job.status === 'running');
+const taskJobsRunning = () => [...activeJobs.values()].some((job) => job.status === 'running');
+const jobsRunning = () => taskJobsRunning() || Boolean(advancedWorkflowsService?.active());
 
 let jobsEmitTimer,
   sentJobs = new Map();
@@ -1184,6 +1324,13 @@ function setupIpc() {
     projectFileService ||= require('./project-files').createProjectFiles({
       denied: () => integrations().deniedFiles(),
     });
+    if (/^(editor-|replace-)/.test(request.action || '')) {
+      projectEditor ||= require('./project-editor').createProjectEditor({
+        files: projectFileService,
+        busy: jobsRunning,
+      });
+      return projectEditor.action(await require('node:fs/promises').realpath(root), request);
+    }
     if (request.action === 'list') return projectFileService.list(root, request.path || '.');
     if (request.action === 'search') return projectFileService.search(root, request.query, request.contents === true);
     if (request.action === 'reveal') {
@@ -1237,6 +1384,7 @@ function setupIpc() {
     // The queue still waits for tasks you started yourself; its own items count toward its limit instead.
     canRun: () =>
       !quitting &&
+      !advancedWorkflowsService?.active() &&
       mainWindow &&
       !mainWindow.isDestroyed() &&
       ![...activeJobs.values()].some((job) => job.status === 'running' && !job.queued),
@@ -1416,6 +1564,181 @@ function setupIpc() {
     const text = await readFile(appLog.file, 'utf8').catch(() => 'No diagnostic log is available.');
     await writeFile(result.filePath, require('./app-log').redactDiagnostic(text), 'utf8');
     return { exported: true };
+  });
+  let diagnosticDraft;
+  ipcMain.handle('atlas:workflow-tools', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const evidence = require('./workflow-evidence');
+    if (request.action === 'archive-list') return taskArchive().list();
+    if (request.action === 'archive-read') return taskArchive().read(request.id);
+    if (request.action === 'archive-delete') return taskArchive().remove(request.id);
+    if (request.action === 'compare') {
+      if (!Array.isArray(request.ids) || request.ids.length !== 2) throw Error('Choose two tasks.');
+      return Promise.all(
+        request.ids.map(async (id) => {
+          try {
+            return await taskArchive().read(id);
+          } catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+          }
+          const job = jobSnapshots().find((row) => row.id === id);
+          if (!job) throw Error('Task is no longer available.');
+          let report;
+          if (job.changeId)
+            try {
+              report = await changes().report(job.changeId, true);
+            } catch {}
+          return { ...evidence.taskEvidence(job, report), source: 'live filesystem (legacy task)' };
+        }),
+      );
+    }
+    if (request.action === 'diagnostic-preview') {
+      const jobs = jobSnapshots();
+      const log = request.includeLogs === true ? await readFile(appLog.file, 'utf8').catch(() => '') : '';
+      const bundle = evidence.diagnosticBundle({
+        version: app.getVersion(),
+        platform: process.platform,
+        jobs,
+        log,
+        includeLogs: request.includeLogs === true,
+        includeOutput: request.includeOutput === true,
+        privatePaths: [app.getPath('home'), app.getPath('userData'), ...jobs.map((job) => job.cwd)],
+      });
+      diagnosticDraft = {
+        id: require('node:crypto').randomUUID(),
+        text: JSON.stringify(bundle, null, 2),
+        createdAt: Date.now(),
+      };
+      return diagnosticDraft;
+    }
+    if (request.action === 'diagnostic-export') {
+      if (!diagnosticDraft || diagnosticDraft.id !== request.id || Date.now() - diagnosticDraft.createdAt > 600000)
+        throw Error('Preview the diagnostic bundle again.');
+      const draft = diagnosticDraft;
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Export reviewed diagnostic bundle',
+        defaultPath: 'atlas-diagnostics.json',
+      });
+      if (result.canceled || !result.filePath) return { cancelled: true };
+      await writeFile(result.filePath, draft.text, 'utf8');
+      return { exported: true };
+    }
+    throw Error('Unknown workflow tools action.');
+  });
+  ipcMain.handle('atlas:advanced-workflows', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    advancedWorkflowsService ||= require('./advanced-workflows').createAdvancedWorkflows({
+      jobs: activeJobs,
+      tracker: changes(),
+      knowledge: knowledge(),
+      busy: taskJobsRunning,
+      denied: () => integrations().deniedFiles(),
+      workspace: workspace(),
+      persist: async () => {
+        await persistJobs();
+        emitJobs();
+      },
+      approve: async (title, details) =>
+        (
+          await dialog.showMessageBox(mainWindow, {
+            type: 'question',
+            title,
+            message: title,
+            detail: details,
+            buttons: ['Cancel', 'Approve'],
+            defaultId: 0,
+            cancelId: 0,
+          })
+        ).response === 1,
+      startRepair: (data, verify) => {
+        repairRequests.set(data, { verify });
+        return startAssistant(event, data);
+      },
+      interrupt: (id) => activeJobs.get(id)?.interrupt?.(),
+    });
+    return advancedWorkflowsService.action(request);
+  });
+  ipcMain.handle('atlas:selected-tools', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const approve = async (title, detail) =>
+      (
+        await dialog.showMessageBox(mainWindow, {
+          title,
+          message: title,
+          detail,
+          buttons: ['Cancel', 'Approve'],
+          defaultId: 0,
+          cancelId: 0,
+        })
+      ).response === 1;
+    selectedToolsService ||= require('./selected-tools').createSelectedTools({
+      directory: app.getPath('userData'),
+      workspace: workspace(),
+      knowledge: knowledge(),
+      jobs: () => jobSnapshots(),
+      tracker: changes(),
+      integrations: integrations(),
+      busy: jobsRunning,
+      approve,
+      updateRecovery,
+      backup: async () => {
+        if (
+          !(await approve(
+            'Export a complete local-record backup?',
+            'Includes chats, memories, settings, attachments, task evidence and checkpoints, plus logical Colab/browser preferences. Excludes installed runtimes, project worktrees and provider-owned histories. The backup is compressed, not encrypted; store it privately.',
+          ))
+        )
+          return { cancelled: true };
+        const target = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: 'ATLAS-' + new Date().toISOString().slice(0, 10) + '.atlas-backup',
+        });
+        if (target.canceled) return { cancelled: true };
+        const bytes = require('./local-backups').createBackup(
+          app.getPath('userData'),
+          app.getVersion(),
+          await rendererBackup(),
+        );
+        await writeFile(target.filePath, bytes);
+        return { exported: true, bytes: bytes.length };
+      },
+      restore: async () => {
+        const picked = await dialog.showOpenDialog(mainWindow, {
+          properties: ['openFile'],
+          filters: [{ name: 'ATLAS backup', extensions: ['atlas-backup'] }],
+        });
+        if (picked.canceled) return { cancelled: true };
+        const stat = await require('node:fs/promises').stat(picked.filePaths[0]);
+        if (stat.size > 256 * 1024 * 1024) throw Error('Backup exceeds 256 MiB.');
+        const bytes = await readFile(picked.filePaths[0]),
+          value = require('./local-backups').validate(bytes);
+        if (
+          !(await approve(
+            'Restore this local backup?',
+            value.files.length +
+              ' files · version ' +
+              value.version +
+              '\nSaved ' +
+              new Date(value.createdAt).toLocaleString() +
+              '\n\nThe current managed records will be moved into a local recovery backup. ATLAS will restart to restore included records. External project files and provider histories are preserved.',
+          ))
+        )
+          return { cancelled: true };
+        require('./local-backups').stageRestore(app.getPath('userData'), bytes);
+        app.relaunch();
+        app.quit();
+        return { restarting: true };
+      },
+    });
+    return selectedToolsService.action(request);
+  });
+  ipcMain.handle('atlas:renderer-restore', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const file = path.join(app.getPath('userData'), '.renderer-restore.json');
+    if (request.action === 'complete') {
+      await unlink(file);
+      return true;
+    }
+    return JSON.parse(await readFile(file, 'utf8'));
   });
   ipcMain.handle('atlas:show-notices', (event) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -1734,6 +2057,8 @@ function setupIpc() {
   });
   startAssistant = async (event, data) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (advancedWorkflowsService?.active() && !repairRequests.has(data))
+      throw Error('Stop the terminal or repair loop before starting another task.');
     const id = typeof data?.requestId === 'string' ? data.requestId : randomUUID();
     if (activeJobs.has(id)) throw Error('Duplicate job');
     const previous = activeJobs.get(data?.resumeJobId),
@@ -1742,6 +2067,7 @@ function setupIpc() {
 
     if (previous?.collaboration || previous?.status === 'running')
       throw Error('Resume a stopped Assistant task, or open its Colab chat.');
+    if (previous) await require('./verified-recovery').requireVerifiedRecovery(previous, changes());
     if (previous?.request)
       data = {
         ...data,
@@ -1759,6 +2085,9 @@ function setupIpc() {
     const controller = new AbortController(),
       job = {
         id,
+        ...(repairRequests.has(data)
+          ? { runVerification: () => repairRequests.get(data).verify(controller.signal) }
+          : {}),
         request: {
           profileId: data.profileId,
           attachments: data.attachments || [],
@@ -1857,6 +2186,12 @@ async function handleChat(event, data) {
   const settings = await readAppSettings();
   const project = await workspace().profile(data.profileId);
   if (jobContext.getStore()) jobContext.getStore().projectSnapshot = project;
+  if (project?.environmentPreflight) {
+    const result = await require('./environment-preflight').preflight(cwd, project.environmentTools);
+    if (jobContext.getStore()) jobContext.getStore().preflight = result;
+    if (result.status !== 'passed')
+      throw Error('Environment preflight failed. Review Project environments requirements.');
+  }
   if (project)
     Object.assign(settings, {
       codexModel: project.codexModel || settings.codexModel,
@@ -2127,6 +2462,19 @@ async function createWindow() {
         '/review-center-ui.js',
         '/project-workbench-ui.js',
         '/live-preview-ui.js',
+        '/project-editor-ui.js',
+        '/project-editor.css',
+        '/workflow-tools-ui.js',
+        '/advanced-workflows-ui.js',
+        '/terminal-dock-ui.js',
+        '/terminal-dock.css',
+        '/selected-tools-ui.js',
+        '/task-dependency-graph.js',
+        '/restore.html',
+        '/restore-state.js',
+        '/node_modules/@xterm/xterm/css/xterm.css',
+        '/node_modules/@xterm/xterm/lib/xterm.js',
+        '/node_modules/@xterm/addon-fit/lib/addon-fit.js',
         '/progress-ui.js',
         '/search-results.js',
         '/unified-search-ui.js',
@@ -2147,7 +2495,10 @@ async function createWindow() {
       stylesheet = url.pathname.endsWith('.css'),
       image = url.pathname.endsWith('.png');
     const html = await readFile(
-      path.join(__dirname, javascript || stylesheet || image ? url.pathname.slice(1) : 'index.html'),
+      path.join(
+        __dirname,
+        javascript || stylesheet || image || url.pathname === '/restore.html' ? url.pathname.slice(1) : 'index.html',
+      ),
     );
     return new Response(html, {
       headers: {
@@ -2197,7 +2548,11 @@ async function createWindow() {
     desktopIndicator?.close();
     desktopIndicator = undefined;
   });
-  await mainWindow.loadURL(`${appOrigin}/`);
+  await mainWindow.loadURL(
+    existsSync(path.join(app.getPath('userData'), '.renderer-restore.json'))
+      ? `${appOrigin}/restore.html`
+      : `${appOrigin}/`,
+  );
 }
 
 app.whenReady().then(async () => {

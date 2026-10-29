@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('atlas', {
     return () => ipcRenderer.removeListener('atlas:response-text', listener);
   },
   taskQueue: (request) => ipcRenderer.invoke('atlas:task-queue', request),
+  selectedTools: (request) => ipcRenderer.invoke('atlas:selected-tools', request),
+  rendererRestore: (request) => ipcRenderer.invoke('atlas:renderer-restore', request),
   approvals: (request) => ipcRenderer.invoke('atlas:approvals', request),
   plugins: (request) => ipcRenderer.invoke('atlas:plugins', request),
   integrations: (request) => ipcRenderer.invoke('atlas:integrations', request),
@@ -50,6 +52,8 @@ contextBridge.exposeInMainWorld('atlas', {
     ipcRenderer.invoke('atlas:attachments', { paths: Array.from(files).map((file) => webUtils.getPathForFile(file)) }),
   attachmentPreview: (id) => ipcRenderer.invoke('atlas:attachment-preview', { id }),
   projectFile: (request) => ipcRenderer.invoke('atlas:project-file', request),
+  workflowTools: (request) => ipcRenderer.invoke('atlas:workflow-tools', request),
+  advancedWorkflows: (request) => ipcRenderer.invoke('atlas:advanced-workflows', request),
   projectWorkbench: (request) => ipcRenderer.invoke('atlas:project-workbench', request),
   livePreview: (request) => ipcRenderer.invoke('atlas:live-preview', request),
   diagnostics: () => ipcRenderer.invoke('atlas:diagnostics'),

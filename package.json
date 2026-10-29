@@ -1,6 +1,6 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
@@ -23,6 +23,10 @@
     "test:power-ui": "electron tests/power-tools.browser.cjs",
     "test:navigation-ui": "electron tests/ui-navigation.browser.cjs",
     "test:files-ui": "electron tests/project-files.browser.cjs",
+    "test:pty-ui": "electron tests/pty.browser.cjs",
+    "test:pty-render-ui": "electron tests/pty-render.browser.cjs",
+    "test:pdf-package-ui": "electron tests/pdf-package.browser.cjs",
+    "test:restore-ui": "electron tests/restore.browser.cjs",
     "test:preview-ui": "electron tests/live-preview.browser.cjs",
     "test:release-ui": "electron tests/release-screens.browser.cjs",
     "build:compliance": "node build/prepare-compliance.cjs"
@@ -34,17 +38,25 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
     "diff": "9.0.0",
     "electron-updater": "6.8.11",
+    "node-pty": "1.1.0",
+    "pdfjs-dist": "6.4.299",
     "prismjs": "1.30.0"
   },
   "productName": "ATLAS",
   "build": {
     "appId": "com.springycape.atlas",
     "productName": "ATLAS",
+    "npmRebuild": false,
     "directories": {
       "output": "dist"
     },
+    "asarUnpack": [
+      "node_modules/node-pty/**"
+    ],
     "files": [
       "**/*",
       "!tests/**",
@@ -66,7 +78,11 @@
       "!.env",
       "!.env.*",
       "!*.enc",
-      "!legal/**"
+      "!legal/**",
+      "!node_modules/@napi-rs/**",
+      "!node_modules/node-pty/build/**",
+      "!node_modules/pdfjs-dist/standard_fonts/Liberation*.ttf",
+      "!node_modules/pdfjs-dist/standard_fonts/LICENSE_LIBERATION"
     ],
     "extraResources": [
       {

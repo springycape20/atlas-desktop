@@ -27,6 +27,56 @@
       details.append(actions);
       const preview = node('div');
       details.append(preview);
+      if (api.advancedWorkflows) {
+        button(
+          'Verify saved checkpoint',
+          async () => {
+            const value = await api.advancedWorkflows({ tool: 'recovery', jobId: job.id, action: 'inspect' });
+            preview.replaceChildren(
+              node('h3', value.verified ? 'Checkpoint verified' : 'Review required'),
+              node('p', value.reason),
+              node('p', value.remaining),
+            );
+            if (value.changedFiles?.length) preview.append(node('pre', value.changedFiles.join('\n')));
+            if (value.verified)
+              button(
+                'Open task to resume',
+                async () => {
+                  await api.taskOpen(job.id);
+                  power.close();
+                },
+                preview,
+              );
+          },
+          actions,
+        );
+        if (job.resumeCheckpoint)
+          button(
+            'Preview restore to last saved stage',
+            async () => {
+              const value = await api.advancedWorkflows({ tool: 'recovery', jobId: job.id, action: 'restore-preview' });
+              preview.replaceChildren(
+                node('h3', 'Restore last saved stage'),
+                node('pre', value.files.join('\n') || 'No files to restore.'),
+              );
+              if (value.files.length)
+                button(
+                  'Restore listed files',
+                  async () => {
+                    const result = await api.advancedWorkflows({
+                      tool: 'recovery',
+                      jobId: job.id,
+                      action: 'restore',
+                      token: value.token,
+                    });
+                    preview.replaceChildren(node('p', result.message));
+                  },
+                  preview,
+                );
+            },
+            actions,
+          );
+      }
       button(
         'Open task',
         async () => {
