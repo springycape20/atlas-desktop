@@ -4,7 +4,6 @@ speech/
 dist/
 out/
 *.lnk
-!ATLAS.lnk
 *.log
 .env
 .env.*
