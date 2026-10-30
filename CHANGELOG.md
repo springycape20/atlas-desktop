@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Adds installed stdio language-server definitions, references and diagnostics with per-project configuration and approval before launch.
+- Adds saved browser interaction/assertion recipes, stop-on-failure execution, console error evidence and unsent evidence drafts in the local preview.
+- Adds preview screenshot baselines, measured pixel comparisons and renderer/DOM/navigation profiling with matching-scenario baseline deltas.
+- Adds Tasks > Power tools with direct access to twelve capabilities, and browser-change, measured-performance and verified-milestone workflow starters.
+- Retains existing repair loops, isolated task workspaces, project memory, ranked context, checkpoint recovery, model routing and local-model support. No new packages or publisher collection are added.
+
 ## 0.10.1 — 30 October 2026
 
 - Adds isolated project trials with comparison/export, project maps, ordered recipe instructions, context freshness, explicit provider handoffs, a review inbox, acceptance evidence, local solution search, offline preparation and reviewed bug-report export. See the work-session guide for bounds and review steps.
