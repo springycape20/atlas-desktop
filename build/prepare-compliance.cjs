@@ -97,7 +97,10 @@ async function prepare(root = path.resolve(__dirname, '..')) {
     ),
   );
   await fs.copyFile(path.join(root, 'docs', 'PATCH-RELEASE-REVIEW.md'), path.join(out, 'SOURCE-REVIEW.md'));
-  await fs.copyFile(path.join(root, 'docs', 'RELEASE-0.10.0-REVIEW.md'), path.join(out, 'CURRENT-REVIEW.md'));
+  await fs.copyFile(
+    path.join(root, 'docs', `RELEASE-${require('../package.json').version}-REVIEW.md`),
+    path.join(out, 'CURRENT-REVIEW.md'),
+  );
   await fs.copyFile(path.join(root, 'legal', 'release-review.json'), path.join(out, 'RELEASE-REVIEW.json'));
   await fs.copyFile(path.join(root, 'legal', 'license-sources.json'), path.join(out, 'LICENSE-SOURCES.json'));
   await fs.copyFile(path.join(root, 'docs', 'PRIVACY.md'), path.join(out, 'PRIVACY.md'));

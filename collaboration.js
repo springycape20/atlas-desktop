@@ -203,7 +203,7 @@ function checkIssue(checks) {
       command: efficiency.excerpt(row.command, 240),
       exitCode: row.exitCode,
       error: efficiency.excerpt(row.error, 300),
-      output: String(row.output || '').slice(-400),
+      output: require('./focused-check-output').focusOutput(row.output || row.error, 800),
     })),
   );
   return {
@@ -236,7 +236,7 @@ function commandIssue(id, criterion, label, run) {
       status: run.status,
       exitCode: run.exitCode ?? null,
       error: efficiency.excerpt(run.error || run.reason, 300),
-      output: String(run.output || '').slice(-1500),
+      output: require('./focused-check-output').focusOutput(run.output || run.error, 1500),
     }).slice(0, 3000),
     regression: false,
   };

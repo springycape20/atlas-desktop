@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.1 — 30 October 2026
+
+- Adds isolated project trials with comparison/export, project maps, ordered recipe instructions, context freshness, explicit provider handoffs, a review inbox, acceptance evidence, local solution search, offline preparation and reviewed bug-report export. See the work-session guide for bounds and review steps.
+
+- Adds a request-context budget breakdown with explicit unknown image/session/tool costs, confirmed-session reuse of unchanged Assistant references, and a duplicate-history fallback fix.
+- Adds optional one-attempt Fast-to-Strong Assistant repair after executed failing checks on changed files; reruns the configured checks and preserves manual/project model choices.
+- Adds editable, revision-reviewed local milestone packets that open fresh unsent chats while retaining source history.
+- Adds focused check-failure evidence and bounded local completion-check logs with preview/reveal controls. No dependencies or publisher telemetry added.
+
 ## 0.10.0 — 30 October 2026
 
 - Adds interactive PowerShell terminals beside chat, multiple sessions, resizing and ANSI support. Fixes action-row overlap, dock alignment and input jumping below the prompt.

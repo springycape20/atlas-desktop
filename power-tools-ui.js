@@ -94,6 +94,7 @@
       attachments: window.atlasWorkspace?.context(which).attachments || [],
       conversationId: typeof conversationId === 'string' ? conversationId : '',
       history: chat?.messages || [],
+      chatId: chat?.id || '',
       selection: selection(which),
     };
   };
@@ -155,20 +156,55 @@
         const result = await api.contextPreview({ ...input, selection: selected });
         if (!current()) return;
         preview.replaceChildren();
+        if (result.budget) {
+          preview.append(
+            node('h3', 'Request context estimate: ~' + result.budget.estimatedTokens.toLocaleString() + ' text tokens'),
+          );
+          preview.append(node('p', result.budget.note), node('p', result.budget.expectedPasses));
+          preview.append(
+            node(
+              'p',
+              'Selected images: ' +
+                result.budget.imageCount +
+                ' · image tokens unknown. Recent history is a planning allowance; retained provider history may differ.',
+            ),
+          );
+          const table = node('table');
+          table.style.width = '100%';
+          table.setAttribute('aria-label', 'Request text-token estimate by source');
+          for (const row of result.budget.rows) {
+            const line = node('tr'),
+              amount = node('td', '~' + row.estimatedTokens.toLocaleString());
+            amount.style.textAlign = 'right';
+            amount.style.fontVariantNumeric = 'tabular-nums';
+            line.append(node('td', row.label + (row.included ? '' : ' (excluded)')), amount);
+            table.append(line);
+          }
+          preview.append(table);
+          if (result.budget.overBudget)
+            preview.append(
+              node(
+                'p',
+                'Above the 16,000 estimated text-token planning threshold. Consider fewer attachments/excerpts or a reviewed milestone handover. This threshold does not block sending.',
+              ),
+            );
+        }
         const included =
           (result.sections || [])
             .filter((section) => section.included)
             .map((section) => section.text || '')
             .join('\n') + (result.indexed?.results || []).map((file) => file.excerpt || '').join('\n');
-        preview.append(
-          node('h3', 'Estimated optional context: ~' + Math.ceil(included.length / 4).toLocaleString() + ' tokens'),
-        );
-        preview.append(
-          node(
-            'p',
-            'Estimate uses four characters per token. Provider sessions, tools and file reads add context; provider compaction is managed by the provider and is not exposed to ATLAS.',
-          ),
-        );
+        if (!result.budget) {
+          preview.append(
+            node('h3', 'Estimated optional context: ~' + Math.ceil(included.length / 4).toLocaleString() + ' tokens'),
+          );
+          preview.append(
+            node(
+              'p',
+              'Estimate uses four characters per token. Provider sessions, tools and file reads add context; provider compaction is managed by the provider and is not exposed to ATLAS.',
+            ),
+          );
+        }
         for (const section of result.sections || []) {
           const details = node('details');
           details.append(

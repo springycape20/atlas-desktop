@@ -319,6 +319,7 @@ class ClaudeConnection {
   async run({
     prompt,
     sessionId = '',
+    preparePrompt,
     signal,
     onText = () => {},
     activity = () => {},
@@ -370,6 +371,11 @@ class ClaudeConnection {
           if (!sessionId && this.used) await this.reset();
           if (this.turn !== turn) return;
           onSession(this.sessionId);
+          if (preparePrompt)
+            prompt = preparePrompt({
+              sessionId: this.sessionId,
+              resumed: Boolean(sessionId) && this.sessionId === sessionId,
+            });
           turn.sent = true;
           this.used = true;
           this.write({

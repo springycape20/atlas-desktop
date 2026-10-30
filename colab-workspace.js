@@ -1556,6 +1556,26 @@
     return operation;
   }
   window.atlasColab = {
+    handoverDraft: (draft, profile) => {
+      if (!historyReady) throw Error('Colab history is still loading.');
+      if (current()?.busy || current()?.draft || document.getElementById('colabTask').value.trim())
+        throw Error('Save or clear the current Colab draft and finish its task first.');
+      const chat = makeChat();
+      Object.assign(chat, {
+        cwd: draft.cwd,
+        profileId: profile?.id || '',
+        projectName: profile?.name || '',
+        codexModel: profile?.codexModel || '',
+        claudeModel: profile?.claudeModel || '',
+        effort: profile?.effort || '',
+        draft: draft.text,
+        status: 'Reviewed milestone handover. Unsent; review before starting.',
+      });
+      projectFilter = projectKey(draft.cwd);
+      save();
+      select('colab');
+      render();
+    },
     applyWorkflow: (workflow) => {
       if (!historyReady) throw Error('Colab history is loading. Try again.');
       if (current()?.busy) throw Error('Stop or finish this Colab task before applying a workflow.');
@@ -1565,7 +1585,10 @@
         projectFilter = projectKey(workflow.cwd);
       }
       Object.assign(chat, {
-        draft: workflow.task,
+        draft:
+          workflow.task +
+          (workflow.steps ? '\n\nWorkflow steps:\n' + workflow.steps : '') +
+          (workflow.stopConditions ? '\n\nStopping conditions:\n' + workflow.stopConditions : ''),
         ...(workflow.cwd ? { cwd: workflow.cwd } : {}),
         mode: workflow.mode,
         brief: { criteria: workflow.criteria || '', outOfScope: workflow.outOfScope || '' },

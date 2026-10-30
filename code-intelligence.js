@@ -77,6 +77,12 @@ function analyzeRecords(records, { file = '', symbol = '' } = {}) {
     file,
     symbol,
     indexed: nodes.size,
+    modules: [...nodes.values()].slice(0, 300).map((row) => ({
+      path: row.path,
+      imports: row.imports,
+      definitions: row.definitions.slice(0, 15),
+      test: isTest(row.path),
+    })),
     definitions: [...nodes.values()]
       .flatMap((row) =>
         row.definitions.filter((def) => !symbol || def.name === symbol).map((def) => ({ path: row.path, ...def })),

@@ -34,6 +34,30 @@ function fixture() {
       }),
   };
 }
+test('prompt reuse preparation follows actual Codex resume/start confirmation', async () => {
+  const f = fixture(),
+    seen = [];
+  await f.run({
+    internal: false,
+    sessionId: 'retained',
+    preparePrompt: (info) => {
+      seen.push(info);
+      return 'prepared prompt';
+    },
+  });
+  assert.deepEqual(seen, [{ sessionId: 'retained', resumed: true }]);
+  assert.equal(f.calls.find((row) => row.method === 'turn/start').params.input[0].text, 'prepared prompt');
+  seen.length = 0;
+  await f.run({
+    sessionId: 'expired-private',
+    preparePrompt: (info) => {
+      seen.push(info);
+      return 'full prompt';
+    },
+  });
+  assert.equal(seen[0].resumed, false);
+  assert.notEqual(seen[0].sessionId, 'expired-private');
+});
 test('Colab starts temporary threads and continues them in memory without creating visible sessions', async () => {
   const f = fixture(),
     first = await f.run();

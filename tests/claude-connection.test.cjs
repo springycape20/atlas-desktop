@@ -114,6 +114,27 @@ test('Claude keeps one process and stdin open across Assistant follow-ups', asyn
   assert.equal(children[0].frames.filter((row) => row.type === 'control_request').length, 1);
   assert.equal(second.usage.inputTokens, 13);
 });
+test('Claude prepares context after actual session reset/resume, before writing the user frame', async (t) => {
+  const { run, children } = fixture(t),
+    seen = [];
+  const first = await run({
+    preparePrompt: (info) => {
+      seen.push(info);
+      return 'full context';
+    },
+  });
+  assert.equal(seen[0].resumed, false);
+  await run({
+    sessionId: first.sessionId,
+    preparePrompt: (info) => {
+      seen.push(info);
+      return 'retained reference';
+    },
+  });
+  assert.equal(seen[1].resumed, true);
+  assert.equal(seen[1].sessionId, first.sessionId);
+  assert.equal(children[0].history.at(-1), 'retained reference');
+});
 test('ATLAS MCP configuration stays warm and only its approval-gated wrapper tools are preallowed', async (t) => {
   const { run, children } = fixture(t),
     settings = {

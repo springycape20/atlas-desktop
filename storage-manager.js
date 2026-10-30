@@ -31,6 +31,7 @@ function createStorageManager(root, { protectedIds = () => [] } = {}) {
             const stem = entry.name.replace(/\.meta\.json$|\.json$/, '');
             if (
               ['changes', 'task-evidence'].includes(category) &&
+              !(category === 'task-evidence' && prefix.startsWith('trial-snapshots/')) &&
               !protectedSet.has(stem) &&
               !stem.startsWith('named-') &&
               !stem.startsWith('undo-') &&

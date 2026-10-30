@@ -17,6 +17,8 @@ Use **Tasks** for running work, the queue, parallel batches, recovery, reminders
 
 These features are included in 0.10.0. Model routing changes model choice, not permissions. Memories, plans, recipes and source excerpts never grant access or authorize tool execution by themselves.
 
+ATLAS 0.10.1 additionally offers **Context → Refresh preview** for a request-text budget, **Settings > Models > Configure model routing** for unchanged-reference reuse and opt-in one-attempt check-driven escalation, and **Tasks > Milestone handovers / Check logs**. See [model usage efficiency](TOKEN-EFFICIENCY.md#controls-added-in-0101) for limits and safeguards.
+
 ## File and image previews
 
 ATLAS 0.10.0 Chat and Colab can display images referenced as `![description](path/to/image.png)` and open project files linked as `[label](path/to/file)` or written as an inline-code filename. Relative paths resolve inside the chat/task project; isolated task outputs use that task's workspace.
