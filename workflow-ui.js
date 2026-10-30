@@ -26,6 +26,8 @@
       ['criteria', 'Acceptance criteria (one per line)', 3],
       ['outOfScope', 'Out of scope', 2],
       ['checks', 'Check commands (one per line)', 2],
+      ['steps', 'Ordered workflow steps (task instructions)', 3],
+      ['stopConditions', 'Stopping conditions / decisions requiring your input', 2],
     ]) {
       const field = node('label', label),
         input = node(rows === 1 ? 'input' : 'textarea');

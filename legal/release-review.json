@@ -1,15 +1,15 @@
 {
   "status": "technical-review-complete",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "reviewedBy": "Codex automated technical review; not legal counsel",
   "reviewedAt": "2026-10-30",
-  "packageLockSha256": "2f1c3666428f2bf0aa85b959369527de7fdc6512db757074f0f1bc0192fc954d",
-  "evidence": "docs/RELEASE-0.10.0-REVIEW.md",
+  "packageLockSha256": "ad43a7e65e7600bc53cdbfe091f4488ccb7049e3bd0825bf9607490932c4120b",
+  "evidence": "docs/RELEASE-0.10.1-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner approved merge and publication on 2026-10-30, then explicitly chose to retain 0.10.0 and replace its unpublished failed tag after correcting the lock checksum. The existing unsigned-release authorization remains in effect. No signing certificate or legal approval is claimed.",
+  "ownerDecision": "Owner requested the patch push on 2026-10-30. The previously authorized unsigned-release policy remains in effect. Post-CI merge and publication confirmation is pending; no signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 500,
+    "unitTests": 524,
     "electronSuites": [
       "assistant",
       "colab",
@@ -28,7 +28,7 @@
       "pdf-package"
     ],
     "productionAudit": "0 vulnerabilities reported 2026-10-30",
-    "package": "Windows x64 unsigned installer and updater assets verified locally; all release checks repeat in CI. Terminal uses pinned upstream N-API prebuilds. Optional native canvas and Liberation fallback fonts excluded; packaged PDF text and native PTY smoke tests passed.",
-    "recovery": "Actual packaged-copy restore/relaunch verified with isolated fixture data and disabled real provider executables. No NSIS install into user profile."
+    "package": "Windows x64 unsigned installer verified locally: mandatory runtime files, notices, npm inventory, pinned speech hashes, private-path exclusions, binary fuses, ASAR integrity, updater hashes and packaged PDF extraction. CI repeats release verification.",
+    "recovery": "Actual packaged 0.10.1 copy relaunched with isolated fixture data, restored saved records before app load and preserved newer fixture records. Provider executables were overridden to where.exe; no real accounts or user-profile NSIS installation used."
   }
 }

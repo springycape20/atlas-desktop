@@ -3,7 +3,7 @@ const { verificationBadge, completeStatus } = require('./verification-badge');
 // What ATLAS checks when a task finishes, for Assistant and Colab tasks alike: completion checks, the
 // verification badge, and the once-per-folder offer to turn checks on for an unverified project.
 // tools is project-tools, passed in so tests that replace it through main.js keep working.
-function createTaskChecks({ workspace, changes, jobs, emit, persist, tools }) {
+function createTaskChecks({ workspace, changes, jobs, emit, persist, tools, reportsFolder }) {
   const { completionChecks, detectProject } = tools;
   async function check(job) {
     const project = job.projectSnapshot || (await workspace().profile(job.request?.profileId));
@@ -15,6 +15,15 @@ function createTaskChecks({ workspace, changes, jobs, emit, persist, tools }) {
           : job.runVerification
             ? await job.runVerification()
             : await completionChecks(project, job.cwd, {
+                ...(reportsFolder
+                  ? {
+                      outputDirectory: path.join(
+                        reportsFolder(),
+                        require('./request-efficiency').hash(String(job.id)).slice(0, 32),
+                        'check-logs',
+                      ),
+                    }
+                  : {}),
                 signal: job.signal,
                 progress: (text) => {
                   job.statusText = text;
@@ -89,6 +98,15 @@ function createTaskChecks({ workspace, changes, jobs, emit, persist, tools }) {
       commands = allowed.filter((command) => Array.isArray(request.commands) && request.commands.includes(command));
     if (!commands.length) throw Error('Choose at least one of the offered checks.');
     job.verification = await completionChecks({ autoCheck: true, checkCommands: commands.join('\n') }, job.cwd, {
+      ...(reportsFolder
+        ? {
+            outputDirectory: path.join(
+              reportsFolder(),
+              require('./request-efficiency').hash(String(job.id)).slice(0, 32),
+              'check-logs',
+            ),
+          }
+        : {}),
       progress: (text) => {
         job.events.push({ kind: 'command', text, at: Date.now() });
         emit();

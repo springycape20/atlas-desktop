@@ -268,6 +268,7 @@ function createColabJobs({
           reuse: request.reuseChecks,
           run: () =>
             load('./project-tools').completionChecks(project, job.cwd, {
+              outputDirectory: path.join(reportsFolder(), job.id, 'check-logs'),
               signal: job.signal,
               progress: (text) => {
                 job.statusText = text;

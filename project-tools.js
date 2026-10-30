@@ -49,6 +49,7 @@ function runCheck(
     interactive = false,
     onOutput = () => {},
     onStart = () => {},
+    outputDirectory,
   } = {},
 ) {
   return new Promise((resolve) => {
@@ -82,6 +83,7 @@ function runCheck(
       env: process.env,
       detached: process.platform !== 'win32',
     });
+    const log = require('./check-log').createCheckLog(outputDirectory);
     onStart({ pid: child.pid, write: (text) => child.stdin?.write(text) });
     if (interactive) child.stdin?.on('error', () => onOutput('\nThe process input stream closed.\n'));
     const finish = (status, exitCode, error) => {
@@ -90,6 +92,7 @@ function runCheck(
       clearTimeout(timer);
       signal?.removeEventListener('abort', stop);
       resolve({
+        ...log.finish(),
         command,
         status,
         exitCode,
@@ -123,6 +126,7 @@ function runCheck(
     let testOutput = '';
     for (const stream of [child.stdout, child.stderr])
       stream.on('data', (part) => {
+        log.write(part);
         output = (output + part.toString()).slice(-16000);
         if (testOutput.length < 524289) testOutput = (testOutput + part.toString()).slice(0, 524289);
         onOutput(part.toString());
@@ -135,7 +139,11 @@ function runCheck(
     else signal?.addEventListener('abort', stop, { once: true });
   });
 }
-async function completionChecks(project, cwd, { signal, progress = () => {}, runner = runCheck } = {}) {
+async function completionChecks(
+  project,
+  cwd,
+  { signal, progress = () => {}, runner = runCheck, outputDirectory } = {},
+) {
   const commands = (project?.checkCommands || '')
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -153,7 +161,7 @@ async function completionChecks(project, cwd, { signal, progress = () => {}, run
   for (const cmd of commands) {
     if (signal?.aborted) break;
     progress('Checking: ' + cmd);
-    results.push(await runner(cmd, cwd, { signal }));
+    results.push(await runner(cmd, cwd, { signal, ...(outputDirectory ? { outputDirectory } : {}) }));
   }
   return {
     status: signal?.aborted ? 'cancelled' : results.every((row) => row.status === 'passed') ? 'passed' : 'failed',

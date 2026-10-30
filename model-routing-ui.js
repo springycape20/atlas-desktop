@@ -26,8 +26,38 @@
     enabled.type = 'checkbox';
     enabled.checked = saved.modelRoutingEnabled === true;
     const label = node('label', 'Enable automatic model tiers for Chat');
-    label.append(enabled);
+    label.className = 'power-toggle';
+    label.prepend(enabled);
     body.append(label);
+    const escalation = document.createElement('input');
+    escalation.type = 'checkbox';
+    escalation.checked = saved.checkDrivenEscalation === true;
+    const repairLabel = node('label', 'Allow one stronger-model repair after executed completion checks fail');
+    repairLabel.className = 'power-toggle';
+    repairLabel.prepend(escalation);
+    body.append(repairLabel);
+    body.append(
+      node(
+        'p',
+        'Assistant automatic tier only: requires changed files, distinct configured Fast/Strong models and a failed check exit code. Project pins, manual model choices, read-only and local chat are excluded. This can use additional tokens; the same checks run again. Colab retains its existing builder/reviewer workflow.',
+      ),
+    );
+    const reuse = document.createElement('input');
+    reuse.type = 'checkbox';
+    reuse.checked = saved.contextReuseEnabled !== false;
+    const reuseLabel = node(
+      'label',
+      'Reuse unchanged attachment/project references in confirmed retained Assistant sessions',
+    );
+    reuseLabel.className = 'power-toggle';
+    reuseLabel.prepend(reuse);
+    body.append(reuseLabel);
+    body.append(
+      node(
+        'p',
+        'Only unchanged reference blocks are shortened. Current requests, instructions and memories stay intact. Full references return after five turns, 15 minutes or an uncertain/new session. Turn this off to resend full references on every request. Provider cache discounts and subscription savings are not measurable here.',
+      ),
+    );
     const fields = {};
     for (const [key, title] of [
       ['fastCodexModel', 'Fast Codex model ID'],
@@ -40,6 +70,8 @@
       const value = await api.saveSettings({
         ...(await api.getSettings()),
         modelRoutingEnabled: enabled.checked,
+        checkDrivenEscalation: escalation.checked,
+        contextReuseEnabled: reuse.checked,
         ...Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value.trim()])),
       });
       if (typeof settings === 'object') settings = value;

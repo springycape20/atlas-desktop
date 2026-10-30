@@ -2,6 +2,8 @@ const keys = ['fastCodexModel', 'strongCodexModel', 'fastClaudeModel', 'strongCl
 function clean(value) {
   return Object.fromEntries([
     ['modelRoutingEnabled', value?.modelRoutingEnabled === true],
+    ['checkDrivenEscalation', value?.checkDrivenEscalation === true],
+    ['contextReuseEnabled', value?.contextReuseEnabled !== false],
     ...keys.map((key) => [key, /^[A-Za-z0-9._:/-]{1,100}$/.test(value?.[key] || '') ? value[key] : '']),
   ]);
 }

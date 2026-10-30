@@ -18,12 +18,16 @@ test('workflow templates persist edits, preserve starters and do not mutate proj
       checks: ' npm test \n\n npm run lint ',
       mode: 'debug',
       criteria: 'Works',
+      steps: 'Reproduce → fix → test → review',
+      stopConditions: 'Ask before changing public interfaces.',
     },
   });
   const rows = await createWorkflowTemplates(directory).action();
   const saved = rows.find((row) => !row.builtin);
   assert.equal(saved.checks, 'npm test\nnpm run lint');
   assert.equal(saved.mode, 'debug');
+  assert.equal(saved.steps, 'Reproduce → fix → test → review');
+  assert.equal(saved.stopConditions, 'Ask before changing public interfaces.');
   const original = { autoCheck: false, checkCommands: 'old check' };
   assert.deepEqual(workflowProject(original, saved.checks), { autoCheck: true, checkCommands: saved.checks });
   assert.equal(original.checkCommands, 'old check');

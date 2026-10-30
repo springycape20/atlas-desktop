@@ -51,6 +51,9 @@ test('Assistant context exclusions affect the actual provider request and start 
     selection: { instructions: false },
   });
   assert.equal(preview.sections[0].included, false);
+  assert.equal(preview.budget.rows.find((row) => row.id === 'instructions').estimatedTokens, 0);
+  assert.ok(preview.budget.rows.find((row) => row.id === 'prompt').estimatedTokens > 0);
+  assert.equal(preview.budget.complete, false);
   assert.match(preview.sections[0].text, /PROJECT_PRIVATE_MARKER/);
   await assert.rejects(h.handlers.get('atlas:context-preview')({}, { cwd }), /Untrusted/);
   await h.assistantService.flush();

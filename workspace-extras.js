@@ -1098,6 +1098,30 @@
     $id('prompt').focus();
   }
   window.atlasWorkspace = {
+    handoverDraft: async (draft, scope) => {
+      profiles = await api.projects();
+      const profile = profiles.find((row) => row.id === draft.profileId);
+      if (draft.profileId && (!profile || profile.cwd.toLowerCase() !== draft.cwd.toLowerCase()))
+        throw Error(
+          'The source project profile changed or is unavailable. Review its folder/instructions before drafting.',
+        );
+      if (scope === 'colab') {
+        await window.atlasColab.ready;
+        window.atlasColab.handoverDraft(draft, profile);
+      } else {
+        if (document.getElementById('prompt').value.trim())
+          throw Error('Save or clear the current Assistant draft first.');
+        window.atlasAssistant.newChat();
+        assistantProfile = profile?.id || '';
+        localStorage.setItem('atlas.project', assistantProfile);
+        setPath(draft.cwd);
+        window.atlasColab.selectAssistant();
+        const input = document.getElementById('prompt');
+        input.value = draft.text;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      renderAttachments();
+    },
     addAttachments,
     open: { projects: showProjects, history: showHistory, diagnostics: showDiagnostics },
     importChats: showImport,

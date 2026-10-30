@@ -238,6 +238,7 @@ class CodexConnection {
     cwd,
     settings,
     sessionId,
+    preparePrompt,
     internal = false,
     onText = () => {},
     onSession = () => {},
@@ -285,6 +286,8 @@ class CodexConnection {
       this.internalSessions.add(result.thread.id);
     }
     const threadId = result.thread.id;
+    if (preparePrompt)
+      prompt = preparePrompt({ sessionId: threadId, resumed: Boolean(sessionId) && threadId === sessionId });
     onSession(threadId);
     if (signal?.aborted) throw Error('Job cancelled.');
     if (this.turns.has(threadId)) throw Error('This Codex conversation is already running.');

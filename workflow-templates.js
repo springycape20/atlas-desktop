@@ -88,6 +88,11 @@ function createWorkflowTemplates(directory) {
           criteria: String(input.criteria || '').slice(0, 4000),
           outOfScope: String(input.outOfScope || '').slice(0, 2000),
           checks: cleanChecks(input.checks),
+          steps: String(input.steps || '').slice(0, 6000),
+          stopConditions: String(
+            input.stopConditions ||
+              'Do not complete until required checks pass; ask for input when a required decision or permission is unresolved.',
+          ).slice(0, 2000),
           builtin: false,
         };
         rows = rows.filter((item) => item.id !== id).concat(row);
