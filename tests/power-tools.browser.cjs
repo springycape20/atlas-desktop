@@ -1,3 +1,4 @@
+const { offscreenFrame } = require('./fixtures/offscreen-frame.cjs');
 const { app, BrowserWindow, protocol } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -48,20 +49,20 @@ app.whenReady().then(async () => {
     const shots = path.join(root, '.handover', 'power-ui');
     fs.mkdirSync(shots, { recursive: true });
     await new Promise((r) => setTimeout(r, 150));
-    fs.writeFileSync(path.join(shots, 'context.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'context.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(`atlasPower.show('Performance')`);
     await new Promise((r) => setTimeout(r, 150));
-    fs.writeFileSync(path.join(shots, 'performance.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'performance.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(
       `(async()=>{await atlasPower.show('Recovery');document.querySelector('#powerDialog details').open=true;const b=[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Preview restore to before task');b.click();await new Promise(r=>setTimeout(r,30));if(powerCalls.some(r=>r.action==='restore'))throw Error('Restore ran without confirmation');if(!document.querySelector('#powerDialog').textContent.includes('Restore 1 file'))throw Error('Restore confirmation missing');})()`,
     );
     await new Promise((r) => setTimeout(r, 150));
-    fs.writeFileSync(path.join(shots, 'recovery.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'recovery.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(
       `(async()=>{atlas.workflows=async()=>[{id:'fixture',name:'Voice bug workflow',task:'Reproduce and fix the voice bug',mode:'debug',criteria:'Reproduction passes after the fix',checks:'npm test',builtin:false}];await atlasPower.show('Workflows');const picker=document.querySelector('#powerDialog select');picker.value='fixture';picker.dispatchEvent(new Event('change'));})()`,
     );
     await new Promise((r) => setTimeout(r, 150));
-    fs.writeFileSync(path.join(shots, 'workflows.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'workflows.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(
       `(async()=>{await atlasColab.ready;[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Use draft in Colab').click();await new Promise(r=>setTimeout(r,30));const chat=atlasColab.current();if(chat.draft!=='Reproduce and fix the voice bug'||chat.workflowChecks!=='npm test'||chat.busy)throw Error('Workflow did not produce an unsent draft');await atlasPower.show('Workflows');})()`,
     );
@@ -71,7 +72,7 @@ app.whenReady().then(async () => {
     );
     win.setContentSize(1280, 800);
     await new Promise((r) => setTimeout(r, 150));
-    fs.writeFileSync(path.join(shots, 'parallel.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'parallel.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(
       `(async()=>{[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Queue batch for review').click();await new Promise(r=>setTimeout(r,30));const request=powerCalls.find(r=>r.action==='add-batch');if(!request||request.tasks.length!==2||request.checks!=='npm test')throw Error('Batch request incomplete');if(powerCalls.some(r=>r.action==='start'))throw Error('Batch started without Start');})()`,
     );
@@ -84,7 +85,7 @@ app.whenReady().then(async () => {
       `(async()=>{atlas.localModel=async()=>['fixture:8b'];atlas.saveSettings=async next=>{powerCalls.push({action:'save-local-settings',settings:next});return next;};await atlasPower.show('Local models');document.querySelector('#localModelName').value='fixture:8b';document.querySelector('#localModelEnabled').checked=true;})()`,
     );
     await new Promise((r) => setTimeout(r, 150));
-    fs.writeFileSync(path.join(shots, 'local-models.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'local-models.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(
       `(async()=>{[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Save local model settings').click();await new Promise(r=>setTimeout(r,30));if(!powerCalls.some(r=>r.action==='save-local-settings'&&r.settings.localModelEnabled))throw Error('Local settings not saved');if(!document.querySelector('.local-model-state').textContent.includes('fixture:8b'))throw Error('Local mode indicator missing');})()`,
     );
@@ -108,7 +109,7 @@ app.whenReady().then(async () => {
       await win.webContents.executeJavaScript(
         `(()=>{const dialog=document.querySelector('#powerDialog'),rect=dialog.getBoundingClientRect();if(rect.right>innerWidth+1||dialog.scrollWidth>dialog.clientWidth+2)throw Error('Handover dialog overflow');})()`,
       );
-      fs.writeFileSync(path.join(shots, 'milestone-' + width + '.png'), (await win.webContents.capturePage()).toPNG());
+      fs.writeFileSync(path.join(shots, 'milestone-' + width + '.png'), (await offscreenFrame(win)).toPNG());
     }
     await win.webContents.executeJavaScript(`(async()=>{
       document.querySelector('#prompt').value='';
@@ -122,11 +123,11 @@ app.whenReady().then(async () => {
     })()`);
     win.setContentSize(1280, 800);
     await new Promise((r) => setTimeout(r, 100));
-    fs.writeFileSync(path.join(shots, 'efficiency-settings.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'efficiency-settings.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(
       `(async()=>{atlas.contextPreview=async()=>({sections:[],budget:{estimatedTokens:18000,imageCount:2,overBudget:true,rows:[{id:'prompt',label:'Current request',included:true,estimatedTokens:300},{id:'history',label:'Recent conversation',included:true,estimatedTokens:17700}],note:'Text estimate only; hidden provider history and image cost are unknown.',expectedPasses:'One initial model turn; repairs can add calls.'},note:'Local context fixture'});await atlasPower.show('Context');await new Promise(r=>setTimeout(r,60));if(!document.querySelector('.power-body').textContent.includes('18,000'))throw Error('Request budget missing');if(!document.querySelector('.power-body').textContent.includes('image tokens unknown'))throw Error('Image estimate disclosure missing');})()`,
     );
-    fs.writeFileSync(path.join(shots, 'request-budget.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'request-budget.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(`(async()=>{
       atlasColab.metadata(atlasColab.current().id,{draft:''});const previous=atlasColab.history().map(c=>c.id);
       await atlasPower.show('Milestone handovers');document.querySelector('#powerDialog details').open=true;
@@ -140,7 +141,7 @@ app.whenReady().then(async () => {
       if(!document.querySelector('#powerDialog pre').textContent.includes('fixture assertion'))throw Error('Check log preview missing');
       if(!document.querySelector('.power-status').textContent.includes('64 KB'))throw Error('Log preview truncation not disclosed');
     })()`);
-    fs.writeFileSync(path.join(shots, 'check-logs.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'check-logs.png'), (await offscreenFrame(win)).toPNG());
     await win.webContents.executeJavaScript(`(async()=>{
       window.sessionCalls=[];
       atlas.jobs=async()=>[{id:'session-task',prompt:'Fix startup',cwd:'C:/Projects/ATLAS',status:'completed',endedAt:2,verification:{results:[{command:'npm test',status:'failed',exitCode:1}]}}];
@@ -160,7 +161,7 @@ app.whenReady().then(async () => {
       }};
       await atlasPower.show('Project map');[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Build local project map').click();await new Promise(r=>setTimeout(r,30));if(!document.querySelector('.power-body').textContent.includes('Declared package entry point'))throw Error('Project map missing');
     })()`);
-    fs.writeFileSync(path.join(shots, 'project-map.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(shots, 'project-map.png'), (await offscreenFrame(win)).toPNG());
     for (const name of [
       'Trial checkpoints',
       'Context freshness',
@@ -180,7 +181,7 @@ app.whenReady().then(async () => {
         );
         fs.writeFileSync(
           path.join(shots, name.toLowerCase().replaceAll(' ', '-') + '-' + width + '.png'),
-          (await win.webContents.capturePage()).toPNG(),
+          (await offscreenFrame(win)).toPNG(),
         );
       }
     }
