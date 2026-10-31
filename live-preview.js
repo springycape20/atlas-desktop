@@ -55,6 +55,13 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       }
     }
   };
+  async function capturePreview() {
+    try {
+      return await win.webContents.capturePage();
+    } catch {
+      throw Error('ATLAS could not capture the preview window. Make sure it is open and visible, then try again.');
+    }
+  }
   async function open(cwd, value) {
     const url = previewUrl(value);
     cwd = await guard.assertProject(cwd);
@@ -125,7 +132,18 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
         event.preventDefault();
       }
     });
-    await win.loadURL(url.href);
+    try {
+      await win.loadURL(url.href);
+    } catch (error) {
+      if (win && !win.isDestroyed()) win.destroy();
+      throw Error(
+        'Nothing could be loaded from ' +
+          url.href +
+          '. Start the project server, then open the preview. (' +
+          String(error.code || error.message).slice(0, 100) +
+          ')',
+      );
+    }
     return state();
   }
   async function start(cwd, request) {
@@ -278,10 +296,13 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
     if (request.action === 'viewport') {
       if (![390, 768, 1280].includes(request.width)) throw Error('Choose a supported viewport.');
       win.setContentSize(request.width, 720);
+      const [actualWidth, actualHeight] = win.getContentSize();
+      if (actualWidth !== request.width || actualHeight !== 720)
+        win.setContentSize(2 * request.width - actualWidth, 2 * 720 - actualHeight);
       return { width: win.getContentSize()[0], height: win.getContentSize()[1] };
     }
     if (['visual-baseline', 'visual-compare'].includes(request.action)) {
-      const image = await win.webContents.capturePage(),
+      const image = await capturePreview(),
         png = image.toPNG(),
         url = win.webContents.getURL();
       if (image.isEmpty() || png.length > 8 * 1048576) throw Error('Screenshot is empty or exceeds 8 MiB.');
@@ -332,7 +353,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
         picked && typeof picked.selector === 'string'
           ? { selector: picked.selector.slice(0, 1000), text: String(picked.text || '').slice(0, 500) }
           : null;
-      const image = await win.webContents.capturePage(),
+      const image = await capturePreview(),
         location = path.join(directory, 'preview-' + randomUUID() + '.png');
       await fs.mkdir(directory, { recursive: true });
       await fs.writeFile(location, image.toPNG());

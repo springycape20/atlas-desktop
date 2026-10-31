@@ -1,4 +1,10 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
+// Electron prefixes every handler error with internal text; screens should show only the message.
+const invokeRaw = ipcRenderer.invoke.bind(ipcRenderer);
+ipcRenderer.invoke = (...args) =>
+  Promise.resolve(invokeRaw(...args)).catch((error) => {
+    throw Error(String(error.message).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, ''));
+  });
 contextBridge.exposeInMainWorld('atlas', {
   onResponseText: (callback) => {
     const listener = (_event, value) => callback(value);

@@ -18,12 +18,15 @@
         'Open a local development server beside chat. Preview pages run in a separate sandbox with no ATLAS API, downloads or device permissions. Requests to other origins are blocked.',
       ),
     );
+    const labelled = (text, input) => {
+      const wrap = node('label', text);
+      wrap.append(input);
+      return wrap;
+    };
     const url = node('input');
     url.value = 'http://127.0.0.1:5173/';
-    url.setAttribute('aria-label', 'Local preview URL');
-    body.append(url);
+    body.append(labelled('Local preview URL', url));
     const recipe = node('select');
-    recipe.setAttribute('aria-label', 'Preview framework');
     for (const [id, label] of [
       ['vite', 'Vite'],
       ['next', 'Next.js'],
@@ -35,16 +38,15 @@
     port.min = '1024';
     port.max = '65535';
     port.value = '5173';
-    port.setAttribute('aria-label', 'Server port');
     const module = node('input');
     module.value = 'app';
-    module.setAttribute('aria-label', 'Flask module');
-    module.hidden = true;
+    const moduleLabel = labelled('Flask module', module);
+    moduleLabel.hidden = true;
     recipe.onchange = () => {
       port.value = recipe.value === 'next' ? '3000' : recipe.value === 'flask' ? '5000' : '5173';
-      module.hidden = recipe.value !== 'flask';
+      moduleLabel.hidden = recipe.value !== 'flask';
     };
-    body.append(recipe, port, module);
+    body.append(labelled('Preview framework', recipe), labelled('Server port', port), moduleLabel);
     const actions = node('div');
     actions.className = 'power-actions';
     body.append(actions);

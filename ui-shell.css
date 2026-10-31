@@ -643,9 +643,30 @@ body.atlas-ui {
   min-height: 36px;
   cursor: pointer;
 }
+.shell-hub > nav[hidden] {
+  display: none;
+}
+.shell-hub > nav.shell-hub-groups {
+  padding-bottom: 8px;
+  border-bottom: 0;
+}
+.shell-hub > nav.shell-hub-groups:has(+ nav[hidden]) {
+  padding-bottom: 16px;
+  border-bottom: 1px solid #29414a;
+}
 .shell-hub > nav button {
   background: transparent;
   border-color: transparent;
+}
+.shell-hub-groups button {
+  font-weight: 600;
+}
+.shell-hub-groups button[aria-pressed='true'] {
+  text-decoration: underline 2px;
+  text-underline-offset: 6px;
+}
+.shell-hub > nav:not(.shell-hub-groups) {
+  gap: 4px;
 }
 .shell-hub [role='tab'][aria-selected='true'] {
   background: #23343c;
@@ -680,6 +701,59 @@ body.atlas-ui {
   font: inherit;
   max-width: 100%;
   box-sizing: border-box;
+}
+.shell-hub-content label:has(> :is(input:not([type='checkbox'], [type='radio']), select, textarea)) {
+  display: grid;
+  gap: 4px;
+  margin-block: 0 12px;
+}
+.shell-hub-content label > :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
+  width: 100%;
+  margin: 0;
+}
+.shell-hub-content label:has(> :is([type='checkbox'], [type='radio'])) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block: 0 12px;
+}
+.shell-hub-content label:has(> :is(select:not([multiple]), input[type='datetime-local'])) {
+  max-width: 360px;
+}
+.shell-hub-content .workspace-actions {
+  margin-bottom: 12px;
+}
+.shell-hub-content > details.assistant-panel {
+  max-width: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+#agendaItems {
+  margin-top: 16px;
+}
+.shell-hub-content :is(pre, footer):empty {
+  display: none;
+}
+.shell-hub > nav:not(.shell-hub-groups) button {
+  padding-inline: 9px;
+  font-size: calc(13px * var(--atlas-text-scale, 1));
+}
+/* Some forms put the checkbox after its text; keep them all on the same side. */
+.shell-hub-content label > :is([type='checkbox'], [type='radio']) {
+  order: -1;
+}
+.shell-hub-content .assistant-panel :is(input, select, textarea) {
+  margin-inline: 0;
+}
+.shell-hub-content .assistant-panel textarea {
+  width: 100%;
+}
+#jobItems:empty::after {
+  content: 'No running or recent tasks.';
+}
+.shell-hub-content .workbench-queue-form label:has(input[type='checkbox'], select[multiple]) {
+  grid-column: 1 / -1;
 }
 :root body.atlas-ui .colab-chat-header > .session-chip {
   display: none;
