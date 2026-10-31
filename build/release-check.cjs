@@ -27,8 +27,14 @@ function recordProblems({ version, lock, lockBytes, review, changelog, notes, re
 }
 
 function run(label, command, args) {
-  const result = spawnSync(command, args, { cwd: root, stdio: 'ignore', shell: process.platform === 'win32' });
+  const result = spawnSync(command, args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 1e9,
+    shell: process.platform === 'win32',
+  });
   console.log(`${result.status === 0 ? 'pass' : 'FAIL'}  ${label}`);
+  if (result.status !== 0) console.log(`${result.stdout || ''}${result.stderr || ''}`.slice(-6000));
   return result.status === 0;
 }
 

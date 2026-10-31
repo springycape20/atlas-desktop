@@ -18,4 +18,6 @@ A real update of the installed 0.10.1 found this defect: the live feed offered 0
 
 The fixed **Restart and install** has not been run end to end, because no release newer than 0.10.3 exists for it to install. The recovery copy is tested in Electron, not through the packaged update flow. Users on 0.10.2 or older must use the installer, and the app will still offer them this update and then fail, as the release notes explain. No real Codex or Claude account and no production language server were used.
 
+The unit test for parallel batch integration in `tests/colab-jobs.test.cjs` timed out at its 45-second limit in two of about seven local runs while preparing this release, and passed on rerun. It normally takes 12 to 24 seconds and this patch does not change that code, so this appears to be timing under load, but a real intermittent hang has not been ruled out.
+
 The existing owner-authorized unsigned policy remains in effect after SignPath denial. Windows signing and legal approval are not claimed.
