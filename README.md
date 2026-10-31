@@ -1,6 +1,8 @@
 # ATLAS
 
-ATLAS 0.10.2 adds [Power tools](docs/POWER-TOOL-UPGRADES.md), which connects the twelve project capabilities and adds installed-language-server navigation, saved browser checks, visual comparisons and preview profiling. It also regroups the Tasks menu and fixes menu errors.
+ATLAS 0.10.3 fixes in-app updates. If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
+
+ATLAS 0.10.2 added [Power tools](docs/POWER-TOOL-UPGRADES.md), which connects the twelve project capabilities and adds installed-language-server navigation, saved browser checks, visual comparisons and preview profiling. It also regroups the Tasks menu and fixes menu errors.
 
 ATLAS 0.10.1 added [five model-usage efficiency controls](docs/TOKEN-EFFICIENCY.md#controls-added-in-0101) and [ten work-session improvements](docs/WORK-SESSIONS.md): context budgets, guarded reference reuse, optional stronger-model repair, isolated trials, project maps, freshness checks, reviewed handoffs, a review inbox, acceptance evidence, local preparation and bug-report exports. It retains the [interactive terminals and project tools](docs/SELECTED-POWER-UPGRADES.md) from 0.10.0.
 

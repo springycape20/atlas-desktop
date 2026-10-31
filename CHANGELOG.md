@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.10.3 — 1 November 2026
 
-- Fixes **Restart and install**, which failed with an "Invalid package" error when copying the current version for recovery and so stopped every in-app update. Versions up to 0.10.2 must install the next release from the downloaded installer.
+- Fixes **Restart and install**, which failed with an "Invalid package" error when copying the current version for recovery and so stopped every in-app update. Versions up to 0.10.2 cannot update themselves to this release: download its installer instead.
 - Removes a partial recovery copy when preparing it fails, and gives a long reminder title its own error message.
 - Adds `npm run release:check`, and a menu audit with sample records (`npm run test:menu-ui`), including a mode that accepts approvals in a throwaway project.
 
