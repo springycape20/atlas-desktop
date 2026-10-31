@@ -1,6 +1,6 @@
-# Power tools (unreleased)
+# Power tools (0.10.2)
 
-Open **Tasks > Power tools** for the twelve capabilities below. This development update fills the language-server, browser-testing, visual-comparison and preview-profiling gaps and connects the existing workflow tools. It does not change the published 0.10.1 installer.
+Open **Tasks > Power tools** for the twelve capabilities below. This update fills the language-server, browser-testing, visual-comparison and preview-profiling gaps and connects the existing workflow tools. These additions are not in the older 0.10.1 installer.
 
 | Capability | Where to use it | Behavior and limits |
 | --- | --- | --- |

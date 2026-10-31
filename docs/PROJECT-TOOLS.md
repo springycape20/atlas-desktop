@@ -1,6 +1,6 @@
 # Project tools (0.10.0)
 
-For the local development additions, see [Power tools (unreleased)](POWER-TOOL-UPGRADES.md): installed language servers, saved browser checks, screenshot comparisons and preview profiling. Existing published behavior below remains available.
+ATLAS 0.10.2 adds [Power tools](POWER-TOOL-UPGRADES.md): installed language servers, saved browser checks, screenshot comparisons and preview profiling. The behavior below remains available.
 
 Use **Tasks** for running work, the queue, parallel batches, recovery, reminders and approvals. **Library** contains memories and workflows. **Settings > Models** opens local-model configuration, and **Settings > Diagnostics** opens performance measurements. **Context** beside either composer previews context for the current chat. These tools are included in ATLAS 0.10.0.
 
