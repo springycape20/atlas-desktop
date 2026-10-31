@@ -55,7 +55,7 @@ app.whenReady().then(async () => {
       if (file === '__mock.js')
         return new Response(
           mock +
-            `window.atlas.projectWorkbench=async request=>request.action==='health'?{name:'Demo project',types:['Node.js'],checks:['npm test'],results:[{name:'Node.js',status:'available',detail:'Fixture tool'}],note:'No scripts executed.'}:request.action==='list'?[]:{id:'checkpoint'};window.atlas.livePreview=async request=>request.action==='capture'?{attachments:[{id:'visual-screenshot',name:'preview.png',type:'image',size:100}],selected:{selector:'button#target',text:'Change this'},cwd:${JSON.stringify(project)}}:{open:true,running:false,output:'src/app.ts:12:3 example compile error'};`,
+            `window.atlas.projectWorkbench=async request=>request.action==='health'?{name:'Demo project',types:['Node.js'],checks:['npm test'],results:[{name:'Node.js',status:'available',detail:'Fixture tool'}],note:'No scripts executed.'}:request.action==='list'?[]:{id:'checkpoint'};window.atlas.livePreview=async request=>request.action==='browser-recipes'?[]:request.action==='capture'?{attachments:[{id:'visual-screenshot',name:'preview.png',type:'image',size:100}],selected:{selector:'button#target',text:'Change this'},cwd:${JSON.stringify(project)}}:{open:true,running:false,output:'src/app.ts:12:3 example compile error'};`,
           { headers: { 'Content-Type': 'application/javascript' } },
         );
       if (file === '__file') {

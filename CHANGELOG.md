@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.2 — 31 October 2026
+
+- Groups the Tasks menu under Work, Review, Project, Context, Connect and Power tools, and aligns forms across its sections.
+- Removes internal IPC prefixes from error messages, stops a reopened section appearing blank, and stops Revoke all reporting a false error.
+- Labels Reminders, defaults When to the next hour and explains missing or past values. Preview load failures read clearly, viewport sizes are exact and tool results no longer show raw JSON.
+- Adds installed stdio language-server definitions, references and diagnostics with per-project configuration and approval before launch.
+- Adds saved browser interaction/assertion recipes, stop-on-failure execution, console error evidence and unsent evidence drafts in the local preview.
+- Adds preview screenshot baselines, measured pixel comparisons and renderer/DOM/navigation profiling with matching-scenario baseline deltas.
+- Adds Tasks > Power tools with direct access to twelve capabilities, and browser-change, measured-performance and verified-milestone workflow starters.
+- Retains existing repair loops, isolated task workspaces, project memory, ranked context, checkpoint recovery, model routing and local-model support. No new packages or publisher collection are added.
+
 ## 0.10.1 — 30 October 2026
 
 - Adds isolated project trials with comparison/export, project maps, ordered recipe instructions, context freshness, explicit provider handoffs, a review inbox, acceptance evidence, local solution search, offline preparation and reviewed bug-report export. See the work-session guide for bounds and review steps.

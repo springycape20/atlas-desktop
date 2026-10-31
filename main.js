@@ -1343,6 +1343,29 @@ function persistJobs() {
 }
 
 function setupIpc() {
+  let languageServer;
+  ipcMain.handle('atlas:language-server', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (!languageServer) {
+      languageServer = require('./language-server').createLanguageServer({
+        directory: app.getPath('userData'),
+        files: require('./project-files').createProjectFiles({ denied: () => integrations().deniedFiles() }),
+        approve: async (message, detail) =>
+          (
+            await dialog.showMessageBox(mainWindow, {
+              type: 'question',
+              message,
+              detail,
+              buttons: ['Cancel', 'Allow once'],
+              defaultId: 0,
+              cancelId: 0,
+            })
+          ).response === 1,
+      });
+      app.on('before-quit', () => languageServer.dispose());
+    }
+    return languageServer.action(request);
+  });
   let livePreview;
   ipcMain.handle('atlas:live-preview', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -1358,7 +1381,7 @@ function setupIpc() {
               type: 'question',
               message,
               detail,
-              buttons: ['Cancel', 'Start server'],
+              buttons: ['Cancel', 'Allow once'],
               defaultId: 0,
               cancelId: 0,
             })
@@ -2753,6 +2776,7 @@ async function createWindow() {
         '/model-routing-ui.js',
         '/efficiency-ui.js',
         '/work-sessions-ui.js',
+        '/power-upgrades-ui.js',
         '/hardware-ui.js',
         '/planning-ui.js',
         '/environment-ui.js',

@@ -30,6 +30,42 @@ const builtins = [
     checks: '',
   },
   {
+    id: 'builtin-browser',
+    name: 'Verify a browser change',
+    mode: 'build',
+    task: 'Implement the requested browser change: ',
+    steps:
+      'Inspect current behavior. Capture a preview baseline. Make the scoped change. Run project checks and browser assertions. Compare screenshots at desktop and narrow widths. Review the final diff.',
+    criteria:
+      'Requested interactions pass.\nBrowser evidence and changed screenshots are reviewed.\nProject checks pass.',
+    outOfScope: 'Publishing or changing unrelated behavior.',
+    checks: '',
+  },
+  {
+    id: 'builtin-performance',
+    name: 'Improve measured performance',
+    mode: 'build',
+    task: 'Improve this measured project performance problem: ',
+    steps:
+      'Define a reproducible scenario. Record baseline timings and memory. Identify an evidence-backed bottleneck. Change one cause. Repeat measurements under the same conditions. Run checks and compare the diff.',
+    criteria:
+      'Baseline and candidate use the same scenario.\nActual measurements and limitations are reported.\nBehavior and project checks still pass.',
+    outOfScope: 'Speculative rewrites or unsupported speed claims.',
+    checks: '',
+  },
+  {
+    id: 'builtin-resumable',
+    name: 'Build in verified milestones',
+    mode: 'build',
+    task: 'Implement this larger task in small verified milestones: ',
+    steps:
+      'Inspect architecture and agree acceptance criteria. Divide work into ordered milestones. Complete a focused milestone and execute its checks. Preserve progress and remaining work in a reviewed milestone handover. Resume from verified evidence. Review the combined result.',
+    criteria:
+      'Each completed milestone has executed check evidence.\nRemaining work is explicit.\nThe combined result meets acceptance criteria.',
+    outOfScope: 'Replaying completed work or silently exceeding scope.',
+    checks: '',
+  },
+  {
     id: 'builtin-release',
     name: 'Prepare a release',
     mode: 'build',

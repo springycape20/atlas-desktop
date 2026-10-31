@@ -124,6 +124,46 @@ app.whenReady().then(async () => {
     await new Promise((r) => setTimeout(r, 200));
     fs.writeFileSync(path.join(out, 'tasks.png'), (await win.webContents.capturePage()).toPNG());
     await win.webContents.executeJavaScript(`(async()=>{
+      const groups=()=>[...document.querySelectorAll('.shell-hub-groups button')];
+      const pressed=()=>groups().find(b=>b.getAttribute('aria-pressed')==='true')?.textContent;
+      const tablist=atlasUi.hub.querySelector('[role=tablist]');
+      if(groups().some(b=>b.textContent==='More'))throw Error('A task section has no group');
+      if(pressed()!=='Work'||tablist.children.length>10)throw Error('Tasks did not open one compact group');
+      await atlasUi.open('tasks','Check logs');
+      if(pressed()!=='Review'||tablist.querySelector('[aria-selected=true]')?.textContent!=='Check logs')throw Error('Direct open did not reveal its group');
+      groups().find(b=>b.textContent==='Power tools').click();
+      await new Promise(r=>setTimeout(r,80));
+      if(!tablist.hidden||!atlasUi.hub.textContent.includes('Choose the next step'))throw Error('Power tools group did not open directly');
+      for(const group of groups().map(b=>b.textContent)){
+        groups().find(b=>b.textContent===group).click();
+        await new Promise(r=>setTimeout(r,40));
+        for(const name of [...tablist.children].map(b=>b.textContent).filter(name=>name!=='Terminal')){
+          await atlasUi.open('tasks',name);
+          await new Promise(r=>setTimeout(r,60));
+          const panel=document.getElementById('shellHubContent');
+          if(panel.scrollWidth>panel.clientWidth+1)throw Error(name+' overflows sideways');
+        }
+      }
+      toast("Error invoking remote method 'atlas:x': Error: Readable");
+      if(document.getElementById('toast').textContent!=='Readable')throw Error('Toast kept the internal IPC prefix');
+      await atlasUi.open('tasks','Reminders');
+      if(!(new Date(document.getElementById('reminderDate').value).getTime()>Date.now()))throw Error('Reminder time was not prefilled');
+      document.getElementById('reminderSave').click();
+      await new Promise(r=>setTimeout(r,40));
+      if(document.getElementById('toast').textContent!=='Enter what the reminder is for.')throw Error('Empty reminder message is unclear');
+    })()`);
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(out, 'tasks-reminders.png'), (await win.webContents.capturePage()).toPNG());
+    await win.webContents.executeJavaScript(`atlasUi.open('tasks','Queue')`);
+    await new Promise((r) => setTimeout(r, 200));
+    fs.writeFileSync(path.join(out, 'tasks-queue.png'), (await win.webContents.capturePage()).toPNG());
+    const [fullWidth, fullHeight] = win.getContentSize();
+    win.setContentSize(390, 800);
+    await new Promise((r) => setTimeout(r, 200));
+    fs.writeFileSync(path.join(out, 'tasks-390.png'), (await win.webContents.capturePage()).toPNG());
+    win.setContentSize(fullWidth, fullHeight);
+    await new Promise((r) => setTimeout(r, 100));
+    await win.webContents.executeJavaScript(`(async()=>{
       const wait=()=>new Promise(r=>setTimeout(r,40));
       atlasUi.hub.close();await wait();
       document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));

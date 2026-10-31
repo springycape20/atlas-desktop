@@ -15,6 +15,18 @@
     for (const [id, name] of rows) input.append(new Option(name, id));
     return input;
   };
+  const plain = (value, indent = '') => {
+    if (value === null || value === undefined) return indent + 'Nothing to show.';
+    if (value.cancelled) return indent + 'Cancelled.';
+    if (typeof value !== 'object') return indent + String(value);
+    const rows = Object.entries(value).map(([key, row]) => {
+      const name = key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+      return row && typeof row === 'object'
+        ? indent + name + ':\n' + plain(row, indent + '  ')
+        : indent + name + ': ' + String(row);
+    });
+    return rows.join('\n') || indent + 'None.';
+  };
   const call = (tool, action, extra = {}) => api.selectedTools({ ...p.request(), tool, action, ...extra });
   function register(name, render, route = 'tasks') {
     p.register(name, async (ui) => {
@@ -115,7 +127,10 @@
       for (const report of await call('tests', 'read', { jobId: choice.value })) {
         output.append(
           n('h3', report.command),
-          n('p', report.format + ' · ' + JSON.stringify(report.summary) + (report.limited ? ' · limited' : '')),
+          n(
+            'p',
+            report.format + ' · ' + plain(report.summary).replaceAll('\n', ', ') + (report.limited ? ' · limited' : ''),
+          ),
         );
         for (const test of report.tests.filter((row) => filter.value === 'all' || row.status === filter.value)) {
           const item = n('details');
@@ -144,8 +159,7 @@
       out = n('pre');
     b(
       'Check versions…',
-      async () =>
-        (out.textContent = JSON.stringify(await call('preflight', 'check', { requirements: text.value }), null, 2)),
+      async () => (out.textContent = plain(await call('preflight', 'check', { requirements: text.value }))),
     );
     body.append(out);
   });
@@ -158,15 +172,9 @@
           'Backups include local chats, settings, memories, attachments and task records. They are compressed, not encrypted. Project worktrees, downloaded runtimes and provider-owned histories are excluded.',
         ),
       );
-      b(
-        'Export local-record backup…',
-        async () => (status.textContent = JSON.stringify(await call('backup', 'export'))),
-      );
+      b('Export local-record backup…', async () => (status.textContent = plain(await call('backup', 'export'))));
       b('Review and restore backup…', () => call('backup', 'restore'));
-      b(
-        'Inspect update recovery',
-        async () => (status.textContent = JSON.stringify(await call('updates', 'status'), null, 2)),
-      );
+      b('Inspect update recovery', async () => (status.textContent = plain(await call('updates', 'status'))));
       b('Launch preserved version and restore data…', () => call('updates', 'rollback'));
     },
     'diagnostics',
@@ -211,7 +219,7 @@
       });
       b('Delete reviewed selection…', async () => {
         if (!preview || !selected.size) throw Error('Review and select records first.');
-        status.textContent = JSON.stringify(
+        status.textContent = plain(
           await call('storage', 'remove', { days: preview.days, token: preview.token, paths: [...selected] }),
         );
       });
@@ -313,7 +321,7 @@
       const text = field(body, n, 'Text to inspect', 'textarea', p.request().prompt || ''),
         out = n('pre');
       b('Inspect locally', async () => {
-        out.textContent = JSON.stringify(await call('sensitive', 'inspect', { text: text.value }), null, 2);
+        out.textContent = plain(await call('sensitive', 'inspect', { text: text.value }));
         status.textContent = 'Nothing sent to a provider.';
       });
       body.append(out);
@@ -334,7 +342,7 @@
       }
       for (const row of value.contextSelection?.omitted || [])
         out.append(n('p', 'Omitted ' + row.path + ' · ' + row.reason));
-      status.textContent = JSON.stringify(value.contextSelection);
+      status.textContent = plain(value.contextSelection);
     });
   });
   register('Multi-root workspaces', async ({ body, node: n, button: b }) => {

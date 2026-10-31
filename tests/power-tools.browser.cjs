@@ -201,6 +201,46 @@ app.whenReady().then(async () => {
       await atlasPower.show('Workflows');document.querySelector('#workflow-task').value='Fix startup';document.querySelector('#workflow-steps').value='Reproduce, fix, test, review';document.querySelector('#workflow-stopConditions').value='Ask before API changes';[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Use draft in Colab').click();await new Promise(r=>setTimeout(r,40));if(!atlasColab.current().draft.includes('Reproduce, fix, test, review')||!atlasColab.current().draft.includes('Ask before API changes'))throw Error('Recipe steps or stopping conditions missing from unsent draft');
       await atlasPower.show('Review inbox');
     })()`);
+    await win.webContents.executeJavaScript(`(async()=>{
+      window.upgradeCalls=[];
+      atlas.languageServer=async request=>{upgradeCalls.push(request);if(request.action==='settings')return {config:{command:'C:/Tools/node.exe',args:['C:/Tools/server.js','--stdio'],languageId:'javascript'},running:false};if(request.action==='definition')return {rows:[{path:'src/app.js',line:3,column:1}],note:'Fixture navigation result'};return {saved:true};};
+      await atlasPower.show('Power tools');
+      if(document.querySelectorAll('.upgrade-tool-row').length!==12)throw Error('Power tool overview incomplete');
+      await atlasPower.show('Language intelligence');
+      document.querySelector('[aria-label="Project file"]').value='src/app.js';
+      [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Save server configuration').click();await new Promise(r=>setTimeout(r,30));
+      if(upgradeCalls.some(r=>r.action==='definition'))throw Error('Saving a server ran a query');
+      [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Go to definition').click();await new Promise(r=>setTimeout(r,30));
+      if(!document.querySelector('.power-body').textContent.includes('Open src/app.js:3'))throw Error('Language navigation result missing');
+      atlas.livePreview=async request=>{upgradeCalls.push(request);if(request.action==='browser-recipes')return [];if(request.action==='status')return {open:true,running:false,output:'Fixture server ready'};if(request.action==='profile')return {domNodes:24,jsHeapMB:12,rendererWorkingSetMB:48,rendererCpuPercent:0,domReadyMs:15,loadMs:null,delta:{domNodes:1,jsHeapMB:-2},note:'Fixture measurements for UI validation.'};if(request.action==='browser-checks')return {status:'passed',results:[{action:'assert-visible',status:'passed',durationMs:2}],browserErrors:[],skipped:0};return {};};
+      await atlasPower.show('Live preview');
+      [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Run browser checks…').click();await new Promise(r=>setTimeout(r,30));
+      if(!document.querySelector('.power-body').textContent.includes('Browser checks · passed'))throw Error('Browser check evidence missing');
+    })()`);
+    for (const name of ['Power tools', 'Language intelligence', 'Live preview']) {
+      await win.webContents.executeJavaScript(`atlasPower.show(${JSON.stringify(name)})`);
+      for (const width of [1280, 768, 390]) {
+        win.setContentSize(width, 800);
+        await new Promise((r) => setTimeout(r, 60));
+        await win.webContents.executeJavaScript(
+          `(()=>{const d=document.querySelector('.power-body');if(d.scrollWidth>d.clientWidth+2)throw Error('Upgrade panel overflow');for(const input of d.querySelectorAll('input,textarea,select'))if(input.getBoundingClientRect().right>d.getBoundingClientRect().right+1)throw Error('Upgrade field overflow');})()`,
+        );
+        fs.writeFileSync(
+          path.join(shots, name.toLowerCase().replaceAll(' ', '-') + '-' + width + '.png'),
+          (await offscreenFrame(win)).toPNG(),
+        );
+        if (name === 'Live preview') {
+          await win.webContents.executeJavaScript(
+            `(async()=>{[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Measure project preview').click();await new Promise(r=>setTimeout(r,30));const profile=document.querySelector('.preview-profile');if(!profile.textContent.includes('12 MB')||!profile.textContent.includes('-2 MB')||!profile.textContent.includes('0%'))throw Error('Profile units or zero values missing');document.querySelector('.power-body').scrollTop=100000;})()`,
+          );
+          fs.writeFileSync(path.join(shots, 'project-profile-' + width + '.png'), (await offscreenFrame(win)).toPNG());
+          await win.webContents.executeJavaScript(
+            `[...document.querySelectorAll('.power-body h3')].find(b=>b.textContent==='Repeatable browser checks').scrollIntoView({block:'start'})`,
+          );
+          fs.writeFileSync(path.join(shots, 'browser-checks-' + width + '.png'), (await offscreenFrame(win)).toPNG());
+        }
+      }
+    }
     clearTimeout(timeout);
     const inspection = await win.webContents.executeJavaScript(
       `(()=>{const live=document.querySelector('#powerDialog'),copy=live.cloneNode(true);[...live.querySelectorAll('input')].forEach((input,index)=>{const target=copy.querySelectorAll('input')[index];target.setAttribute('value',input.value);if(input.checked)target.setAttribute('checked','');else target.removeAttribute('checked');});const styles=[...document.querySelectorAll('style')].map(item=>item.outerHTML).join('');return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>ATLAS captured demo dialog</title>'+styles+'<style>body{margin:0;background:#0c0d0f}.power-dialog{display:block;position:relative;margin:24px auto;inset:auto}</style></head><body><main>'+copy.outerHTML.replace('<dialog','<section').replace('</dialog>','</section>')+'</main></body></html>';})()`,

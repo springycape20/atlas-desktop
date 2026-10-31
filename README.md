@@ -1,6 +1,8 @@
 # ATLAS
 
-ATLAS 0.10.1 adds [five model-usage efficiency controls](docs/TOKEN-EFFICIENCY.md#controls-added-in-0101) and [ten work-session improvements](docs/WORK-SESSIONS.md): context budgets, guarded reference reuse, optional stronger-model repair, isolated trials, project maps, freshness checks, reviewed handoffs, a review inbox, acceptance evidence, local preparation and bug-report exports. It retains the [interactive terminals and project tools](docs/SELECTED-POWER-UPGRADES.md) from 0.10.0.
+ATLAS 0.10.2 adds [Power tools](docs/POWER-TOOL-UPGRADES.md), which connects the twelve project capabilities and adds installed-language-server navigation, saved browser checks, visual comparisons and preview profiling. It also regroups the Tasks menu and fixes menu errors.
+
+ATLAS 0.10.1 added [five model-usage efficiency controls](docs/TOKEN-EFFICIENCY.md#controls-added-in-0101) and [ten work-session improvements](docs/WORK-SESSIONS.md): context budgets, guarded reference reuse, optional stronger-model repair, isolated trials, project maps, freshness checks, reviewed handoffs, a review inbox, acceptance evidence, local preparation and bug-report exports. It retains the [interactive terminals and project tools](docs/SELECTED-POWER-UPGRADES.md) from 0.10.0.
 
 **A local Windows desktop assistant for Codex and Claude Code.** Chat with either model in one app, talk to it with local speech, or hand a task to **Colab**, where Codex and Claude build, check and review each other's work before you see one reviewed result. Verification labels name the checks ATLAS actually ran; AI output and model review can still be wrong.
 

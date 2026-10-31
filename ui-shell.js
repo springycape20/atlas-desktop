@@ -56,6 +56,8 @@
   title.id = 'shellHubTitle';
   header.append(title);
   actionButton('Close', () => hub.close(), header);
+  const groups = node('nav', undefined, 'shell-hub-groups');
+  groups.setAttribute('aria-label', 'Section groups');
   const tabs = node('nav');
   tabs.setAttribute('aria-label', 'Sections');
   tabs.setAttribute('role', 'tablist');
@@ -63,7 +65,7 @@
   content.className = 'shell-hub-content';
   content.id = 'shellHubContent';
   content.setAttribute('role', 'tabpanel');
-  hub.append(header, tabs, content);
+  hub.append(header, groups, tabs, content);
   document.body.append(hub);
   let cleanup,
     generation = 0,
@@ -98,28 +100,71 @@
     library: { Memories: panel(memoryPanel, () => void refreshMemory()), Workflows: power('Workflows') },
     diagnostics: { Performance: power('Performance'), 'Response timing': panel(latencyPanel) },
   };
-  async function renderTab(route, name) {
-    const revision = ++generation;
-    cleanup?.();
-    cleanup = null;
-    content.replaceChildren();
-    for (const button of tabs.querySelectorAll('button')) {
-      const active = button.dataset.section === name;
-      button.setAttribute('aria-selected', String(active));
-      button.tabIndex = active ? 0 : -1;
-    }
-    content.setAttribute('aria-labelledby', 'shell-tab-' + name.replaceAll(' ', '-'));
-    const restore = await sections[route][name]();
-    if (revision !== generation || !hub.open) restore?.();
-    else cleanup = restore;
-  }
-  async function openHub(route, name) {
-    if (route === 'settings') return settingsButton.click();
-    if (!sections[route]) return;
-    focusBefore = document.activeElement;
-    title.textContent = route === 'tasks' ? 'Tasks' : route === 'library' ? 'Library' : 'Diagnostics';
+  // Registered task sections missing from this list appear under More.
+  const taskGroups = {
+    Work: [
+      'Running',
+      'Queue',
+      'Plan a task',
+      'Progress',
+      'Parallel',
+      'Task dependencies',
+      'Reminders',
+      'Recovery',
+      'Repair loops',
+      'Milestone handovers',
+    ],
+    Review: [
+      'Approvals',
+      'Review centre',
+      'Review inbox',
+      'Selective changes',
+      'Task comparison',
+      'Test results',
+      'Check logs',
+      'Acceptance evidence',
+      'Saved task evidence',
+    ],
+    Project: [
+      'Live preview',
+      'Project editor',
+      'Find and replace',
+      'Terminal',
+      'Git',
+      'Services',
+      'Environment preflight',
+      'Permissions',
+      'Named checkpoints',
+      'Trial checkpoints',
+    ],
+    Context: [
+      'Project intelligence',
+      'Language intelligence',
+      'Project map',
+      'Context selection',
+      'Context freshness',
+      'Document context',
+      'Multi-root workspaces',
+    ],
+    Connect: ['Model handoff', 'Offline preparation', 'API requests', 'Integration manifests', 'Bug report builder'],
+    'Power tools': ['Power tools'],
+  };
+  const groupOf = (route, name) =>
+    route === 'tasks' ? Object.keys(taskGroups).find((group) => taskGroups[group].includes(name)) || 'More' : null;
+  const sectionsIn = (route, group) =>
+    (taskGroups[group] || Object.keys(sections[route])).filter(
+      (name) => sections[route][name] && groupOf(route, name) === group,
+    );
+  let shownGroup;
+  function showGroup(route, group) {
+    if (shownGroup === route + ':' + group) return;
+    shownGroup = route + ':' + group;
+    for (const button of groups.querySelectorAll('button'))
+      button.setAttribute('aria-pressed', String(button.textContent === group));
+    const names = sectionsIn(route, group);
+    tabs.hidden = names.length < 2;
     tabs.replaceChildren();
-    for (const section of Object.keys(sections[route])) {
+    for (const section of names) {
       const button = actionButton(section, () => renderTab(route, section), tabs);
       button.dataset.section = section;
       button.id = 'shell-tab-' + section.replaceAll(' ', '-');
@@ -145,10 +190,40 @@
         }
       };
     }
+  }
+  async function renderTab(route, name) {
+    const revision = ++generation;
+    cleanup?.();
+    cleanup = null;
+    content.replaceChildren();
+    showGroup(route, groupOf(route, name));
+    for (const button of tabs.querySelectorAll('button')) {
+      const active = button.dataset.section === name;
+      button.setAttribute('aria-selected', String(active));
+      button.tabIndex = active ? 0 : -1;
+    }
+    content.setAttribute('aria-labelledby', 'shell-tab-' + name.replaceAll(' ', '-'));
+    const restore = await sections[route][name]();
+    if (revision !== generation || !hub.open) restore?.();
+    else cleanup = restore;
+  }
+  async function openHub(route, name) {
+    if (route === 'settings') return settingsButton.click();
+    if (!sections[route]) return;
+    focusBefore = document.activeElement;
+    title.textContent = route === 'tasks' ? 'Tasks' : route === 'library' ? 'Library' : 'Diagnostics';
+    shownGroup = null;
+    groups.replaceChildren();
+    groups.hidden = route !== 'tasks';
+    if (route === 'tasks')
+      for (const group of [...Object.keys(taskGroups), 'More'].filter((row) => sectionsIn(route, row).length))
+        actionButton(group, () => renderTab(route, sectionsIn(route, group)[0]), groups);
     if (!hub.open) hub.showModal();
     await renderTab(route, name && sections[route][name] ? name : Object.keys(sections[route])[0]);
   }
   hub.addEventListener('close', () => {
+    // The event is queued: a section opened right after closing must not be torn down by it.
+    if (hub.open) return;
     generation++;
     cleanup?.();
     cleanup = null;
