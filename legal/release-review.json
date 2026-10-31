@@ -1,15 +1,15 @@
 {
   "status": "technical-review-complete",
-  "version": "0.10.1",
-  "reviewedBy": "Codex automated technical review; not legal counsel",
-  "reviewedAt": "2026-10-30",
-  "packageLockSha256": "ad43a7e65e7600bc53cdbfe091f4488ccb7049e3bd0825bf9607490932c4120b",
-  "evidence": "docs/RELEASE-0.10.1-REVIEW.md",
+  "version": "0.10.2",
+  "reviewedBy": "Claude automated technical review; not legal counsel",
+  "reviewedAt": "2026-10-31",
+  "packageLockSha256": "8bb43c9539dda22a374ffaed4c45baa4218d5bd4deb9a370c292cf11d6feeb2c",
+  "evidence": "docs/RELEASE-0.10.2-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner requested the patch push on 2026-10-30. The previously authorized unsigned-release policy remains in effect. Post-CI merge and publication confirmation is pending; no signing or legal approval is claimed.",
+  "ownerDecision": "Owner requested the 0.10.2 push on 2026-10-31. The previously authorized unsigned-release policy remains in effect. Post-CI merge and publication confirmation is pending; no signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 524,
+    "unitTests": 532,
     "electronSuites": [
       "assistant",
       "colab",
@@ -27,8 +27,8 @@
       "restore",
       "pdf-package"
     ],
-    "productionAudit": "0 vulnerabilities reported 2026-10-30",
-    "package": "Windows x64 unsigned installer verified locally: mandatory runtime files, notices, npm inventory, pinned speech hashes, private-path exclusions, binary fuses, ASAR integrity, updater hashes and packaged PDF extraction. CI repeats release verification.",
-    "recovery": "Actual packaged 0.10.1 copy relaunched with isolated fixture data, restored saved records before app load and preserved newer fixture records. Provider executables were overridden to where.exe; no real accounts or user-profile NSIS installation used."
+    "productionAudit": "0 vulnerabilities reported 2026-10-31",
+    "package": "Windows x64 unsigned installer checked locally with build/verify-release.cjs. CI repeats release verification.",
+    "recovery": "Restore UI suite ran from source with fixture data. No packaged-update recovery test was run for this patch."
   }
 }

@@ -416,7 +416,7 @@ function cue(freq = 500) {
 
 function toast(t) {
   const el = $('#toast');
-  el.textContent = t;
+  el.textContent = String(t).replace(/^Error invoking remote method '[^']+': Error: /, '');
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 3300);
 }
@@ -1415,10 +1415,15 @@ memoryPanel.addEventListener('toggle', () => {
 const agendaPanel = document.createElement('details');
 agendaPanel.className = 'assistant-panel';
 agendaPanel.innerHTML =
-  '<summary>Agenda & reminders</summary><p>Reminders run while ATLAS is open. Overdue reminders appear when you reopen it.</p><input id="reminderTitle" maxlength="300" placeholder="Reminder" aria-label="Reminder title"><input id="reminderDate" type="datetime-local" aria-label="Reminder time"><select id="reminderRepeat" aria-label="Repeat reminder"><option value="0">Once</option><option value="60">Hourly</option><option value="1440">Daily</option><option value="10080">Weekly</option></select><button type="button" class="quiet-button" id="reminderSave">Add reminder</button><div id="agendaItems"></div>';
+  '<summary>Agenda & reminders</summary><p>Reminders run while ATLAS is open. Overdue reminders appear when you reopen it.</p><label>Reminder<input id="reminderTitle" maxlength="300" placeholder="What should ATLAS remind you about?"></label><label>When<input id="reminderDate" type="datetime-local"></label><label>Repeat<select id="reminderRepeat"><option value="0">Once</option><option value="60">Hourly</option><option value="1440">Daily</option><option value="10080">Weekly</option></select></label><button type="button" class="quiet-button" id="reminderSave">Add reminder</button><div id="agendaItems"></div>';
 memoryPanel.after(agendaPanel);
 async function refreshAgenda() {
   try {
+    if (!$('#reminderDate').value) {
+      const next = new Date();
+      next.setHours(next.getHours() + 1, 0, 0, 0);
+      $('#reminderDate').value = new Date(next - next.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
     const items = await window.atlas.reminders();
     const box = $('#agendaItems');
     box.replaceChildren();
@@ -1460,11 +1465,14 @@ async function refreshAgenda() {
 }
 $('#reminderSave').onclick = async () => {
   try {
+    const dueAt = new Date($('#reminderDate').value).getTime();
+    if (!$('#reminderTitle').value.trim()) throw Error('Enter what the reminder is for.');
+    if (!(dueAt > Date.now())) throw Error('Choose a date and time in the future.');
     await window.atlas.reminders({
       action: 'save',
       item: {
         title: $('#reminderTitle').value,
-        dueAt: new Date($('#reminderDate').value).getTime(),
+        dueAt,
         repeatMinutes: Number($('#reminderRepeat').value),
       },
     });

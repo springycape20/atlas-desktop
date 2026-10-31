@@ -12,9 +12,10 @@
     );
     const jobs = (await api.jobs()).filter((job) => job.status !== 'running' && job.endedAt);
     const picker = node('select');
-    picker.setAttribute('aria-label', 'Finished task for handover');
+    const pickerLabel = node('label', 'Finished task for handover');
+    pickerLabel.append(picker);
     for (const job of jobs) picker.append(new Option(String(job.prompt || job.id).slice(0, 100), job.id));
-    body.append(picker);
+    body.append(pickerLabel);
     button('Create milestone packet', async () => {
       if (!picker.value) throw Error('Finish a task first.');
       await api.milestoneHandovers({ action: 'create', jobId: picker.value });

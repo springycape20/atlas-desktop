@@ -11,6 +11,7 @@
         'Trace local imports, symbol references and likely related tests. Results are bounded static hints and can miss dynamic behaviour.',
       ),
     );
+    button('Use a language server for precise navigation', () => power.show('Language intelligence'));
     const field = (label) => {
       const wrap = node('label', label),
         input = node('input');

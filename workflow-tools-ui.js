@@ -36,7 +36,6 @@
     }
     button('Revoke all remembered grants', async () => {
       await api.integrations({ action: 'revoke-desktop' });
-      await api.integrations({ action: 'revoke-shell' });
       await power.show('Permissions');
     });
     status.textContent =
