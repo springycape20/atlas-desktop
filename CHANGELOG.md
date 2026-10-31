@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fixes **Restart and install**, which failed with an "Invalid package" error when copying the current version for recovery and so stopped every in-app update. Versions up to 0.10.2 must install the next release from the downloaded installer.
+- Removes a partial recovery copy when preparing it fails, and gives a long reminder title its own error message.
+- Adds `npm run release:check`, and a menu audit with sample records (`npm run test:menu-ui`), including a mode that accepts approvals in a throwaway project.
+
 ## 0.10.2 — 31 October 2026
 
 - Groups the Tasks menu under Work, Review, Project, Context, Connect and Power tools, and aligns forms across its sections.

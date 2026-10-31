@@ -11,4 +11,11 @@ For 0.8.3 the owner authorized removing bundled Kokoro and releasing an unsigned
 
 Publish only with owner authorization, passing CI and verified final artifacts. Retain the exact release hashes and review evidence.
 
+## Release steps
+
+1. Update the version, changelog, release notes and review record, commit them, then run `npm run release:check`. It checks the record against the committed lockfile and runs the tests, menu audit, installer build and installer verification.
+2. Run the packaged update check, because no automated test can click through a real update. Start the previous installed version with `LOCALAPPDATA` set to a throwaway folder and `CODEX_EXECUTABLE` and `CLAUDE_CODE_EXECUTABLE` set to `where.exe`. Check for the update, download it, approve the recovery copy and install it. Record the result in the release review. The installer's relaunch does not keep these variables, so close that window without using it and start the new version the same way before checking it further.
+3. Open a PR, wait for CI, and get the owner's confirmation. Then merge and tag `vX.Y.Z` on the merged commit. The tag starts the build that publishes the release.
+4. Confirm the build finished and that the installer, blockmap and `latest.yml` are published.
+
 The current 0.10.0 dependency and feature review is [RELEASE-0.10.0-REVIEW.md](RELEASE-0.10.0-REVIEW.md). Native terminal and PDF dependencies require their included notices. Public distribution remains unsigned under the recorded owner decision.

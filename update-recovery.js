@@ -1,6 +1,17 @@
 const fs = require('node:fs/promises'),
   path = require('node:path'),
   { randomUUID } = require('node:crypto');
+// Electron's fs treats .asar files as folders, so copying the installed app needs the unpatched one.
+const rawFs = process.versions.electron ? require('original-fs').promises : fs;
+async function copyApp(source, target) {
+  await rawFs.mkdir(target, { recursive: true });
+  for (const entry of await rawFs.readdir(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name),
+      to = path.join(target, entry.name);
+    if (entry.isDirectory()) await copyApp(from, to);
+    else if (entry.isFile()) await rawFs.copyFile(from, to);
+  }
+}
 function createUpdateRecovery({ directory, appRoot, version, backupData, restoreData, launch, approve, isPackaged }) {
   const file = path.join(directory, 'update-recovery.json');
   async function status() {
@@ -26,20 +37,21 @@ function createUpdateRecovery({ directory, appRoot, version, backupData, restore
     )
       throw Error('Update cancelled: recovery copy was not approved.');
     const folder = path.join(directory, 'update-recovery', randomUUID());
-    await fs.mkdir(folder, { recursive: true });
-    const data = await backupData();
-    await fs.writeFile(path.join(folder, 'data.atlas-backup'), data, { mode: 0o600 });
-    const target = path.join(folder, 'app');
-    await fs.cp(root, target, {
-      recursive: true,
-      dereference: false,
-      filter: async (source) => !(await fs.lstat(source)).isSymbolicLink(),
-    });
-    const executable = path.join(target, path.basename(process.execPath));
-    await fs.access(executable);
-    const row = { version, createdAt: Date.now(), folder, executable, data: path.join(folder, 'data.atlas-backup') };
-    await fs.writeFile(file, JSON.stringify(row));
-    return row;
+    try {
+      await fs.mkdir(folder, { recursive: true });
+      const data = await backupData();
+      await fs.writeFile(path.join(folder, 'data.atlas-backup'), data, { mode: 0o600 });
+      const target = path.join(folder, 'app');
+      await copyApp(root, target);
+      const executable = path.join(target, path.basename(process.execPath));
+      await fs.access(executable);
+      const row = { version, createdAt: Date.now(), folder, executable, data: path.join(folder, 'data.atlas-backup') };
+      await fs.writeFile(file, JSON.stringify(row));
+      return row;
+    } catch (error) {
+      await rawFs.rm(folder, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
   }
   async function rollback() {
     const row = await status();

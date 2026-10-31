@@ -43,14 +43,8 @@ function createService({ directory, launchApp, volume, notify, now = () => Date.
       const title = String(item.title || '').trim();
       const dueAt = Number(item.dueAt);
       const repeatMinutes = Number(item.repeatMinutes) || 0;
-      if (
-        !title ||
-        title.length > 300 ||
-        !Number.isFinite(dueAt) ||
-        dueAt <= now() ||
-        repeatMinutes < 0 ||
-        repeatMinutes > 525600
-      )
+      if (title.length > 300) throw Error('Keep the reminder title to 300 characters or fewer.');
+      if (!title || !Number.isFinite(dueAt) || dueAt <= now() || repeatMinutes < 0 || repeatMinutes > 525600)
         throw Error('Choose a title and a future reminder time.');
       state.reminders.push({ id: randomUUID(), title, dueAt, repeatMinutes, acknowledged: false });
     } else throw Error('Unknown reminder action');
