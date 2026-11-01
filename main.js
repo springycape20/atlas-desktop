@@ -10,6 +10,10 @@ const {
   clipboard,
   screen,
   Notification,
+  Tray,
+  Menu,
+  nativeImage,
+  globalShortcut,
 } = require('electron');
 const { spawn } = require('node:child_process');
 const { existsSync, statSync, readdirSync } = require('node:fs');
@@ -139,7 +143,7 @@ let modelCatalogService, updateService, providerUsageService;
 let taskPlanService;
 let projectFileService;
 let projectEditor;
-let selectedToolsService, updateRecoveryService, autoBackupService;
+let selectedToolsService, updateRecoveryService, autoBackupService, presenceService;
 let advancedWorkflowsService;
 const repairRequests = new WeakMap();
 function providerUsage() {
@@ -198,6 +202,17 @@ async function rendererBackup() {
   return mainWindow.webContents.executeJavaScript(
     `(async()=>({localStorage:Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('atlas')).map(key=>[key,localStorage.getItem(key)])),colab:await window.atlasColabHistory.load({chats:[],selected:''})}))()`,
   );
+}
+function presence() {
+  return (presenceService ||= require('./desktop-presence').createPresence({
+    app,
+    Tray,
+    Menu,
+    nativeImage,
+    globalShortcut,
+    getWindow: () => mainWindow,
+    iconPath: path.join(__dirname, 'assets', 'app-icon.png'),
+  }));
 }
 function autoBackups() {
   return (autoBackupService ||= require('./auto-backups').createAutoBackups({
@@ -497,6 +512,8 @@ function defaultSettings() {
     speakResponses: true,
     showReasoning: false,
     launchAtStartup: false,
+    trayEnabled: false,
+    globalHotkey: '',
     voiceEngine: 'windows',
     timeoutSeconds: 0,
     timeoutPolicyVersion: 1,
@@ -543,6 +560,8 @@ function sanitizeSettings(value) {
     // Opt-in: providers' own reasoning summaries, shown labelled as model-reported.
     showReasoning: value?.showReasoning === true,
     launchAtStartup: value?.launchAtStartup === true,
+    trayEnabled: value?.trayEnabled === true,
+    globalHotkey: require('./desktop-presence').HOTKEYS.includes(value?.globalHotkey) ? value.globalHotkey : '',
     speechDetail: value?.speechDetail === 'full' ? 'full' : 'brief',
     voiceEngine: ['windows', 'elevenlabs'].includes(value?.voiceEngine) ? value.voiceEngine : defaults.voiceEngine,
     timeoutSeconds:
@@ -580,6 +599,7 @@ app.on('before-quit', (event) => {
   if (quitting) return;
   event.preventDefault();
   quitting = true;
+  presenceService?.dispose();
   desktopIndicator?.close();
   const finishing = [];
   for (const job of activeJobs.values())
@@ -2195,7 +2215,7 @@ function setupIpc() {
     if (process.platform === 'win32' && previous.launchAtStartup !== saved.launchAtStartup) {
       app.setLoginItemSettings({ openAtLogin: saved.launchAtStartup, name: APP_ID });
     }
-    return saved;
+    return { ...saved, ...presence().apply(saved) };
   });
   ipcMain.handle('atlas:elevenlabs-key-status', (event) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
@@ -2917,6 +2937,14 @@ async function createWindow() {
     if (!target.startsWith(`${appOrigin}/`)) event.preventDefault();
   });
   mainWindow.on('focus', () => mainWindow?.flashFrame(false));
+  // Windows signing out or shutting down must not be held up by a hidden window.
+  let sessionEnding = false;
+  mainWindow.on('query-session-end', () => (sessionEnding = true));
+  mainWindow.on('close', (event) => {
+    if (quitting || sessionEnding || !presenceService?.keepOnClose()) return;
+    event.preventDefault();
+    mainWindow.hide();
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
     desktopIndicator?.close();
@@ -2992,6 +3020,8 @@ async function startApp() {
   await createWindow();
   runtimePerformance.startup(Date.now() - startedAt);
   appLog.info(`Window loaded after ${Date.now() - startedAt}ms`);
+  const { hotkeyError } = presence().apply(await readAppSettings());
+  if (hotkeyError) appLog.warn(hotkeyError);
   const autoBackup = () =>
     void autoBackups()
       .tick()

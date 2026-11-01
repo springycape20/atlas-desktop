@@ -462,6 +462,8 @@ function hydrateSettings(value) {
   $('#speakResponses').checked = settings.speakResponses !== false;
   $('#showReasoning').checked = settings.showReasoning === true;
   $('#launchAtStartup').checked = settings.launchAtStartup === true;
+  $('#trayEnabled').checked = settings.trayEnabled === true;
+  $('#globalHotkey').value = settings.globalHotkey || '';
   $('#codexSandbox').value = settings.codexSandbox || 'workspace-write';
   $('#permissionBypass').checked = settings.permissionBypass === true;
   $('#recognitionMode').value = settings.recognitionMode || 'enhanced';
@@ -726,6 +728,8 @@ $('#settingsSave').addEventListener('click', async () => {
     speakResponses: $('#speakResponses').checked,
     showReasoning: $('#showReasoning').checked,
     launchAtStartup: $('#launchAtStartup').checked,
+    trayEnabled: $('#trayEnabled').checked,
+    globalHotkey: $('#globalHotkey').value,
     voiceEngine: $('#voiceEngine').value,
     codexSandbox: $('#codexSandbox').value,
     permissionBypass: $('#permissionBypass').checked,
@@ -752,7 +756,7 @@ $('#settingsSave').addEventListener('click', async () => {
     else stopWakeListener();
     $('#settingsSaved').textContent = 'Saved on this computer';
     $('#settingsDialog').close();
-    toast('Settings saved');
+    toast(settings.hotkeyError || 'Settings saved');
   } catch (e) {
     toast('Could not save settings: ' + e.message);
   } finally {
