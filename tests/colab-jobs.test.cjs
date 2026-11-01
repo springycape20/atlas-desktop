@@ -113,10 +113,12 @@ test('a parallel batch runs final integration checks in the combined workspace',
     concurrency: 2,
   });
   await h.call('task-queue', { action: 'start', pauseBetween: false, concurrency: 2 });
+  // Three full Colab jobs start about 120 git processes, each one slow to start on Windows and slower while
+  // the rest of the suite runs. This limit is there to catch a hang, not to measure speed.
   await until(
     async () => (await h.call('task-queue', {})).items.at(-1).status === 'completed',
     'integrated batch',
-    45000,
+    180000,
   );
   const row = (await h.call('task-queue', {})).items.at(-1);
   const job = h.activeJobs.get(row.result.jobId);
