@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const MEMORY_LIMIT = 100,
+  MEMORY_OLD = 180 * 86400000;
 
 function createService({ directory, launchApp, volume, notify, onDamaged = () => {}, now = () => Date.now() }) {
   const file = path.join(directory, 'assistant-data.json');
@@ -24,6 +26,7 @@ function createService({ directory, launchApp, volume, notify, onDamaged = () =>
   }
   function memory(action, item = {}) {
     if (action === 'list') return state.memories;
+    if (action === 'review') return reviewMemories(item);
     if (action === 'delete') state.memories = state.memories.filter((m) => m.id !== item.id);
     else if (action === 'save') {
       const text = String(item.text || '').trim();
@@ -40,7 +43,7 @@ function createService({ directory, launchApp, volume, notify, onDamaged = () =>
       const index = state.memories.findIndex((m) => m.id === value.id);
       if (index >= 0) state.memories[index] = value;
       else state.memories.push(value);
-      state.memories = state.memories.slice(-100);
+      state.memories = state.memories.slice(-MEMORY_LIMIT);
     } else throw Error('Unknown memory action');
     save();
     return state.memories;
@@ -114,7 +117,7 @@ function createService({ directory, launchApp, volume, notify, onDamaged = () =>
       );
     return null;
   }
-  function context(prompt, cwd) {
+  function relevant(prompt, cwd) {
     const terms = new Set((prompt + ' ' + cwd).toLowerCase().match(/[a-z0-9]{3,}/g) || []);
     return state.memories
       .filter((m) => !m.projectFolder || sameProject(m.projectFolder, cwd))
@@ -123,8 +126,31 @@ function createService({ directory, launchApp, volume, notify, onDamaged = () =>
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 12)
-      .map((x) => `[${x.m.category}] ${x.m.text}`)
+      .map((x) => x.m);
+  }
+  function context(prompt, cwd) {
+    return relevant(prompt, cwd)
+      .map((m) => `[${m.category}] ${m.text}`)
       .join('\n');
+  }
+  function reviewMemories({ prompt, cwd } = {}) {
+    const seen = new Set(),
+      sent = prompt ? new Set(relevant(String(prompt), String(cwd || '')).map((m) => m.id)) : null;
+    return {
+      limit: MEMORY_LIMIT,
+      rows: state.memories.map((m) => {
+        const key = m.text.trim().toLowerCase().replace(/\s+/g, ' '),
+          duplicate = seen.has(key);
+        seen.add(key);
+        return {
+          ...m,
+          duplicate,
+          missingFolder: Boolean(m.projectFolder) && !fs.existsSync(m.projectFolder),
+          old: Boolean(m.updatedAt) && now() - m.updatedAt > MEMORY_OLD,
+          ...(sent ? { sent: sent.has(m.id) } : {}),
+        };
+      }),
+    };
   }
   function sameProject(left, right) {
     try {
