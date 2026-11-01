@@ -116,7 +116,10 @@ app.whenReady().then(async () => {
       );
     }
     win.setContentSize(1280, 800);
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if ((await win.webContents.executeJavaScript('innerWidth')) === 1280) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     await win.webContents.executeJavaScript(`(async()=>{
   const toggles=document.querySelectorAll('.chat-list-toggle'),chats=document.querySelector('.assistant-chats'),width=()=>document.querySelector('.assistant-workspace>.core').clientWidth,before=width();
   if(toggles.length!==2||!document.querySelector('.colab-chats>.chat-list-toggle'))throw Error('Assistant and Colab need a list toggle');
