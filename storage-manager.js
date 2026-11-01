@@ -14,6 +14,7 @@ function createStorageManager(root, { protectedIds = () => [] } = {}) {
       'colab-reports',
       'worktrees',
       'recovery-backups',
+      'auto-backups',
     ]) {
       let bytes = 0,
         count = 0;

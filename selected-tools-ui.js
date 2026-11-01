@@ -172,6 +172,27 @@
           'Backups include local chats, settings, memories, attachments and task records. They are compressed, not encrypted. Project worktrees, downloaded runtimes and provider-owned histories are excluded.',
         ),
       );
+      const auto = n('label', 'Back up automatically once a day'),
+        autoBox = n('input'),
+        autoStatus = n('p');
+      autoBox.type = 'checkbox';
+      auto.prepend(autoBox);
+      const showAuto = (row) => {
+        autoBox.checked = row.enabled;
+        autoStatus.textContent =
+          (row.lastAt
+            ? 'Last automatic backup: ' + new Date(row.lastAt).toLocaleString()
+            : 'No automatic backup yet.') +
+          ' Keeps the newest ' +
+          row.keep +
+          ' while ATLAS is open, in ' +
+          row.folder +
+          ' on this computer. Choose one with Review and restore backup.' +
+          (row.lastError ? ' The last attempt failed: ' + row.lastError : '');
+      };
+      autoBox.onchange = async () => showAuto(await call('auto-backup', 'set', { enabled: autoBox.checked }));
+      body.append(auto, autoStatus);
+      showAuto(await call('auto-backup', 'status'));
       b('Export local-record backup…', async () => (status.textContent = plain(await call('backup', 'export'))));
       b('Review and restore backup…', () => call('backup', 'restore'));
       b('Inspect update recovery', async () => (status.textContent = plain(await call('updates', 'status'))));
