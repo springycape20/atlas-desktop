@@ -6,7 +6,7 @@ const fs = require('node:fs'),
   path = require('node:path');
 const assert = require('node:assert/strict');
 const scenario = process.env.ATLAS_DATA_SCENARIO;
-const { app, dialog, shell, BrowserWindow } = require('electron');
+const { app, dialog, shell, BrowserWindow, globalShortcut } = require('electron');
 if (!scenario) parent();
 else child();
 
@@ -25,6 +25,7 @@ function parent() {
       'chat-branch',
       'memory-review',
       'report-problem',
+      'tray',
     ]) {
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-data-safety-'));
       const result = cp.spawnSync(process.execPath, [__filename], {
@@ -117,6 +118,7 @@ function child() {
           },
         ]),
       ),
+    tray: () => {},
     'report-problem': () => {},
     'memory-review': () =>
       fs.writeFileSync(
@@ -212,6 +214,30 @@ function child() {
       );
       assert.match(refused, /not available/);
       assert.equal(saved().length, 2);
+    }
+    if (scenario === 'tray') {
+      const save = (value) =>
+        win.webContents.executeJavaScript(
+          `window.atlas.getSettings().then(s=>window.atlas.saveSettings({...s,...${JSON.stringify(value)}}))`,
+        );
+      const saved = await save({ trayEnabled: true, globalHotkey: 'Ctrl+Alt+Space' });
+      assert.equal(saved.trayEnabled, true);
+      assert.ok(globalShortcut.isRegistered('Ctrl+Alt+Space') || saved.hotkeyError);
+      assert.equal((await save({ globalHotkey: 'Alt+F4' })).globalHotkey, '');
+      assert.equal(globalShortcut.isRegistered('Ctrl+Alt+Space'), false);
+      win.show();
+      win.close();
+      await sleep(300);
+      assert.equal(win.isDestroyed(), false, 'closing with the tray on destroyed the window');
+      assert.equal(win.isVisible(), false);
+      app.emit('second-instance');
+      await sleep(200);
+      assert.equal(win.isVisible(), true);
+      await new Promise((resolve) => {
+        app.once('will-quit', resolve);
+        app.quit();
+      });
+      assert.equal(win.isDestroyed(), true, 'quit did not close the hidden-on-close window');
     }
     if (scenario === 'report-problem') {
       const opened = [];
