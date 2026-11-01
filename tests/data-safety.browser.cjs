@@ -23,6 +23,7 @@ function parent() {
       'auto-backup',
       'recovery-cleanup',
       'chat-branch',
+      'memory-review',
     ]) {
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-data-safety-'));
       const result = cp.spawnSync(process.execPath, [__filename], {
@@ -115,6 +116,17 @@ function child() {
           },
         ]),
       ),
+    'memory-review': () =>
+      fs.writeFileSync(
+        path.join(data, 'assistant-data.json'),
+        JSON.stringify({
+          memories: [
+            { id: 'gone', text: 'Old project note', category: 'project', projectFolder: path.join(temp, 'gone') },
+            { id: 'pref', text: 'Prefer short answers', category: 'preference', projectFolder: '' },
+            { id: 'copy', text: 'prefer short  answers', category: 'preference', projectFolder: '' },
+          ],
+        }),
+      ),
     'recovery-cleanup': () => {
       for (const name of ['old', 'current'])
         fs.mkdirSync(path.join(data, 'update-recovery', name), { recursive: true });
@@ -198,6 +210,38 @@ function child() {
       );
       assert.match(refused, /not available/);
       assert.equal(saved().length, 2);
+    }
+    if (scenario === 'memory-review') {
+      const shown = await win.webContents.executeJavaScript(`(async()=>{
+        const wait=()=>new Promise(resolve=>setTimeout(resolve,250)),
+          rows=()=>[...document.querySelectorAll('.power-body details')],
+          row=text=>rows().find(node=>node.querySelector('summary').textContent.includes(text)),
+          click=(root,text)=>[...root.querySelectorAll('button')].find(node=>node.textContent===text).click(),
+          field=text=>[...document.querySelectorAll('.power-body label')].find(node=>node.textContent.startsWith(text)).querySelector('input');
+        await atlasUi.open('library','Memory review');await wait();
+        const summary={all:rows().length,folder:row('Old project note').querySelector('summary').textContent,copy:row('prefer short  answers').querySelector('summary').textContent};
+        const filter=document.querySelector('[aria-label="Which memories to show"]');filter.value='flagged';filter.dispatchEvent(new Event('change'));await wait();
+        summary.flagged=rows().length;
+        filter.value='';filter.dispatchEvent(new Event('change'));await wait();
+        field('Check a message').value='hello';field('From project folder').value=${JSON.stringify(project)};
+        click(document.querySelector('.power-body'),'Check message');await wait();
+        summary.status=document.querySelector('.power-status').textContent;
+        summary.sent=row('Prefer short answers').querySelector('summary').textContent;
+        click(row('Old project note'),'Use for all projects');await wait();
+        const gone=row('prefer short  answers');gone.querySelector('textarea').value='Prefer tables';click(gone,'Save changes');await wait();
+        click(row('Prefer short answers'),'Delete');await wait();
+        return summary;
+      })()`);
+      assert.equal(shown.all, 3);
+      assert.match(shown.folder, /project folder is gone/);
+      assert.match(shown.copy, /same as another memory/);
+      assert.equal(shown.flagged, 2);
+      assert.match(shown.status, /3 of 100 memories.*would send 2/);
+      assert.match(shown.sent, /^Would be sent/);
+      await sleep(300);
+      const { memories } = JSON.parse(fs.readFileSync(path.join(data, 'assistant-data.json')));
+      assert.deepEqual(memories.map((row) => row.text).sort(), ['Old project note', 'Prefer tables']);
+      assert.equal(memories.find((row) => row.id === 'gone').projectFolder, '');
     }
     if (scenario === 'recovery-cleanup') {
       await win.webContents.executeJavaScript(`(async()=>{
