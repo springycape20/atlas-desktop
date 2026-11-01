@@ -197,6 +197,42 @@
       b('Review and restore backup…', () => call('backup', 'restore'));
       b('Inspect update recovery', async () => (status.textContent = plain(await call('updates', 'status'))));
       b('Launch preserved version and restore data…', () => call('updates', 'rollback'));
+      const copies = n('div'),
+        chosen = new Set();
+      b('Review old recovery copies', async () => {
+        const rows = await call('recovery-cleanup', 'inspect');
+        chosen.clear();
+        copies.replaceChildren();
+        for (const row of rows) {
+          const label = n(
+              'label',
+              row.kind +
+                ' · ' +
+                new Date(row.modified).toLocaleString() +
+                ' · ' +
+                (row.bytes / 1048576).toFixed(1) +
+                ' MiB',
+            ),
+            box = n('input');
+          box.type = 'checkbox';
+          box.onchange = () => (box.checked ? chosen.add(row.name) : chosen.delete(row.name));
+          label.prepend(box);
+          copies.append(label);
+        }
+        status.textContent = rows.length
+          ? rows.length + ' old copies. The copy you can roll back to and your newest pre-restore records are kept.'
+          : 'No old recovery copies.';
+      });
+      b('Delete selected copies…', async () => {
+        if (!chosen.size) throw Error('Review and select copies first.');
+        const result = await call('recovery-cleanup', 'remove', { names: [...chosen] });
+        status.textContent = plain(result);
+        if (!result.cancelled) {
+          chosen.clear();
+          copies.replaceChildren();
+        }
+      });
+      body.append(copies);
     },
     'diagnostics',
   );

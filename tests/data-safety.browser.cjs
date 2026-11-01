@@ -21,6 +21,7 @@ function parent() {
       'bad-restore',
       'failed-start',
       'auto-backup',
+      'recovery-cleanup',
     ]) {
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-data-safety-'));
       const result = cp.spawnSync(process.execPath, [__filename], {
@@ -63,9 +64,10 @@ function child() {
     return real.call(this, provider ? 'atlas-test-missing-cli' : command, args, ...rest);
   };
   const warnings = [];
-  dialog.showMessageBox = async (options) => {
+  dialog.showMessageBox = async (...args) => {
+    const options = args.at(-1);
     warnings.push(options.message + ' ' + (options.detail || ''));
-    return { response: 0 };
+    return { response: scenario === 'recovery-cleanup' ? 1 : 0 };
   };
   dialog.showErrorBox = (title, detail) => {
     if (scenario === 'failed-start') {
@@ -102,6 +104,15 @@ function child() {
     'bad-restore': () =>
       fs.writeFileSync(path.join(data, '.restore-pending.json'), JSON.stringify({ id: 'gone', expected: [] })),
     'failed-start': () => fs.mkdirSync(path.join(data, 'assistant-data.json')),
+    'recovery-cleanup': () => {
+      for (const name of ['old', 'current'])
+        fs.mkdirSync(path.join(data, 'update-recovery', name), { recursive: true });
+      fs.writeFileSync(path.join(data, 'update-recovery', 'old', 'ATLAS.exe'), 'x');
+      fs.writeFileSync(
+        path.join(data, 'update-recovery.json'),
+        JSON.stringify({ folder: path.join(data, 'update-recovery', 'current') }),
+      );
+    },
     'auto-backup': () => {
       fs.writeFileSync(conversations, JSON.stringify([chat(id(1), 1)]));
       // The first automatic backup waits two minutes after start-up.
@@ -157,6 +168,21 @@ function child() {
     if (scenario === 'bad-restore') {
       assert.equal(fs.existsSync(path.join(data, '.restore-pending.json')), false);
       assert.match(warnings.join(), /could not restore/);
+    }
+    if (scenario === 'recovery-cleanup') {
+      await win.webContents.executeJavaScript(`(async()=>{
+        const wait=()=>new Promise(resolve=>setTimeout(resolve,300)),
+          click=text=>[...document.querySelectorAll('button')].find(node=>node.textContent===text).click();
+        await atlasUi.open('diagnostics','Backups and recovery');await wait();
+        click('Review old recovery copies');await wait();
+        const boxes=[...document.querySelectorAll('label')].filter(node=>node.textContent.startsWith('App copy'));
+        if(boxes.length!==1)throw Error('Expected one old copy, saw '+boxes.length);
+        boxes[0].querySelector('input').click();
+        click('Delete selected copies…');await wait();
+      })()`);
+      assert.match(warnings.join(), /Permanently delete[^]*update-recovery\/old/);
+      assert.equal(fs.existsSync(path.join(data, 'update-recovery', 'old')), false);
+      assert.equal(fs.existsSync(path.join(data, 'update-recovery', 'current')), true);
     }
     if (scenario === 'auto-backup') {
       const folder = path.join(data, 'auto-backups');
