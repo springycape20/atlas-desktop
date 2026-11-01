@@ -35,7 +35,9 @@
   search.placeholder = 'Search saved chats…';
   search.setAttribute('aria-label', 'Search Assistant chats');
   projects.setAttribute('aria-label', 'Filter Assistant chats by workspace');
-  sidebar.append(fresh, importButton, projects, search, list);
+  const folderPicker = node('select');
+  folderPicker.setAttribute('aria-label', 'Filter Assistant chats by folder');
+  sidebar.append(fresh, importButton, projects, folderPicker, search, list);
   // One choice hides or shows the saved-chat lists of both Assistant and Colab, remembered across restarts.
   const listToggles = [sidebar, document.querySelector('.colab-chats')].filter(Boolean).map((aside) => {
     const toggle = node('button', undefined, 'quiet-button chat-list-toggle');
@@ -66,10 +68,19 @@
     });
   const heading = node('header', undefined, 'assistant-chat-heading'),
     title = node('h1', 'Assistant'),
-    latest = node('button', 'Latest ↓', 'quiet-button');
-  latest.type = 'button';
+    latest = node('button', 'Latest ↓', 'quiet-button'),
+    moveFolder = node('button', 'Folder', 'quiet-button'),
+    archive = node('button', 'Archive', 'quiet-button');
+  latest.type = moveFolder.type = archive.type = 'button';
   latest.hidden = true;
-  heading.append(title, latest);
+  heading.append(title, latest, moveFolder, archive);
+  const selectedRow = () => rows.find((row) => row.id === selected);
+  moveFolder.onclick = () =>
+    void window.atlasWorkspace.moveToFolder(selectedRow()).catch((error) => toast(error.message));
+  archive.onclick = () =>
+    void window.atlasWorkspace
+      .updateChat(selectedRow(), { archived: !metadata['atlas:' + selected]?.archived })
+      .catch((error) => toast(error.message));
   core.querySelector('.corehead').after(heading);
   const tools = node('div', undefined, 'assistant-chat-find'),
     find = node('input'),
@@ -90,7 +101,7 @@
   output.before(liveLabel);
   userTurn.classList.add('assistant-live-user');
   const style = node('style');
-  style.textContent = `.assistant-workspace{min-width:0;min-height:0;height:100%;display:grid;grid-template-columns:200px minmax(0,1fr);border:1px solid #29414b;border-radius:18px;overflow:hidden;background:#0c171e}.assistant-workspace>.core{min-width:0;min-height:0;height:100%;max-height:100%;padding:16px 20px;border:0;border-radius:0;overflow:hidden}.assistant-chats{display:flex;flex-direction:column;min-height:0;min-width:0;padding:16px 12px;gap:8px;background:#0a141a;border-right:1px solid #243942}.assistant-chats>input,.assistant-chats>select{width:100%;min-width:0;padding:8px;border:1px solid #35505a;border-radius:8px;background:#07141b;color:#c9dfe6;font:11px Segoe UI,sans-serif}.assistant-chat-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:5px}.assistant-chat-item{display:block;flex-shrink:0;width:100%;border:1px solid transparent;border-radius:8px;padding:10px;background:none;color:#a7bdc5;text-align:left;cursor:pointer}.assistant-chat-item[aria-current=true]{background:#183039;border-color:#34505c;color:#e0f1f3}.assistant-chat-item span,.assistant-chat-item small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.assistant-chat-item span{font:12px Segoe UI,sans-serif}.assistant-chat-item small{font:10px Segoe UI,sans-serif;color:#81a5ad;margin-top:6px}.assistant-chat-heading{display:flex;align-items:center;gap:12px;margin:8px 0;flex-shrink:0}.assistant-chat-heading h1{font:600 19px Segoe UI,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0;flex:1}.assistant-chat-heading button{font-size:10px;padding:5px 8px}.assistant-workspace .core>.presence{margin:5px 0 8px;flex-shrink:0}.assistant-workspace .core .orbwrap,.assistant-workspace .core .orb{height:30px;width:30px}.assistant-workspace .core .presence-copy .hello{font-size:14px}.assistant-workspace .core .presence-copy #sub{font-size:9px}.assistant-chat-find{display:flex;align-items:center;gap:6px;flex-shrink:0;margin:4px 0 8px}.assistant-chat-find input{flex:1;min-width:60px;padding:7px 9px;border:1px solid #35505a;border-radius:8px;background:#07141b;color:#c9dfe6;font:11px Segoe UI,sans-serif}.assistant-chat-find button{padding:4px 7px;font-size:10px}.assistant-chat-find span{font:10px Segoe UI,sans-serif;color:#91adb8}.assistant-workspace .core>.response.show{flex:1 1 0;min-height:0;max-height:none;overflow:auto;scroll-behavior:auto;overflow-anchor:none}.assistant-past{flex-shrink:0}.assistant-turn{margin:0 0 24px;font:13px/1.8 Segoe UI,sans-serif;overflow-wrap:anywhere;color:#d1e1e6}.assistant-turn.user{max-width:90%;margin-left:auto;background:#1a3039;padding:12px 16px;border-radius:12px 12px 3px 12px}.assistant-turn>strong,.assistant-live-label{display:block;font:600 11px Segoe UI,sans-serif;color:#88cad3;margin-bottom:8px}.assistant-turn time{font-weight:400;margin-left:8px;color:#7897a3}.assistant-turn .answer{white-space:pre-wrap;font:inherit}.assistant-turn[data-match=true],.assistant-live-user[data-match=true],#output[data-match=true]{outline:1px solid #66b9c5;outline-offset:4px;border-radius:8px}.assistant-workspace .core>.composer{flex:0 0 auto;min-height:0;max-height:46%;overflow:auto}.assistant-workspace[hidden]{display:none}.assistant-turn-actions{display:flex;gap:6px;margin-top:8px}.assistant-turn-actions button{padding:4px 8px;font-size:10px}@media(max-width:1000px){.assistant-workspace{grid-template-columns:165px minmax(0,1fr)}.assistant-workspace>.core{padding:12px}}@media(max-width:750px){.layout>.assistant-workspace{grid-row:2;display:flex;flex-direction:column}.assistant-workspace>.assistant-chats{display:grid;grid-template-columns:auto auto minmax(0,1fr);grid-template-rows:auto auto auto;gap:4px;padding:6px;max-height:115px;border-right:0;border-bottom:1px solid #243942;flex-shrink:0}.assistant-chats>.quiet-button{padding:4px 6px;font-size:10px}.assistant-chats>select{grid-column:3}.assistant-chats>input{grid-column:1/-1;padding:4px}.assistant-chats>.assistant-chat-list{grid-column:1/-1;flex-direction:row;max-height:32px}.assistant-chat-item{width:135px;padding:5px}.assistant-chat-item small{display:none}.assistant-workspace>.core{flex:1 1 0;height:auto;padding:10px;min-height:0}.assistant-chat-heading{margin:3px 0}.assistant-chat-heading h1{font-size:16px}.assistant-workspace .core>.presence{margin:3px 0}.assistant-workspace .core .presence-copy #sub{display:none}.assistant-chat-find{margin:3px 0}.assistant-workspace .core>.composer{max-height:44%;padding-top:4px}.assistant-workspace .voice-bar{min-height:30px}.assistant-workspace .core .workspace-bar{padding-top:3px}}`;
+  style.textContent = `.assistant-workspace{min-width:0;min-height:0;height:100%;display:grid;grid-template-columns:200px minmax(0,1fr);border:1px solid #29414b;border-radius:18px;overflow:hidden;background:#0c171e}.assistant-workspace>.core{min-width:0;min-height:0;height:100%;max-height:100%;padding:16px 20px;border:0;border-radius:0;overflow:hidden}.assistant-chats{display:flex;flex-direction:column;min-height:0;min-width:0;padding:16px 12px;gap:8px;background:#0a141a;border-right:1px solid #243942}.assistant-chats>input,.assistant-chats>select{width:100%;min-width:0;padding:8px;border:1px solid #35505a;border-radius:8px;background:#07141b;color:#c9dfe6;font:11px Segoe UI,sans-serif}.assistant-chat-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:5px}.assistant-chat-item{display:block;flex-shrink:0;width:100%;border:1px solid transparent;border-radius:8px;padding:10px;background:none;color:#a7bdc5;text-align:left;cursor:pointer}.assistant-chat-item[aria-current=true]{background:#183039;border-color:#34505c;color:#e0f1f3}.assistant-chat-item span,.assistant-chat-item small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.assistant-chat-item span{font:12px Segoe UI,sans-serif}.assistant-chat-item small{font:10px Segoe UI,sans-serif;color:#81a5ad;margin-top:6px}.assistant-chat-heading{display:flex;align-items:center;gap:12px;margin:8px 0;flex-shrink:0}.assistant-chat-heading h1{font:600 19px Segoe UI,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0;flex:1}.assistant-chat-heading button{font-size:10px;padding:5px 8px}.assistant-workspace .core>.presence{margin:5px 0 8px;flex-shrink:0}.assistant-workspace .core .orbwrap,.assistant-workspace .core .orb{height:30px;width:30px}.assistant-workspace .core .presence-copy .hello{font-size:14px}.assistant-workspace .core .presence-copy #sub{font-size:9px}.assistant-chat-find{display:flex;align-items:center;gap:6px;flex-shrink:0;margin:4px 0 8px}.assistant-chat-find input{flex:1;min-width:60px;padding:7px 9px;border:1px solid #35505a;border-radius:8px;background:#07141b;color:#c9dfe6;font:11px Segoe UI,sans-serif}.assistant-chat-find button{padding:4px 7px;font-size:10px}.assistant-chat-find span{font:10px Segoe UI,sans-serif;color:#91adb8}.assistant-workspace .core>.response.show{flex:1 1 0;min-height:0;max-height:none;overflow:auto;scroll-behavior:auto;overflow-anchor:none}.assistant-past{flex-shrink:0}.assistant-turn{margin:0 0 24px;font:13px/1.8 Segoe UI,sans-serif;overflow-wrap:anywhere;color:#d1e1e6}.assistant-turn.user{max-width:90%;margin-left:auto;background:#1a3039;padding:12px 16px;border-radius:12px 12px 3px 12px}.assistant-turn>strong,.assistant-live-label{display:block;font:600 11px Segoe UI,sans-serif;color:#88cad3;margin-bottom:8px}.assistant-turn time{font-weight:400;margin-left:8px;color:#7897a3}.assistant-turn .answer{white-space:pre-wrap;font:inherit}.assistant-turn[data-match=true],.assistant-live-user[data-match=true],#output[data-match=true]{outline:1px solid #66b9c5;outline-offset:4px;border-radius:8px}.assistant-workspace .core>.composer{flex:0 0 auto;min-height:0;max-height:46%;overflow:auto}.assistant-workspace[hidden]{display:none}.assistant-turn-actions{display:flex;gap:6px;margin-top:8px}.assistant-turn-actions button{padding:4px 8px;font-size:10px}@media(max-width:1000px){.assistant-workspace{grid-template-columns:165px minmax(0,1fr)}.assistant-workspace>.core{padding:12px}}@media(max-width:750px){.layout>.assistant-workspace{grid-row:2;display:flex;flex-direction:column}.assistant-workspace>.assistant-chats{display:grid;grid-template-columns:auto auto minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto auto;gap:4px;padding:6px;max-height:115px;border-right:0;border-bottom:1px solid #243942;flex-shrink:0}.assistant-chats>.quiet-button{padding:4px 6px;font-size:10px}.assistant-chats>input{grid-column:1/-1;padding:4px}.assistant-chats>.assistant-chat-list{grid-column:1/-1;flex-direction:row;max-height:32px}.assistant-chat-item{width:135px;padding:5px}.assistant-chat-item small{display:none}.assistant-workspace>.core{flex:1 1 0;height:auto;padding:10px;min-height:0}.assistant-chat-heading{margin:3px 0}.assistant-chat-heading h1{font-size:16px}.assistant-workspace .core>.presence{margin:3px 0}.assistant-workspace .core .presence-copy #sub{display:none}.assistant-chat-find{margin:3px 0}.assistant-workspace .core>.composer{max-height:44%;padding-top:4px}.assistant-workspace .voice-bar{min-height:30px}.assistant-workspace .core .workspace-bar{padding-top:3px}}`;
   document.head.append(style);
   const workspaceKey = (value) =>
     String(value || '')
@@ -153,7 +164,7 @@
   }).observe(output, { subtree: true, childList: true, characterData: true });
   const turnNodes = new Map();
   let renderedTurnsChat = '';
-  const { memo, reconcile: reconcileNodes } = window.atlasChatRender;
+  const { memo, reconcile: reconcileNodes, chatVisible, fillFolderFilter } = window.atlasChatRender;
   function renderTurns(turns) {
     if (renderedTurnsChat !== selected) {
       turnNodes.clear();
@@ -210,6 +221,10 @@
       ...Array.from(folders, ([key, name]) => new Option(name, key)),
     );
     projects.value = folders.has(filter) ? filter : '';
+    fillFolderFilter(
+      folderPicker,
+      rows.map((row) => metadata['atlas:' + row.id]?.folder),
+    );
     list.replaceChildren();
     for (const row of [...rows].sort(
       (a, b) =>
@@ -219,6 +234,7 @@
       const meta = metadata['atlas:' + row.id] || {},
         name = meta.title || row.title;
       if (
+        !chatVisible(meta, folderPicker.value, { searching: Boolean(query), selected: row.id === selected }) ||
         (projects.value && workspaceKey(row.workspaceId || row.cwd) !== projects.value) ||
         (query && !(name + ' ' + row.cwd + ' ' + row.searchText).toLowerCase().includes(query))
       )
@@ -231,7 +247,14 @@
         node('span', (meta.pinned ? '★ ' : '') + name),
         node(
           'small',
-          row.turnCount + ' messages · ' + (folders.get(workspaceKey(row.workspaceId || row.cwd)) || 'No workspace'),
+          [
+            meta.archived && 'Archived',
+            meta.folder,
+            row.turnCount + ' messages',
+            folders.get(workspaceKey(row.workspaceId || row.cwd)) || 'No workspace',
+          ]
+            .filter(Boolean)
+            .join(' · '),
         ),
       );
       button.onclick = () => void open(row.id).catch((error) => toast(error.message));
@@ -241,6 +264,8 @@
     const row = rows.find((row) => row.id === selected);
     title.textContent = row ? metadata['atlas:' + row.id]?.title || row.title : 'New Assistant chat';
     title.title = row?.cwd || '';
+    moveFolder.hidden = archive.hidden = !row;
+    archive.textContent = metadata['atlas:' + selected]?.archived ? 'Unarchive' : 'Archive';
   }
   async function refreshList() {
     const request = ++listSequence;
@@ -333,7 +358,7 @@
   fresh.onclick = () => $('#newChat').click();
   $('#newChat').addEventListener('click', reset);
   importButton.onclick = () => void window.atlasWorkspace.importChats().catch((error) => toast(error.message));
-  search.oninput = projects.onchange = renderList;
+  search.oninput = projects.onchange = folderPicker.onchange = renderList;
   sendMessage = async function (prompt, options = {}) {
     if (/^(?:tell me more|read (?:the )?(?:full answer|full reply|details))[.!? ]*$/i.test(prompt) && lastSpokenAnswer)
       return originalSend(prompt, options);

@@ -276,7 +276,7 @@
   moreButton.popoverTargetElement = more;
   moreButton.setAttribute('aria-label', 'More conversation actions');
   colabHeader.append(more);
-  for (const id of ['colabRename', 'colabPin', 'colabExport']) {
+  for (const id of ['colabRename', 'colabPin', 'colabMoveFolder', 'colabArchive', 'colabExport']) {
     const button = document.getElementById(id);
     if (button) {
       more.append(button);

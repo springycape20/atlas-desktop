@@ -732,7 +732,13 @@ function createWorkspaceService(directory, options = {}) {
       const key = trim(request.key, 160);
       if (request.action === 'save') {
         if (!/^(atlas|codex|claude):[A-Za-z0-9-]+$/.test(key)) throw Error('Invalid conversation.');
-        s.chatMeta[key] = { title: trim(request.title, 100), pinned: request.pinned === true };
+        const next = { ...s.chatMeta[key], ...request };
+        s.chatMeta[key] = {
+          title: trim(next.title, 100),
+          pinned: next.pinned === true,
+          folder: trim(next.folder, 60),
+          archived: next.archived === true,
+        };
         await save();
       }
       return structuredClone(s.chatMeta);

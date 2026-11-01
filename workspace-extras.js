@@ -651,10 +651,17 @@
         for (const item of sorted) {
           const meta = metadata[key(item)] || {},
             row = element('section', undefined, 'workspace-result'),
-            title = meta.title || item.title;
+            title = meta.title || item.title,
+            archived = meta.archived || item.archived,
+            chatFolder = meta.folder || item.folder;
           row.append(
             element('h3', (meta.pinned || item.pinned ? '★ ' : '') + title),
-            element('p', item.provider.toUpperCase() + ' · ' + (item.cwd || 'No folder')),
+            element(
+              'p',
+              [item.provider.toUpperCase(), archived && 'Archived', chatFolder, item.cwd || 'No folder']
+                .filter(Boolean)
+                .join(' · '),
+            ),
           );
           const actions = element('div', undefined, 'workspace-actions');
           row.append(actions);
@@ -663,15 +670,16 @@
           button(
             meta.pinned || item.pinned ? 'Unpin' : 'Pin',
             async () => {
-              if (item.provider === 'colab') window.atlasColab.metadata(item.id, { pinned: !item.pinned });
-              else {
-                metadata = await api.chatMetadata({
-                  action: 'save',
-                  key: key(item),
-                  title: meta.title || item.title,
-                  pinned: !meta.pinned,
-                });
-              }
+              await updateChat(item, { pinned: !(meta.pinned || item.pinned) });
+              await render();
+            },
+            actions,
+          );
+          button('Move to folder', () => moveToFolder(item, showHistory), actions);
+          button(
+            archived ? 'Unarchive' : 'Archive',
+            async () => {
+              await updateChat(item, { archived: !archived });
               await render();
             },
             actions,
@@ -1052,15 +1060,38 @@
     body.append(input);
     button('Save name', async () => {
       if (!input.value.trim()) throw Error('Enter a name.');
-      if (item.provider === 'colab') window.atlasColab.metadata(item.id, { title: input.value.trim() });
-      else
-        metadata = await api.chatMetadata({
-          action: 'save',
-          key: key(item),
-          title: input.value.trim(),
-          pinned: metadata[key(item)]?.pinned === true,
-        });
+      await updateChat(item, { title: input.value.trim() });
       await showHistory();
+    });
+    input.focus();
+  }
+  async function updateChat(item, patch) {
+    if (item.provider === 'colab') window.atlasColab.metadata(item.id, patch);
+    else {
+      metadata = await api.chatMetadata({ action: 'save', key: key(item), ...patch });
+      await window.atlasAssistant?.refresh();
+    }
+  }
+  // A folder is just a name on its chats: it appears with its first chat and goes with its last.
+  async function moveToFolder(item, after = () => modal.close()) {
+    metadata = await api.chatMetadata();
+    open('Move to folder');
+    const input = element('input'),
+      names = element('datalist');
+    names.id = 'chatFolderNames';
+    for (const name of new Set(
+      [...Object.values(metadata), ...window.atlasColab.history()].map((chat) => chat.folder).filter(Boolean),
+    ))
+      names.append(new Option(name, name));
+    input.setAttribute('list', names.id);
+    input.value = metadata[key(item)]?.folder || item.folder || '';
+    input.maxLength = 60;
+    input.placeholder = 'Folder name. Leave empty for no folder.';
+    input.setAttribute('aria-label', 'Folder name');
+    body.append(input, names);
+    button('Save folder', async () => {
+      await updateChat(item, { folder: input.value.trim() });
+      await after();
     });
     input.focus();
   }
@@ -1134,6 +1165,8 @@
     messageAttachments,
     review,
     renameColab: () => rename({ ...window.atlasColab.current(), provider: 'colab' }),
+    updateChat,
+    moveToFolder,
   };
   const assistantWork = element('div', undefined, 'assistant-task-work'),
     assistantActivity = { activityRuns: [] },
