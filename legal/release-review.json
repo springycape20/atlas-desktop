@@ -9,7 +9,7 @@
   "ownerDecision": "Owner requested the 0.10.4 patch on 2026-11-01. The previously authorized unsigned-release policy remains in effect. No signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 541,
+    "unitTests": 542,
     "electronSuites": [
       "assistant",
       "colab",

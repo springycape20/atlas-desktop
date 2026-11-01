@@ -6,7 +6,16 @@ function createService({ directory, launchApp, volume, notify, onDamaged = () =>
   const file = path.join(directory, 'assistant-data.json');
   const { createAtomicStore, readStored } = require('./atomic-store');
   let state = { memories: [], reminders: [], jobs: [] };
-  const saved = readStored(file, (value) => value && typeof value === 'object' && !Array.isArray(value));
+  const isRecords = (list) =>
+    list === undefined || (Array.isArray(list) && list.every((item) => item && typeof item === 'object'));
+  const saved = readStored(
+    file,
+    (value) =>
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      [value.memories, value.reminders, value.jobs].every(isRecords),
+  );
   if (saved?.damaged) onDamaged(saved.damaged);
   if (saved?.value) state = { ...state, ...saved.value };
   const store = createAtomicStore(file);

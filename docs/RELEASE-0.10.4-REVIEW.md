@@ -12,7 +12,7 @@ The 0.10.0 dependency/source inventory and packaging exclusions remain in effect
 
 ## Validation
 
-`npm run release:check` passed: the release record, 541 unit/integration tests, formatting, the production audit, 17 Electron UI suites with mock or fixture providers, the menu audit and the Windows x64 installer build and verification. The new `test:data-ui` suite starts the real main process on a throwaway profile in six scenarios. All six failed on the 0.10.3 code and pass with the fixes.
+`npm run release:check` passed: the release record, 542 unit/integration tests, formatting, the production audit, 17 Electron UI suites with mock or fixture providers, the menu audit and the Windows x64 installer build and verification. The new `test:data-ui` suite starts the real main process on a throwaway profile in six scenarios. All six failed on the 0.10.3 code and pass with the fixes.
 
 The parallel batch integration test recorded as intermittent in the 0.10.3 review was traced. It runs three full Colab jobs that start about 120 git processes, and every process finished, so it was reaching its 45-second limit rather than hanging. Its limit is now 180 seconds, which still catches a hang. It takes 52 to 63 seconds in a full local run, and why that is slower than the 12 to 24 seconds previously recorded was not found.
 

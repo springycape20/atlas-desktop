@@ -48,6 +48,19 @@ test('a damaged assistant file does not stop start-up and is kept', (t) => {
   assert.equal(fs.readFileSync(kept, 'utf8'), '{"memories":[{"id"');
 });
 
+test('an assistant file with the wrong list shapes is treated as damaged', (t) => {
+  for (const content of ['{"reminders":null}', '{"memories":"text"}', '{"reminders":[null]}', '{"jobs":{}}']) {
+    const dir = folder(t),
+      file = path.join(dir, 'assistant-data.json');
+    fs.writeFileSync(file, content);
+    let kept;
+    const service = createService({ directory: dir, notify() {}, onDamaged: (value) => (kept = value) });
+    service.tick();
+    assert.deepEqual(service.memory('list'), []);
+    assert.equal(fs.readFileSync(kept, 'utf8'), content);
+  }
+});
+
 test('a restore request with nothing staged reports once, then clears', (t) => {
   const dir = folder(t);
   fs.writeFileSync(path.join(dir, '.restore-pending.json'), JSON.stringify({ id: 'gone', expected: [] }));
