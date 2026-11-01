@@ -20,6 +20,7 @@ function parent() {
       'damaged-assistant',
       'bad-restore',
       'failed-start',
+      'auto-backup',
     ]) {
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-data-safety-'));
       const result = cp.spawnSync(process.execPath, [__filename], {
@@ -101,6 +102,12 @@ function child() {
     'bad-restore': () =>
       fs.writeFileSync(path.join(data, '.restore-pending.json'), JSON.stringify({ id: 'gone', expected: [] })),
     'failed-start': () => fs.mkdirSync(path.join(data, 'assistant-data.json')),
+    'auto-backup': () => {
+      fs.writeFileSync(conversations, JSON.stringify([chat(id(1), 1)]));
+      // The first automatic backup waits two minutes after start-up.
+      const wait = global.setTimeout;
+      global.setTimeout = (run, ms, ...rest) => wait(run, ms === 120000 ? 200 : ms, ...rest);
+    },
   })[scenario]();
   setTimeout(() => {
     console.error('Timed out');
@@ -150,6 +157,29 @@ function child() {
     if (scenario === 'bad-restore') {
       assert.equal(fs.existsSync(path.join(data, '.restore-pending.json')), false);
       assert.match(warnings.join(), /could not restore/);
+    }
+    if (scenario === 'auto-backup') {
+      const folder = path.join(data, 'auto-backups');
+      const made = () =>
+        (fs.existsSync(folder) ? fs.readdirSync(folder) : []).filter((n) => n.endsWith('.atlas-backup'));
+      for (let i = 0; i < 200 && !made().length; i++) await sleep(100);
+      assert.equal(made().length, 1, 'no automatic backup was written');
+      const value = require('../local-backups').validate(fs.readFileSync(path.join(folder, made()[0])));
+      assert.ok(value.files.some((row) => row.path === 'conversations.json'));
+      assert.ok(value.renderer.colab, 'renderer records are missing from the automatic backup');
+      const shown = await win.webContents.executeJavaScript(`(async()=>{
+        await atlasUi.open('diagnostics','Backups and recovery');
+        await new Promise(resolve=>setTimeout(resolve,300));
+        const box=[...document.querySelectorAll('label')].find(node=>node.textContent==='Back up automatically once a day').querySelector('input'),
+          text=box.closest('label').nextElementSibling;
+        const before={checked:box.checked,text:text.textContent};
+        box.click();await new Promise(resolve=>setTimeout(resolve,300));
+        return {before,after:box.checked};
+      })()`);
+      assert.equal(shown.before.checked, true);
+      assert.match(shown.before.text, /Last automatic backup: .*Keeps the newest 7/);
+      assert.equal(shown.after, false);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'auto-backup.json'))).enabled, false);
     }
     console.log('PASS: ' + scenario);
   })()

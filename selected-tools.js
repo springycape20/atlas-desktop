@@ -10,6 +10,7 @@ function createSelectedTools({
   backup,
   restore,
   updateRecovery,
+  autoBackups,
 }) {
   const services = require('./project-services').createProjectServices(directory, { approve }),
     git = require('./git-panel').createGitPanel({ approve, busy }),
@@ -52,6 +53,8 @@ function createSelectedTools({
         }
         return storage.inspect(Number(request.days ?? 30));
       }
+      if (request.tool === 'auto-backup')
+        return request.action === 'set' ? autoBackups().setEnabled(request.enabled) : autoBackups().status();
       if (request.tool === 'backup') {
         if (busy() || services.active()) throw Error('Finish work and stop services before backing up/restoring.');
         return request.action === 'restore' ? restore() : backup();

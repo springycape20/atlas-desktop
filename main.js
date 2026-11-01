@@ -139,7 +139,7 @@ let modelCatalogService, updateService, providerUsageService;
 let taskPlanService;
 let projectFileService;
 let projectEditor;
-let selectedToolsService, updateRecoveryService;
+let selectedToolsService, updateRecoveryService, autoBackupService;
 let advancedWorkflowsService;
 const repairRequests = new WeakMap();
 function providerUsage() {
@@ -198,6 +198,14 @@ async function rendererBackup() {
   return mainWindow.webContents.executeJavaScript(
     `(async()=>({localStorage:Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('atlas')).map(key=>[key,localStorage.getItem(key)])),colab:await window.atlasColabHistory.load({chats:[],selected:''})}))()`,
   );
+}
+function autoBackups() {
+  return (autoBackupService ||= require('./auto-backups').createAutoBackups({
+    directory: app.getPath('userData'),
+    busy: () => jobsRunning() || Boolean(selectedToolsService?.servicesActive()),
+    make: async () =>
+      require('./local-backups').createBackup(app.getPath('userData'), app.getVersion(), await rendererBackup()),
+  }));
 }
 function updateRecovery() {
   return (updateRecoveryService ||= require('./update-recovery').createUpdateRecovery({
@@ -1903,6 +1911,7 @@ function setupIpc() {
       busy: jobsRunning,
       approve,
       updateRecovery,
+      autoBackups,
       backup: async () => {
         if (
           !(await approve(
@@ -1925,6 +1934,7 @@ function setupIpc() {
       },
       restore: async () => {
         const picked = await dialog.showOpenDialog(mainWindow, {
+          defaultPath: autoBackups().folder,
           properties: ['openFile'],
           filters: [{ name: 'ATLAS backup', extensions: ['atlas-backup'] }],
         });
@@ -2971,6 +2981,12 @@ async function startApp() {
   await createWindow();
   runtimePerformance.startup(Date.now() - startedAt);
   appLog.info(`Window loaded after ${Date.now() - startedAt}ms`);
+  const autoBackup = () =>
+    void autoBackups()
+      .tick()
+      .catch((error) => appLog.warn('Automatic backup failed:', error.message));
+  setTimeout(autoBackup, 120000).unref();
+  setInterval(autoBackup, 3600000).unref();
   if (app.isPackaged && process.platform === 'win32') {
     // Right after an in-app update the entry was not yet settled when this first ran, so
     // check again once the installer has finished, and log every outcome.
