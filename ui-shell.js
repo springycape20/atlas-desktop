@@ -110,9 +110,9 @@
       'Parallel',
       'Task dependencies',
       'Reminders',
+      'Scheduled tasks',
       'Recovery',
       'Repair loops',
-      'Milestone handovers',
     ],
     Review: [
       'Approvals',
@@ -146,7 +146,14 @@
       'Document context',
       'Multi-root workspaces',
     ],
-    Connect: ['Model handoff', 'Offline preparation', 'API requests', 'Integration manifests', 'Bug report builder'],
+    Connect: [
+      'Model handoff',
+      'Milestone handovers',
+      'Offline preparation',
+      'API requests',
+      'Integration manifests',
+      'Bug report builder',
+    ],
     'Power tools': ['Power tools'],
   };
   const groupOf = (route, name) =>
