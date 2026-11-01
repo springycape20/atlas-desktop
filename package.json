@@ -36,12 +36,12 @@
     "build:compliance": "node build/prepare-compliance.cjs"
   },
   "devDependencies": {
-    "electron": "^45.0.0",
+    "electron": "^45.1.0",
     "electron-builder": "26.18.0",
     "prettier": "3.9.10"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "diff": "9.0.0",
