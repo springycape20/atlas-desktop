@@ -188,4 +188,94 @@
     await load();
   });
   window.atlasUi.register('library', 'Memory review');
+  power.register('Scheduled tasks', async ({ body, node, button, status, current }) => {
+    body.append(
+      node(
+        'p',
+        'Run an Assistant task on a schedule. Each run uses your model accounts and is added to the same chat. Tasks run only while ATLAS is open and nothing else is running, stop after 30 minutes, and are skipped while permission bypass is on. Missed runs are not caught up.',
+      ),
+    );
+    const prompt = field(body, 'What should it do?', '', true),
+      cwd = field(body, 'Working folder', folder()),
+      when = field(body, 'First run'),
+      schedule = document.createElement('select'),
+      editsLabel = node('label', 'Allow it to change files in this folder'),
+      edits = document.createElement('input'),
+      list = node('div');
+    when.type = 'datetime-local';
+    schedule.setAttribute('aria-label', 'How often it runs');
+    for (const [value, name] of [
+      ['once', 'Once'],
+      ['hourly', 'Every hour'],
+      ['daily', 'Every day'],
+      ['weekly', 'Every week'],
+    ])
+      schedule.append(new Option(name, value));
+    schedule.value = 'daily';
+    edits.type = 'checkbox';
+    editsLabel.prepend(edits);
+    body.append(schedule, editsLabel);
+    const every = { 0: 'Once', 3600000: 'Every hour', 86400000: 'Every day', 604800000: 'Every week' };
+    const show = (rows) => {
+      if (!current() || !Array.isArray(rows)) return;
+      list.replaceChildren();
+      for (const row of rows) {
+        const item = node('details');
+        item.append(
+          node(
+            'summary',
+            [
+              row.enabled ? 'On' : 'Off',
+              every[row.every],
+              row.enabled ? 'next ' + new Date(row.nextAt).toLocaleString() : '',
+              row.allowEdits ? 'can change files' : 'read only',
+              row.title,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          ),
+          node('p', row.cwd),
+          node('pre', row.prompt),
+        );
+        if (row.lastStatus)
+          item.append(
+            node(
+              'p',
+              'Last: ' +
+                row.lastStatus +
+                (row.lastRunAt ? ' · ' + new Date(row.lastRunAt).toLocaleString() : '') +
+                (row.lastError ? ' · ' + row.lastError : ''),
+            ),
+          );
+        button(
+          row.enabled ? 'Turn off' : 'Turn on',
+          async () => show(await api.scheduledTasks({ action: 'set', id: row.id, enabled: !row.enabled })),
+          item,
+        );
+        if (row.lastRunAt) button('Open chat', () => window.atlasAssistant.open(row.conversationId), item);
+        button('Delete', async () => show(await api.scheduledTasks({ action: 'remove', id: row.id })), item);
+        list.append(item);
+      }
+      if (!rows.length) list.append(node('p', 'No scheduled tasks yet.'));
+    };
+    button('Schedule task…', async () => {
+      const result = await api.scheduledTasks({
+        action: 'save',
+        item: {
+          prompt: prompt.value,
+          cwd: cwd.value.trim(),
+          schedule: schedule.value,
+          firstAt: new Date(when.value).getTime(),
+          allowEdits: edits.checked,
+        },
+      });
+      if (result.cancelled) return;
+      prompt.value = '';
+      status.textContent = 'Scheduled.';
+      show(result);
+    });
+    body.append(list);
+    show(await api.scheduledTasks({ action: 'list' }));
+  });
+  window.atlasUi.register('tasks', 'Scheduled tasks');
 })();

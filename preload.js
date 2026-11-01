@@ -103,6 +103,7 @@ contextBridge.exposeInMainWorld('atlas', {
     ipcRenderer.on('atlas:jobs-changed', listener);
     return () => ipcRenderer.removeListener('atlas:jobs-changed', listener);
   },
+  scheduledTasks: (request) => ipcRenderer.invoke('atlas:scheduled-tasks', request),
   memory: (request) => ipcRenderer.invoke('atlas:memory', request),
   reminders: (request) => ipcRenderer.invoke('atlas:reminders', request),
   onReminder: (callback) => {

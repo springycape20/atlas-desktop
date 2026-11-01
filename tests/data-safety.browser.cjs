@@ -26,6 +26,7 @@ function parent() {
       'memory-review',
       'report-problem',
       'tray',
+      'scheduled-task',
     ]) {
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-data-safety-'));
       const result = cp.spawnSync(process.execPath, [__filename], {
@@ -71,7 +72,7 @@ function child() {
   dialog.showMessageBox = async (...args) => {
     const options = args.at(-1);
     warnings.push(options.message + ' ' + (options.detail || ''));
-    return { response: scenario === 'recovery-cleanup' ? 1 : 0 };
+    return { response: ['recovery-cleanup', 'scheduled-task'].includes(scenario) ? 1 : 0 };
   };
   dialog.showErrorBox = (title, detail) => {
     if (scenario === 'failed-start') {
@@ -118,6 +119,31 @@ function child() {
           },
         ]),
       ),
+    'scheduled-task': () => {
+      // The first check waits a minute after start-up. "what's the time" is answered by ATLAS itself.
+      // Patched a moment later so the 60-second limit on this scenario keeps its length.
+      const wait = global.setTimeout;
+      setImmediate(() => {
+        global.setTimeout = (run, ms, ...rest) => wait(run, ms === 60000 ? 200 : ms, ...rest);
+      });
+      fs.writeFileSync(
+        path.join(data, 'scheduled-tasks.json'),
+        JSON.stringify([
+          {
+            id: 'seeded',
+            conversationId: id(7),
+            title: "what's the time",
+            prompt: "what's the time",
+            cwd: project,
+            every: 86400000,
+            nextAt: Date.now() - 1000,
+            allowEdits: false,
+            enabled: true,
+            failures: 0,
+          },
+        ]),
+      );
+    },
     tray: () => {},
     'report-problem': () => {},
     'memory-review': () =>
@@ -214,6 +240,38 @@ function child() {
       );
       assert.match(refused, /not available/);
       assert.equal(saved().length, 2);
+    }
+    if (scenario === 'scheduled-task') {
+      const stored = () => JSON.parse(fs.readFileSync(path.join(data, 'scheduled-tasks.json')));
+      for (let i = 0; i < 150 && stored()[0].lastStatus !== 'completed'; i++) await sleep(100);
+      assert.equal(stored()[0].lastStatus, 'completed', JSON.stringify(stored()[0]));
+      assert.ok(stored()[0].nextAt > Date.now(), 'a daily task should move to the next day');
+      const chat = saved().find((row) => row.id === id(7));
+      assert.equal(chat.turns[0].content, "what's the time");
+      assert.equal(chat.turns.length, 2);
+      const shown = await win.webContents.executeJavaScript(`(async()=>{
+        const wait=()=>new Promise(resolve=>setTimeout(resolve,250)),
+          click=(root,text)=>[...root.querySelectorAll('button')].find(node=>node.textContent===text).click(),
+          body=()=>document.querySelector('.power-body'),
+          field=text=>[...body().querySelectorAll('label')].find(node=>node.textContent.startsWith(text)).querySelector('input,textarea');
+        await atlasUi.open('tasks','Scheduled tasks');await wait();
+        const first=body().querySelector('details summary').textContent;
+        field('What should it do?').value='Summarise the log';
+        field('Working folder').value=${JSON.stringify(project)};
+        field('First run').value='2099-01-01T09:00';
+        click(body(),'Schedule task…');await wait();
+        const rows=()=>[...body().querySelectorAll('details')];
+        const added=rows().at(-1).querySelector('summary').textContent;
+        click(rows().at(-1),'Turn off');await wait();
+        const off=rows().at(-1).querySelector('summary').textContent;
+        click(rows().at(-1),'Delete');await wait();
+        return {first,added,off,count:rows().length};
+      })()`);
+      assert.match(shown.first, /^On · Every day · next .* read only/);
+      assert.match(shown.added, /^On · Every day · next .* read only · Summarise the log/);
+      assert.match(shown.off, /^Off/);
+      assert.equal(shown.count, 1);
+      assert.match(warnings.join(), /Run this task without you\?[^]*uses your model accounts/);
     }
     if (scenario === 'tray') {
       const save = (value) =>

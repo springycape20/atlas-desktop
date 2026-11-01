@@ -143,7 +143,7 @@ let modelCatalogService, updateService, providerUsageService;
 let taskPlanService;
 let projectFileService;
 let projectEditor;
-let selectedToolsService, updateRecoveryService, autoBackupService, presenceService;
+let selectedToolsService, updateRecoveryService, autoBackupService, presenceService, scheduledTaskService;
 let advancedWorkflowsService;
 const repairRequests = new WeakMap();
 function providerUsage() {
@@ -202,6 +202,50 @@ async function rendererBackup() {
   return mainWindow.webContents.executeJavaScript(
     `(async()=>({localStorage:Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('atlas')).map(key=>[key,localStorage.getItem(key)])),colab:await window.atlasColabHistory.load({chats:[],selected:''})}))()`,
   );
+}
+const scheduledReadOnly = new WeakSet();
+function scheduledTasks() {
+  return (scheduledTaskService ||= require('./scheduled-tasks').createScheduledTasks({
+    directory: app.getPath('userData'),
+    busy: () => jobsRunning() || Boolean(selectedToolsService?.servicesActive()),
+    approve: async (title, detail) =>
+      (
+        await dialog.showMessageBox(mainWindow, {
+          title,
+          message: title,
+          detail,
+          buttons: ['Cancel', 'Approve'],
+          defaultId: 0,
+          cancelId: 0,
+        })
+      ).response === 1,
+    blocked: async () => {
+      if (!mainWindow) return 'The ATLAS window was closed.';
+      return (await readAppSettings()).permissionBypass
+        ? 'Scheduled tasks do not run while permission bypass is on.'
+        : '';
+    },
+    start: async (task) => {
+      const requestId = randomUUID(),
+        request = { requestId, prompt: task.prompt, cwd: task.cwd, conversationId: task.conversationId };
+      if (!task.allowEdits) scheduledReadOnly.add(request);
+      const limit = setTimeout(() => {
+        const job = activeJobs.get(requestId);
+        if (job?.status !== 'running') return;
+        job.stopped = 'cancelled';
+        job.statusText = 'Stopped after 30 minutes';
+        job.interrupt?.();
+      }, 1800000);
+      try {
+        await startAssistant(
+          { sender: mainWindow.webContents, senderFrame: mainWindow.webContents.mainFrame },
+          request,
+        );
+      } finally {
+        clearTimeout(limit);
+      }
+    },
+  }));
 }
 function presence() {
   return (presenceService ||= require('./desktop-presence').createPresence({
@@ -2030,6 +2074,14 @@ function setupIpc() {
     if (!['https:', 'http:'].includes(url.protocol)) throw Error('Unsupported link');
     await shell.openExternal(url.href);
   });
+  ipcMain.handle('atlas:scheduled-tasks', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window');
+    const tasks = scheduledTasks();
+    if (request.action === 'save') return tasks.save(request.item);
+    if (request.action === 'set') return tasks.setEnabled(request.id, request.enabled);
+    if (request.action === 'remove') return tasks.remove(request.id);
+    return tasks.list();
+  });
   ipcMain.handle('atlas:memory', async (event, request) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window');
     const result = assistantService.memory(request?.action || 'list', request?.item);
@@ -2356,6 +2408,7 @@ function setupIpc() {
           attachments: data.attachments || [],
           effort: data.effort || '',
           contextSelection: require('./context-selection').selection(data.contextSelection),
+          readOnly: scheduledReadOnly.has(data) || previous?.request?.readOnly === true,
         },
         prompt: data.prompt,
         cwd: data.cwd,
@@ -2520,6 +2573,8 @@ async function handleChat(event, data) {
   if (!path.isAbsolute(cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory())
     throw new Error('Choose an existing working folder.');
   const settings = await readAppSettings();
+  // Claude reads the first and Codex the second.
+  if (jobContext.getStore()?.request?.readOnly) Object.assign(settings, { readOnly: true, codexSandbox: 'read-only' });
   const project = await workspace().profile(data.profileId);
   if (jobContext.getStore()) jobContext.getStore().projectSnapshot = project;
   if (project?.environmentPreflight) {
@@ -3028,6 +3083,12 @@ async function startApp() {
       .catch((error) => appLog.warn('Automatic backup failed:', error.message));
   setTimeout(autoBackup, 120000).unref();
   setInterval(autoBackup, 3600000).unref();
+  const scheduledTick = () =>
+    void scheduledTasks()
+      .tick()
+      .catch((error) => appLog.warn('Scheduled task failed:', error.message));
+  setTimeout(scheduledTick, 60000).unref();
+  setInterval(scheduledTick, 30000).unref();
   if (app.isPackaged && process.platform === 'win32') {
     // Right after an in-app update the entry was not yet settled when this first ran, so
     // check again once the installer has finished, and log every outcome.

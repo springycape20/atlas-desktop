@@ -61,10 +61,10 @@ async function mainHarness(t, options = {}) {
   vm.runInContext(
     code +
       `
-    mainWindow = { isDestroyed: () => false, webContents: { send: (_event, patch) => updates.push(patch) } };
+    mainWindow = { isDestroyed: () => false, webContents: { send: (_event, patch) => updates.push(patch), mainFrame: { url: 'atlas://app/index.html' } } };
     assistantService = require('./assistant-service').createService({ directory: app.getPath('userData'), notify() {} });
     providerHealth = new (require('./provider-health').ProviderHealth)(path.join(app.getPath('userData'),'provider-health.json'));
-    globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, readAppSettings, setupIpc, allowColab:()=>{findClaudeExecutable=()=>process.env.CODEX_EXECUTABLE;mainWindow.webContents.isDestroyed=()=>false;}, sender: mainWindow.webContents };
+    globalThis.harness = { activeJobs, jobSnapshots, emitJobs, writeAtlasHistory, readAtlasHistory, assistantService, persistJobs, migrateLegacyUserData, readAppSettings, setupIpc, scheduledTasks, allowColab:()=>{findClaudeExecutable=()=>process.env.CODEX_EXECUTABLE;mainWindow.webContents.isDestroyed=()=>false;}, sender: mainWindow.webContents };
   `,
     context,
   );
