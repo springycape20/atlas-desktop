@@ -283,7 +283,7 @@
   const toolbar = document.createElement('div');
   toolbar.className = 'colab-chat-actions';
   toolbar.innerHTML =
-    '<button class="quiet-button" id="colabRename" type="button">Rename</button><button class="quiet-button" id="colabPin" type="button">Pin</button><button class="quiet-button" id="colabFolder" type="button">Folder</button><button class="quiet-button" id="colabArchive" type="button">Archive</button><button class="quiet-button" id="colabExport" type="button">Export</button>';
+    '<button class="quiet-button" id="colabRename" type="button">Rename</button><button class="quiet-button" id="colabPin" type="button">Pin</button><button class="quiet-button" id="colabMoveFolder" type="button">Folder</button><button class="quiet-button" id="colabArchive" type="button">Archive</button><button class="quiet-button" id="colabExport" type="button">Export</button>';
   panel.querySelector('.colab-chat-header').append(toolbar);
   const recovery = document.createElement('div');
   recovery.className = 'colab-recovery';
@@ -1369,7 +1369,7 @@
       save();
     };
   el('colabRename').onclick = () => window.atlasWorkspace?.renameColab();
-  el('colabFolder').onclick = () =>
+  el('colabMoveFolder').onclick = () =>
     void window.atlasWorkspace.moveToFolder({ ...current(), provider: 'colab' }).catch((error) => toast(error.message));
   el('colabArchive').onclick = () => {
     current().archived = !current().archived;

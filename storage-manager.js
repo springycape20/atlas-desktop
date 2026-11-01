@@ -35,7 +35,7 @@ function createStorageManager(root, { protectedIds = () => [] } = {}) {
               !protectedSet.has(stem) &&
               !stem.startsWith('named-') &&
               !stem.startsWith('undo-') &&
-              Date.now() - stat.mtimeMs >= Number(days) * 86400000
+              (!Number(days) || Date.now() - stat.mtimeMs >= Number(days) * 86400000)
             )
               candidates.push({ path: category + '/' + prefix + entry.name, size: stat.size, mtime: stat.mtimeMs });
           }

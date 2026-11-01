@@ -153,7 +153,8 @@ app.whenReady().then(async () => {
       const wait=()=>new Promise(resolve=>setTimeout(resolve,40)),rows=()=>document.querySelectorAll('.colab-chat-item').length;
       const project=document.querySelector('#colabProjectFilter');project.value='';project.dispatchEvent(new Event('change'));await wait();
       const all=rows(),id=atlasColab.current().id;
-      document.querySelector('#colabFolder').click();await wait();
+      if(document.querySelectorAll('[id]').length!==new Set([...document.querySelectorAll('[id]')].map(node=>node.id)).size)throw Error('Duplicate ids: '+[...document.querySelectorAll('[id]')].map(node=>node.id).filter((name,index,all)=>all.indexOf(name)!==index).join(', '));
+      document.querySelector('#colabMoveFolder').click();await wait();
       document.querySelector('[aria-label="Folder name"]').value='Work';
       [...document.querySelectorAll('.workspace-dialog button')].find(node=>node.textContent==='Save folder').click();await wait();
       if(atlasColab.current().folder!=='Work'||document.querySelector('.workspace-dialog').open)throw Error('Colab folder not saved');

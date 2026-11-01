@@ -99,6 +99,14 @@ test('storage cleanup preserves active and named snapshots and rejects stale pre
     preview.candidates.map((row) => row.path),
     ['changes/orphan.json'],
   );
+  // A file written this instant can read as slightly in the future.
+  const fresh = await fixture(t),
+    freshStore = require('../storage-manager').createStorageManager(fresh);
+  await fs.mkdir(path.join(fresh, 'changes'));
+  for (let run = 0; run < 200; run++) {
+    await fs.writeFile(path.join(fresh, 'changes', 'orphan.json'), 'run' + run);
+    assert.equal((await freshStore.inspect(0)).candidates.length, 1);
+  }
   await fs.writeFile(path.join(root, 'changes', 'orphan.json'), 'newer');
   await assert.rejects(store.remove({ ...preview, paths: ['changes/orphan.json'] }), /changed/);
   const next = await store.inspect(0);
