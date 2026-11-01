@@ -39,13 +39,28 @@ function createUpdateRecovery({ directory, appRoot, version, backupData, restore
     const folder = path.join(directory, 'update-recovery', randomUUID());
     try {
       await fs.mkdir(folder, { recursive: true });
-      const data = await backupData();
-      await fs.writeFile(path.join(folder, 'data.atlas-backup'), data, { mode: 0o600 });
+      let data = null;
+      try {
+        const bytes = await backupData();
+        data = path.join(folder, 'data.atlas-backup');
+        await fs.writeFile(data, bytes, { mode: 0o600 });
+      } catch (error) {
+        // Too much data must not rule out updating: installing does not touch the records themselves.
+        if (
+          error.code !== 'ATLAS_BACKUP_LIMIT' ||
+          !(await approve(
+            'Update without backing up your records?',
+            error.message +
+              ' The app can still be preserved for rollback, but your records would not be saved with it. Updating does not change them.',
+          ))
+        )
+          throw error;
+      }
       const target = path.join(folder, 'app');
       await copyApp(root, target);
       const executable = path.join(target, path.basename(process.execPath));
       await fs.access(executable);
-      const row = { version, createdAt: Date.now(), folder, executable, data: path.join(folder, 'data.atlas-backup') };
+      const row = { version, createdAt: Date.now(), folder, executable, data };
       await fs.writeFile(file, JSON.stringify(row));
       return row;
     } catch (error) {
@@ -59,27 +74,31 @@ function createUpdateRecovery({ directory, appRoot, version, backupData, restore
     const base = await fs.realpath(path.join(directory, 'update-recovery')),
       folder = await fs.realpath(row.folder),
       executable = await fs.realpath(row.executable),
-      data = await fs.realpath(row.data);
+      data = row.data ? await fs.realpath(row.data) : null;
     if (
       !require('./project-files').within(base, folder) ||
       !require('./project-files').within(folder, executable) ||
-      !require('./project-files').within(folder, data)
+      (data && !require('./project-files').within(folder, data))
     )
       throw Error('Recovery paths changed.');
     if (
       !(await approve(
-        'Launch the preserved version and restore its data?',
+        data ? 'Launch the preserved version and restore its data?' : 'Launch the preserved version?',
         'Version ' +
           row.version +
           '\nSaved ' +
           new Date(row.createdAt).toLocaleString() +
           '\nExecutable: ' +
           executable +
-          '\n\nCurrent managed records will be preserved in a recovery backup. ATLAS will close and launch its local preserved copy. The newer installation remains available.',
+          '\n\n' +
+          (data
+            ? 'Current managed records will be preserved in a recovery backup. '
+            : 'This copy has no saved records, so it will open your current ones. ') +
+          'ATLAS will close and launch its local preserved copy. The newer installation remains available.',
       ))
     )
       return { cancelled: true };
-    await restoreData(await fs.readFile(data));
+    if (data) await restoreData(await fs.readFile(data));
     await launch(executable);
     return { launching: true };
   }

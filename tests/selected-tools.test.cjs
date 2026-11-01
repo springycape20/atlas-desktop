@@ -354,6 +354,8 @@ test('restore detects stage modification before moving current records', async (
   await fs.writeFile(path.join(root, 'restore-staging', staged.id, 'settings.json'), '{"tampered":true}');
   assert.throws(() => backups.applyPendingRestore(root), /data changed/);
   assert.equal(await fs.readFile(path.join(root, 'settings.json'), 'utf8'), '{"current":true}');
+  // The failed request is cleared, so it cannot stop every later launch.
+  assert.equal(backups.applyPendingRestore(root), false);
 });
 
 test('update recovery retains executable and data and stages restoration before launch', async (t) => {

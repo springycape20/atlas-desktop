@@ -68,19 +68,11 @@ function createChatImporter({ history, transaction, dialog, window, home, now = 
     if (destination === 'colab') return { destination, chats: prepared };
     const imported = [];
     let skipped = 0;
-    // Imports and normal chat saves share the same transaction queue. Never evict an
-    // existing conversation to make room for an import, including concurrent imports.
+    // Imports and normal chat saves share the same transaction queue.
     await transaction(async (current) => {
       const existing = new Map(
         current.filter((chat) => chat.importSource).map((chat) => [sourceKey(chat.importSource), chat]),
       );
-      const newChats = [...unique].filter(([key]) => !existing.has(key));
-      if (current.length + newChats.length > MAX_CHATS)
-        throw Error(
-          'ATLAS has room for ' +
-            Math.max(0, MAX_CHATS - current.length) +
-            ' more conversations. Select fewer chats; existing chats were kept.',
-        );
       for (const [key, chat] of unique) {
         if (existing.has(key)) {
           skipped++;

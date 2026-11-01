@@ -205,7 +205,7 @@ test('file import requires the native picker, previews before writing, and dedup
   assert.equal((await fs.readFile(file, 'utf8')).includes('Use this plan'), true);
   await assert.rejects(importer.read({ provider: 'claude', id: '../credentials', fromFile: true }), /Choose/);
 });
-test('import capacity failures preserve existing conversations and cancellations do not write', async (t) => {
+test('imports past 100 chats keep existing conversations and cancellations do not write', async (t) => {
   const f = await fixture(t);
   f.state = Array.from({ length: 100 }, (_, i) => ({ id: String(i), turns: [] }));
   const importer = createChatImporter({
@@ -217,8 +217,9 @@ test('import capacity failures preserve existing conversations and cancellations
     dialog: { showOpenDialog: async () => ({ canceled: true }) },
     window: () => null,
   });
-  await assert.rejects(importer.commit({ chats: [{ provider: 'codex', id }] }), /room for 0/);
-  assert.equal(f.state.length, 100);
+  assert.equal((await importer.commit({ chats: [{ provider: 'codex', id }] })).imported, 1);
+  assert.equal(f.state.length, 101);
+  assert.equal(f.state[0].id, '0');
   assert.equal((await importer.chooseFile()).cancelled, true);
   const handlers = new Map();
   registerChatImportIpc({ ipcMain: { handle: (name, handler) => handlers.set(name, handler) }, trusted: () => false });

@@ -6,7 +6,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file));
 const SUITES =
-  'navigation power preview settings assistant colab graph dispute approvals files pty pty-render restore recovery release pdf-package';
+  'navigation power preview settings assistant colab graph dispute approvals files pty pty-render restore recovery data release pdf-package';
 
 // Problems in the release record that no test would otherwise report before tagging.
 function recordProblems({ version, lock, lockBytes, review, changelog, notes, reviewDocExists, tags = [] }) {

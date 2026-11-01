@@ -81,6 +81,24 @@ if (process.versions?.electron) {
   app.on('will-quit', () => appLog.info('Quitting'));
 }
 
+// Also usable before the app is ready: the dialog then waits until it can be shown.
+function warnUser(message, detail) {
+  appLog.error(message, detail);
+  app
+    .whenReady()
+    .then(() =>
+      dialog
+        .showMessageBox({ type: 'warning', title: 'ATLAS', message, detail, buttons: ['OK'] })
+        .catch((error) => appLog.error('Could not show a warning:', error)),
+    );
+}
+function warnDamaged(what, file) {
+  warnUser(
+    'ATLAS could not read ' + what + '.',
+    'The file was damaged, so ATLAS started without those records. The damaged file was kept at:\n' + file,
+  );
+}
+
 async function migrateLegacyUserData() {
   if (!migrateToLocalAppData || !existsSync(legacyUserDataPath)) return;
   return require('./startup-lifecycle').migrateOnce(legacyUserDataPath, localUserDataPath);
@@ -95,8 +113,23 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow;
 const ownsInstance = require('./startup-lifecycle').singleInstance(app, () => mainWindow);
-if (ownsInstance) require('./local-data').applyPendingReset(app.getPath('userData'), legacyUserDataPath);
-if (ownsInstance) require('./local-backups').applyPendingRestore(app.getPath('userData'));
+// A failed reset or restore must not stop ATLAS opening, or the user has no way to choose again.
+if (ownsInstance)
+  try {
+    require('./local-data').applyPendingReset(app.getPath('userData'), legacyUserDataPath);
+  } catch (error) {
+    warnUser('ATLAS could not reset its data.', error.message);
+  }
+if (ownsInstance)
+  try {
+    require('./local-backups').applyPendingRestore(app.getPath('userData'));
+  } catch (error) {
+    warnUser(
+      'ATLAS could not restore the backup.',
+      error.message +
+        '\n\nYour existing records were kept. If any are missing, they are in the recovery-backups folder in the ATLAS data folder. Select the backup again to retry.',
+    );
+  }
 if (ownsInstance) require('./startup-lifecycle').configureChromiumCache(app);
 const taskNotifications = require('./task-notifications').createTaskNotifications({
   Notification,
@@ -850,15 +883,13 @@ function atlasHistoryPath() {
 let atlasHistoryCache;
 async function readAtlasHistory() {
   if (atlasHistoryCache) return structuredClone(atlasHistoryCache);
-  try {
-    const parsed = JSON.parse(await readFile(atlasHistoryPath(), 'utf8'));
-    atlasHistoryCache = Array.isArray(parsed)
-      ? parsed.filter((item) => item && typeof item.id === 'string' && Array.isArray(item.turns)).slice(-100)
-      : [];
-    return structuredClone(atlasHistoryCache);
-  } catch {
-    return [];
-  }
+  const saved = require('./atomic-store').readStored(atlasHistoryPath(), Array.isArray);
+  if (!saved) return [];
+  if (saved.damaged) warnDamaged('your saved chats', saved.damaged);
+  atlasHistoryCache = (saved.value || []).filter(
+    (item) => item && typeof item.id === 'string' && Array.isArray(item.turns),
+  );
+  return structuredClone(atlasHistoryCache);
 }
 let historyWriteQueue = Promise.resolve();
 function transactAtlasHistory(change) {
@@ -878,7 +909,8 @@ function writeAtlasHistory(items) {
 }
 async function persistAtlasHistory(items) {
   await mkdir(app.getPath('userData'), { recursive: true });
-  const trimmed = items.slice(-100).map((item) => ({
+  // ponytail: every save rewrites one file holding all chats. Split it per chat if saving becomes slow.
+  const trimmed = items.map((item) => ({
     id: String(item.id).slice(0, 80),
     title: String(item.title || 'Conversation').slice(0, 100),
     provider: 'atlas',
@@ -903,9 +935,9 @@ async function persistAtlasHistory(items) {
         }
       : {}),
     updatedAt: Number(item.updatedAt) || Date.now(),
-    turns: (item.importSource ? item.turns : item.turns.slice(-80)).map((turn) => ({
+    turns: item.turns.map((turn) => ({
       role: turn.role === 'assistant' ? 'assistant' : 'user',
-      content: item.importSource ? String(turn.content || '') : String(turn.content || '').slice(0, 12000),
+      content: String(turn.content || ''),
       provider: String(turn.provider || '').slice(0, 20),
       attachments: (Array.isArray(turn.attachments) ? turn.attachments : [])
         .slice(0, 8)
@@ -2876,7 +2908,7 @@ async function createWindow() {
   );
 }
 
-app.whenReady().then(async () => {
+async function startApp() {
   if (!ownsInstance) return;
   app.setName('ATLAS');
   app.setAppUserModelId(APP_ID);
@@ -2888,6 +2920,7 @@ app.whenReady().then(async () => {
   setupPermissions();
   assistantService = require('./assistant-service').createService({
     directory: app.getPath('userData'),
+    onDamaged: (file) => warnDamaged('your memories, reminders and saved tasks', file),
     launchApp: async (name) => {
       const targets = {
         notepad: 'notepad.exe',
@@ -2963,7 +2996,15 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
+}
+app.whenReady().then(() =>
+  startApp().catch((error) => {
+    // Without this the process keeps running with no window and no explanation.
+    appLog.error('ATLAS could not start:', error);
+    dialog.showErrorBox('ATLAS could not start', error.message);
+    app.exit(1);
+  }),
+);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
