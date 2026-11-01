@@ -1,6 +1,6 @@
 # ATLAS
 
-ATLAS 0.10.3 fixes in-app updates. If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
+ATLAS 0.10.4 stops ATLAS losing saved chats, and stops damaged data blocking start-up or updates. If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
 
 ATLAS 0.10.2 added [Power tools](docs/POWER-TOOL-UPGRADES.md), which connects the twelve project capabilities and adds installed-language-server navigation, saved browser checks, visual comparisons and preview profiling. It also regroups the Tasks menu and fixes menu errors.
 

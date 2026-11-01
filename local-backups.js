@@ -13,6 +13,10 @@ const safe = (name) =>
   name.split('/').every((part) => part && part !== '.' && part !== '..') &&
   managed(name.split('/')[0]);
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const tooLarge = () =>
+  Object.assign(Error('ATLAS records are over the backup limit of 256 MiB or 20,000 files.'), {
+    code: 'ATLAS_BACKUP_LIMIT',
+  });
 function collect(root) {
   assertDirectory(root);
   const rows = [];
@@ -25,8 +29,7 @@ function collect(root) {
       if (stat.isSymbolicLink()) throw Error('Backup refuses linked data: ' + name);
       if (entry.isDirectory()) walk(file, name + '/');
       else if (entry.isFile()) {
-        if (stat.size > 32 * 1024 * 1024 || (total += stat.size) > 256 * 1024 * 1024 || rows.length >= 20000)
-          throw Error('Backup limit exceeded (256 MiB, 20,000 files).');
+        if ((total += stat.size) > 256 * 1024 * 1024 || rows.length >= 20000) throw tooLarge();
         const bytes = fs.readFileSync(file);
         rows.push({ path: name, size: bytes.length, sha256: digest(bytes), data: bytes.toString('base64') });
       }
@@ -37,12 +40,10 @@ function collect(root) {
     const file = path.join(root, name);
     const stat = fs.lstatSync(file);
     if (stat.isSymbolicLink()) throw Error('Backup refuses linked data: ' + name);
-    if (stat.size > 32 * 1024 * 1024) throw Error('Backup file exceeds 32 MiB.');
-    if (fs.lstatSync(file).isDirectory()) walk(file, name + '/');
+    if (stat.isDirectory()) walk(file, name + '/');
     else {
+      if ((total += stat.size) > 256 * 1024 * 1024 || rows.length >= 20000) throw tooLarge();
       const bytes = fs.readFileSync(file);
-      total += bytes.length;
-      if (total > 256 * 1024 * 1024 || rows.length >= 20000) throw Error('Backup limit exceeded.');
       rows.push({ path: name, size: bytes.length, sha256: digest(bytes), data: bytes.toString('base64') });
     }
   }
@@ -87,9 +88,18 @@ function stageRestore(root, bytes) {
   fs.writeFileSync(path.join(root, '.restore-pending.json'), JSON.stringify({ id, version: value.version, expected }));
   return { id, version: value.version, files: value.files.length, createdAt: value.createdAt };
 }
+// A failed request is cleared, so it reports once instead of failing on every launch.
 function applyPendingRestore(root) {
   const marker = path.join(root, '.restore-pending.json');
   if (!fs.existsSync(marker)) return false;
+  try {
+    return applyRestore(root, marker);
+  } catch (error) {
+    fs.rmSync(marker, { force: true });
+    throw error;
+  }
+}
+function applyRestore(root, marker) {
   assertDirectory(root);
   assertChildDirectory(root, 'restore-staging');
   assertChildDirectory(root, 'recovery-backups');

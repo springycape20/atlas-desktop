@@ -1,15 +1,15 @@
 {
   "status": "technical-review-complete",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "reviewedBy": "Claude automated technical review; not legal counsel",
   "reviewedAt": "2026-11-01",
-  "packageLockSha256": "6c5b939adf310abd197b1d8cf49092a7c252cb7b9bbcf5cb931395fcfddcc389",
-  "evidence": "docs/RELEASE-0.10.3-REVIEW.md",
+  "packageLockSha256": "fd7204bf6ab812c03d690618626cf9972f59e94eaff96f8ff7fb9fb2a619a42e",
+  "evidence": "docs/RELEASE-0.10.4-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner requested the 0.10.3 release on 2026-11-01. The previously authorized unsigned-release policy remains in effect. No signing or legal approval is claimed.",
+  "ownerDecision": "Owner requested the 0.10.4 patch on 2026-11-01. The previously authorized unsigned-release policy remains in effect. No signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 534,
+    "unitTests": 542,
     "electronSuites": [
       "assistant",
       "colab",
@@ -27,10 +27,11 @@
       "restore",
       "pdf-package",
       "recovery",
+      "data",
       "menu-audit"
     ],
     "productionAudit": "Checked by npm run release:check on 2026-11-01",
     "package": "Windows x64 unsigned installer checked with build/verify-release.cjs by npm run release:check.",
-    "recovery": "Recovery copy tested in Electron with a built app.asar. The fixed update has not been run through the packaged flow end to end because no newer release exists."
+    "recovery": "Recovery copy tested in Electron with a built app.asar, and the backup-limit path with fixtures. Restart and install has not been run through the packaged flow end to end, because it can only reach a published release."
   }
 }

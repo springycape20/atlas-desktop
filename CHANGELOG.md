@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.4 — 1 November 2026
+
+- Chats are no longer lost when their file is damaged: ATLAS keeps the damaged file, warns you and starts a new list instead of overwriting it. A file that cannot be read for another reason, such as being locked, is left alone.
+- Removes the limits that silently deleted your first chat when you started the 101st, kept only the last 80 messages of a chat and cut saved messages at 12,000 characters.
+- ATLAS now opens with a warning when its reminders and memories file is damaged, and explains any other start-up failure instead of running with no window.
+- A failed backup restore now reports once and lets ATLAS open, rather than failing on every launch.
+- Backups no longer refuse single files over 32 MiB. Records over the 256 MiB total limit no longer block **Restart and install**: ATLAS asks whether to update without backing them up.
+
 ## 0.10.3 — 1 November 2026
 
 - Fixes **Restart and install**, which failed with an "Invalid package" error when copying the current version for recovery and so stopped every in-app update. Versions up to 0.10.2 cannot update themselves to this release: download its installer instead.

@@ -2,11 +2,23 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 
-function createService({ directory, launchApp, volume, notify, now = () => Date.now() }) {
+function createService({ directory, launchApp, volume, notify, onDamaged = () => {}, now = () => Date.now() }) {
   const file = path.join(directory, 'assistant-data.json');
+  const { createAtomicStore, readStored } = require('./atomic-store');
   let state = { memories: [], reminders: [], jobs: [] };
-  if (fs.existsSync(file)) state = { ...state, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
-  const store = require('./atomic-store').createAtomicStore(file);
+  const isRecords = (list) =>
+    list === undefined || (Array.isArray(list) && list.every((item) => item && typeof item === 'object'));
+  const saved = readStored(
+    file,
+    (value) =>
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      [value.memories, value.reminders, value.jobs].every(isRecords),
+  );
+  if (saved?.damaged) onDamaged(saved.damaged);
+  if (saved?.value) state = { ...state, ...saved.value };
+  const store = createAtomicStore(file);
   function save() {
     return store.save(state);
   }
