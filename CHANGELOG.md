@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.5 — 2 November 2026
+
+- Adds chat folders and an archive to Assistant and Colab, with filtering and search that include them.
+- Adds automatic backups of your local records, on by default: once a day, keeping the newest seven in the ATLAS data folder. They are compressed, not encrypted. Turn them off in **Backups and recovery**.
+- Adds recovery cleanup to **Backups and recovery**, which shows old recovery copies and asks before deleting them. The copy needed to roll back and the newest record backups are kept.
+- Adds edit and resend, and branch from a message. Both start a new chat and leave the original unchanged.
+- Adds **Memory review**, a page for checking and removing what ATLAS remembers.
+- Adds **Report a problem**, which prepares a report for you to read and opens a blank GitHub issue. ATLAS sends nothing itself.
+- Adds an optional tray icon and global shortcut under **Settings > Startup**, both off by default. With the tray on, closing the window keeps ATLAS running.
+
 ## 0.10.4 — 1 November 2026
 
 - Chats are no longer lost when their file is damaged: ATLAS keeps the damaged file, warns you and starts a new list instead of overwriting it. A file that cannot be read for another reason, such as being locked, is left alone.
