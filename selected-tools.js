@@ -16,6 +16,7 @@ function createSelectedTools({
     git = require('./git-panel').createGitPanel({ approve, busy }),
     http = require('./api-workspace').createApiWorkspace(directory, { approve }),
     roots = require('./multi-root-workspaces').createMultiRootWorkspaces(directory),
+    recoveryCleanup = require('./recovery-cleanup').createRecoveryCleanup(directory),
     storage = require('./storage-manager').createStorageManager(directory, {
       protectedIds: () =>
         jobs()
@@ -52,6 +53,18 @@ function createSelectedTools({
           return storage.remove(request);
         }
         return storage.inspect(Number(request.days ?? 30));
+      }
+      if (request.tool === 'recovery-cleanup') {
+        if (request.action !== 'remove') return recoveryCleanup.inspect();
+        if (busy() || services.active()) throw Error('Stop tasks and services before cleanup.');
+        if (
+          !(await approve(
+            'Permanently delete these recovery copies?',
+            request.names.join('\n') + '\n\nThey cannot be recovered, and you could not go back to them.',
+          ))
+        )
+          return { cancelled: true };
+        return recoveryCleanup.remove(request.names);
       }
       if (request.tool === 'auto-backup')
         return request.action === 'set' ? autoBackups().setEnabled(request.enabled) : autoBackups().status();
