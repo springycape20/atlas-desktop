@@ -93,20 +93,17 @@ app.whenReady().then(async () => {
   for(const selector of ['#mic','#assistantEffort','.attachment-add','.assistant-task-work','#setFolder','#readFullAnswer'])if(!document.querySelector(selector))throw Error('Existing control missing: '+selector);
   await atlasWorkspace.importChats();const dialog=document.querySelector('.import-dialog');if(dialog.querySelectorAll('input[type=checkbox]').length!==61)throw Error('Import paging or internal filter missing');if(!dialog.textContent.includes('Native chat 0')||dialog.textContent.includes('Native chat 124'))throw Error('Named chat list wrong');const nativeSelect=dialog.querySelector('input[aria-label="Import Native chat 0"]');if(!nativeSelect.disabled)throw Error('Unavailable transcript selectable');const workspace=dialog.querySelector('[aria-label="Filter import workspace"]');workspace.value='claude|claude-project';workspace.dispatchEvent(new Event('change'));if(!dialog.textContent.includes('Claude workspace')||dialog.textContent.includes('Native chat 0'))throw Error('Workspace filter failed');dialog.querySelector('#workspaceDialogClose').click();
  })()`);
-    const resize = async (width, height) => {
+    for (const [width, height] of [
+      [1280, 800],
+      [800, 600],
+      [640, 600],
+    ]) {
       win.setContentSize(width, height);
       for (let attempt = 0; attempt < 40; attempt++) {
         const size = await win.webContents.executeJavaScript('[innerWidth,innerHeight]');
         if (size[0] === width && size[1] === height) break;
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-    };
-    for (const [width, height] of [
-      [1280, 800],
-      [800, 600],
-      [640, 600],
-    ]) {
-      await resize(width, height);
       const bounds = await win.webContents.executeJavaScript(
         `(()=>({outerHeight:document.documentElement.scrollHeight,outerWidth:document.documentElement.scrollWidth,transcript:document.querySelector('#response').clientHeight,composerBottom:document.querySelector('.composer').getBoundingClientRect().bottom}))()`,
       );
@@ -118,7 +115,11 @@ app.whenReady().then(async () => {
         JSON.stringify(bounds),
       );
     }
-    await resize(1280, 800);
+    win.setContentSize(1280, 800);
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if ((await win.webContents.executeJavaScript('innerWidth')) === 1280) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     await win.webContents.executeJavaScript(`(async()=>{
   const toggles=document.querySelectorAll('.chat-list-toggle'),chats=document.querySelector('.assistant-chats'),width=()=>document.querySelector('.assistant-workspace>.core').clientWidth,before=width();
   if(toggles.length!==2||!document.querySelector('.colab-chats>.chat-list-toggle'))throw Error('Assistant and Colab need a list toggle');
