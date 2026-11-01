@@ -100,9 +100,9 @@
   style.textContent +=
     '.task-progress pre{font:13px/1.7 Segoe UI,sans-serif;color:#c8d9df}.task-command>summary{color:#91aab4;cursor:pointer}.task-command pre{padding:8px;background:#071118;border-radius:7px}.assistant-task-work{margin:8px 0 16px}.assistant-task-work:empty{display:none}.assistant-task-work .colab-work{margin:0}.assistant-task-work .colab-work-list{max-height:32vh}.colab-work-step.task-progress{border-top:0;padding:6px 0}';
   style.textContent +=
-    '.colab-chats>#colabProjectFilter{width:100%;min-width:0;margin:0 0 8px;padding:8px;border:1px solid #35505a;border-radius:8px;background:#07141b;color:#c9dfe6;font:11px Segoe UI,sans-serif}.colab-browse{display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;padding:9px 0;border-bottom:1px solid #253c45}.colab-browse input{min-width:100px;flex:1;width:100px;border:1px solid #35505a;border-radius:8px;background:#07141b;color:#c9dfe6;padding:7px 9px;font:11px Segoe UI,sans-serif}.colab-browse button{padding:5px 8px;font-size:10px}.colab-browse>span{font:10px Segoe UI,sans-serif;color:#91adb8}.colab-chat-main>.colab-transcript{scroll-behavior:auto;overflow-anchor:none}.colab-message[data-match=true]{outline:1px solid #66b9c5;outline-offset:5px;border-radius:8px}.colab-message-actions{display:flex;gap:8px;margin-top:10px}.colab-message-actions button{padding:4px 8px;font-size:10px}.colab-message-actions [aria-pressed=true]{border-color:#81caca;color:#aff1f3}.colab-message time{font-weight:400;color:#7897a3;margin-left:8px}.colab-compare{width:min(1100px,94vw);max-height:90vh;border:1px solid #35505a;border-radius:14px;background:#0c171e;color:#d6e8ed;padding:0}.colab-compare::backdrop{background:#02080dd9}.colab-compare header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #29414a}.colab-compare h2{font-size:17px;margin:0}.colab-compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;max-height:70vh;overflow:auto}.colab-compare-grid section{min-width:0}.colab-compare-grid h3{font:12px Segoe UI,sans-serif;color:#91adb8}.colab-compare-grid pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 Segoe UI,sans-serif;background:#071118;padding:12px;border-radius:8px}.colab-chat-project{font:10px/1.5 Segoe UI,sans-serif;color:#81a5ad;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:750px){.colab-workspace>.colab-chats{max-height:150px}.colab-chats>#colabProjectFilter{padding:4px;margin-bottom:4px}.colab-compare-grid{grid-template-columns:1fr}.colab-browse{gap:4px;padding:5px 0}.colab-browse input{flex-basis:100px}}';
+    '.colab-chats>:is(#colabProjectFilter,#colabFolderFilter){width:100%;min-width:0;margin:0 0 8px;padding:8px;border:1px solid #35505a;border-radius:8px;background:#07141b;color:#c9dfe6;font:11px Segoe UI,sans-serif}.colab-browse{display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;padding:9px 0;border-bottom:1px solid #253c45}.colab-browse input{min-width:100px;flex:1;width:100px;border:1px solid #35505a;border-radius:8px;background:#07141b;color:#c9dfe6;padding:7px 9px;font:11px Segoe UI,sans-serif}.colab-browse button{padding:5px 8px;font-size:10px}.colab-browse>span{font:10px Segoe UI,sans-serif;color:#91adb8}.colab-chat-main>.colab-transcript{scroll-behavior:auto;overflow-anchor:none}.colab-message[data-match=true]{outline:1px solid #66b9c5;outline-offset:5px;border-radius:8px}.colab-message-actions{display:flex;gap:8px;margin-top:10px}.colab-message-actions button{padding:4px 8px;font-size:10px}.colab-message-actions [aria-pressed=true]{border-color:#81caca;color:#aff1f3}.colab-message time{font-weight:400;color:#7897a3;margin-left:8px}.colab-compare{width:min(1100px,94vw);max-height:90vh;border:1px solid #35505a;border-radius:14px;background:#0c171e;color:#d6e8ed;padding:0}.colab-compare::backdrop{background:#02080dd9}.colab-compare header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #29414a}.colab-compare h2{font-size:17px;margin:0}.colab-compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;max-height:70vh;overflow:auto}.colab-compare-grid section{min-width:0}.colab-compare-grid h3{font:12px Segoe UI,sans-serif;color:#91adb8}.colab-compare-grid pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 Segoe UI,sans-serif;background:#071118;padding:12px;border-radius:8px}.colab-chat-project{font:10px/1.5 Segoe UI,sans-serif;color:#81a5ad;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:750px){.colab-workspace>.colab-chats{max-height:150px}.colab-chats>:is(#colabProjectFilter,#colabFolderFilter){padding:4px;margin-bottom:4px}.colab-compare-grid{grid-template-columns:1fr}.colab-browse{gap:4px;padding:5px 0}.colab-browse input{flex-basis:100px}}';
   style.textContent +=
-    '@media(max-width:750px){.colab-workspace>.colab-chats{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);gap:4px;max-height:110px;padding:6px}.colab-chats>#colabNewChat{grid-column:1;grid-row:1;margin:0;padding:5px 8px;font-size:10px}.colab-chats>#colabProjectFilter{grid-column:2;grid-row:1;margin:0}.colab-chats>#colabSearch{grid-column:1/-1;grid-row:2;margin:0}.colab-chats>.colab-chat-list{grid-column:1/-1;grid-row:3;max-height:32px}.colab-chat-header>div:first-child{min-width:0;flex:1}.colab-chat-header h1{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.colab-chat-header>span.session-chip{display:none}.colab-chat-header p{font-size:10px}.colab-chat-main>.colab-recovery{font-size:9px;margin:3px 0}.colab-chat-main>.colab-composer{padding-top:6px}.colab-composer textarea{max-height:100px}}@media(max-width:750px) and (max-height:680px){.colab-chat-header p{display:none}.colab-chat-header .colab-chat-actions button{padding:4px 6px;font-size:9px}.colab-chat-main>.colab-recovery{max-height:28px}.colab-compose-footer [role=status]{font-size:9px}.colab-browse button{font-size:9px;padding:4px 5px}}';
+    '@media(max-width:750px){.colab-workspace>.colab-chats{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);gap:4px;max-height:110px;padding:6px}.colab-chats>#colabNewChat{grid-column:1;grid-row:1;margin:0;padding:5px 8px;font-size:10px}.colab-chats>#colabProjectFilter{grid-column:2;grid-row:1;margin:0}.colab-chats>#colabFolderFilter{grid-column:3;grid-row:1;margin:0}.colab-chats>#colabSearch{grid-column:1/-1;grid-row:2;margin:0}.colab-chats>.colab-chat-list{grid-column:1/-1;grid-row:3;max-height:32px}.colab-chat-header>div:first-child{min-width:0;flex:1}.colab-chat-header h1{font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.colab-chat-header>span.session-chip{display:none}.colab-chat-header p{font-size:10px}.colab-chat-main>.colab-recovery{font-size:9px;margin:3px 0}.colab-chat-main>.colab-composer{padding-top:6px}.colab-composer textarea{max-height:100px}}@media(max-width:750px) and (max-height:680px){.colab-chat-header p{display:none}.colab-chat-header .colab-chat-actions button{padding:4px 6px;font-size:9px}.colab-chat-main>.colab-recovery{max-height:28px}.colab-compose-footer [role=status]{font-size:9px}.colab-browse button{font-size:9px;padding:4px 5px}}';
   document.head.append(style);
   const panel = document.createElement('section');
   panel.className = 'colab-workspace';
@@ -133,6 +133,11 @@
   projectPicker.id = 'colabProjectFilter';
   projectPicker.setAttribute('aria-label', 'Filter Colab history by project');
   search.before(projectPicker);
+  const folderPicker = document.createElement('select');
+  folderPicker.id = 'colabFolderFilter';
+  folderPicker.setAttribute('aria-label', 'Filter Colab chats by folder');
+  folderPicker.onchange = () => render();
+  search.before(folderPicker);
   try {
     projectFilter = localStorage.getItem('atlas.colab.project-filter') || '';
   } catch {}
@@ -278,7 +283,7 @@
   const toolbar = document.createElement('div');
   toolbar.className = 'colab-chat-actions';
   toolbar.innerHTML =
-    '<button class="quiet-button" id="colabRename" type="button">Rename</button><button class="quiet-button" id="colabPin" type="button">Pin</button><button class="quiet-button" id="colabExport" type="button">Export</button>';
+    '<button class="quiet-button" id="colabRename" type="button">Rename</button><button class="quiet-button" id="colabPin" type="button">Pin</button><button class="quiet-button" id="colabFolder" type="button">Folder</button><button class="quiet-button" id="colabArchive" type="button">Archive</button><button class="quiet-button" id="colabExport" type="button">Export</button>';
   panel.querySelector('.colab-chat-header').append(toolbar);
   const recovery = document.createElement('div');
   recovery.className = 'colab-recovery';
@@ -620,11 +625,19 @@
     if (projectFilter && !projects.has(projectFilter)) projectFilter = '';
     projectPicker.value = projectFilter;
     const query = el('colabSearch').value.toLowerCase();
+    window.atlasChatRender.fillFolderFilter(
+      folderPicker,
+      chats.map((chat) => chat.folder),
+    );
     for (const item of [...chats]
       .reverse()
       .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.updatedAt || 0) - (a.updatedAt || 0))
       .filter(
         (chat) =>
+          window.atlasChatRender.chatVisible(chat, folderPicker.value, {
+            searching: Boolean(query),
+            selected: chat.id === selected,
+          }) &&
           (!projectFilter || projectKey(chat.cwd) === projectFilter) &&
           (!query ||
             memo(searchText, chat.id, [chat.title, ...chat.messages.map((m) => m.content)], () =>
@@ -638,6 +651,8 @@
           [
             item.title,
             item.pinned,
+            item.folder,
+            item.archived,
             item.busy,
             item.messages.length,
             item.projectName,
@@ -654,6 +669,8 @@
               detail = document.createElement('small');
             title.textContent = (item.pinned ? '★ ' : '') + item.title;
             detail.textContent =
+              (item.archived ? 'Archived · ' : '') +
+              (item.folder ? item.folder + ' · ' : '') +
               (item.busy ? 'Working…' : item.messages.length + ' messages') +
               ' · ' +
               (item.projectName ||
@@ -883,6 +900,7 @@
       (!historyReady ? 'Loading saved Colab history…' : chat.status) ||
       'Only the final summary appears when both models finish.';
     el('colabPin').textContent = chat.pinned ? 'Unpin' : 'Pin';
+    el('colabArchive').textContent = chat.archived ? 'Unarchive' : 'Archive';
     const job = chat.lastJob;
     el('colabResume').hidden = chat.busy || !job?.canResume || Boolean(job?.dispute);
     renderDispute(chat);
@@ -1351,6 +1369,13 @@
       save();
     };
   el('colabRename').onclick = () => window.atlasWorkspace?.renameColab();
+  el('colabFolder').onclick = () =>
+    void window.atlasWorkspace.moveToFolder({ ...current(), provider: 'colab' }).catch((error) => toast(error.message));
+  el('colabArchive').onclick = () => {
+    current().archived = !current().archived;
+    save();
+    render();
+  };
   el('colabPin').onclick = () => {
     current().pinned = !current().pinned;
     save();
@@ -1619,6 +1644,8 @@
         id: chat.id,
         title: chat.title,
         pinned: chat.pinned,
+        folder: chat.folder,
+        archived: chat.archived,
         cwd: chat.cwd,
         turns: chat.messages,
         updatedAt: chat.updatedAt || chat.lastJob?.startedAt || chat.createdAt || 0,
@@ -1639,7 +1666,7 @@
       const chat = chats.find((chat) => chat.id === id);
       if (chat) {
         Object.assign(chat, value);
-        chat.customTitle = true;
+        if (value.title) chat.customTitle = true;
         save();
         render();
       }

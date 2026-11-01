@@ -93,6 +93,31 @@ app.whenReady().then(async () => {
   for(const selector of ['#mic','#assistantEffort','.attachment-add','.assistant-task-work','#setFolder','#readFullAnswer'])if(!document.querySelector(selector))throw Error('Existing control missing: '+selector);
   await atlasWorkspace.importChats();const dialog=document.querySelector('.import-dialog');if(dialog.querySelectorAll('input[type=checkbox]').length!==61)throw Error('Import paging or internal filter missing');if(!dialog.textContent.includes('Native chat 0')||dialog.textContent.includes('Native chat 124'))throw Error('Named chat list wrong');const nativeSelect=dialog.querySelector('input[aria-label="Import Native chat 0"]');if(!nativeSelect.disabled)throw Error('Unavailable transcript selectable');const workspace=dialog.querySelector('[aria-label="Filter import workspace"]');workspace.value='claude|claude-project';workspace.dispatchEvent(new Event('change'));if(!dialog.textContent.includes('Claude workspace')||dialog.textContent.includes('Native chat 0'))throw Error('Workspace filter failed');dialog.querySelector('#workspaceDialogClose').click();
  })()`);
+    await win.webContents.executeJavaScript(`(async()=>{
+      const meta={};atlas.chatMetadata=async request=>{if(request?.action==='save'){const {action,key,...patch}=request;meta[key]={...meta[key],...patch};}return structuredClone(meta);};
+      const wait=()=>new Promise(resolve=>setTimeout(resolve,40)),names=()=>[...document.querySelectorAll('.assistant-chat-item span')].map(node=>node.textContent),heading=text=>[...document.querySelectorAll('.assistant-chat-heading button')].find(node=>node.textContent===text),filter=document.querySelector('[aria-label="Filter Assistant chats by folder"]'),search=document.querySelector('[aria-label="Search Assistant chats"]');
+      const choose=async value=>{filter.value=value;filter.dispatchEvent(new Event('change'));await wait();};
+      const file=async folder=>{heading('Folder').click();await wait();const input=document.querySelector('[aria-label="Folder name"]');input.value=folder;[...document.querySelectorAll('.workspace-dialog button')].find(node=>node.textContent==='Save folder').click();await wait();};
+      await atlasAssistant.open('${second}');await wait();
+      await file('Work');
+      if(!document.querySelector('.assistant-chat-item[aria-current=true] small').textContent.includes('Work'))throw Error('Folder missing from the chat row');
+      if(document.querySelector('.workspace-dialog').open)throw Error('Folder dialog stayed open');
+      await choose('Work');if(names().join()!=='Website project')throw Error('Folder filter wrong: '+names());await choose('');
+      heading('Archive').click();await wait();
+      if(!heading('Unarchive')||!names().includes('Website project'))throw Error('An archived chat should stay listed while it is open');
+      await atlasAssistant.open('${first}');await wait();
+      if(names().includes('Website project'))throw Error('Archived chat still in the main list');
+      search.value='Website';search.dispatchEvent(new Event('input'));await wait();
+      if(!names().includes('Website project'))throw Error('Search does not find an archived chat');
+      search.value='';search.dispatchEvent(new Event('input'));
+      await choose(atlasChatRender.ARCHIVED);if(names().join()!=='Website project')throw Error('Archived filter wrong: '+names());
+      document.querySelector('.assistant-chat-item').click();await wait();await choose('');
+      heading('Unarchive').click();await wait();await file('');
+      if([...filter.options].some(option=>option.value==='Work'))throw Error('An empty folder should disappear');
+      if(names().length<2||!heading('Archive'))throw Error('Unarchive did not restore the chat');
+      await atlasAssistant.open('${first}');await wait();
+    })()`);
+    console.log('PASS: Assistant folders and archive: filing, filtering, archiving, search and restoring.');
     for (const [width, height] of [
       [1280, 800],
       [800, 600],

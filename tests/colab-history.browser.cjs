@@ -149,6 +149,37 @@ app.whenReady().then(async () => {
    await click('Add Windows control');await click('Install runtime');await click('Start / check');if(!dialog.textContent.includes('Ready · 7 tools')||!calls.some(row=>row?.action==='start'))throw Error('Tool readiness missing');dialog.close();
  })()`);
     console.log('PASS: Colab Tools menu adds the Windows preset, installs its runtime and checks readiness.');
+    await win.webContents.executeJavaScript(`(async()=>{
+      const wait=()=>new Promise(resolve=>setTimeout(resolve,40)),rows=()=>document.querySelectorAll('.colab-chat-item').length;
+      const project=document.querySelector('#colabProjectFilter');project.value='';project.dispatchEvent(new Event('change'));await wait();
+      const all=rows(),id=atlasColab.current().id;
+      document.querySelector('#colabFolder').click();await wait();
+      document.querySelector('[aria-label="Folder name"]').value='Work';
+      [...document.querySelectorAll('.workspace-dialog button')].find(node=>node.textContent==='Save folder').click();await wait();
+      if(atlasColab.current().folder!=='Work'||document.querySelector('.workspace-dialog').open)throw Error('Colab folder not saved');
+      document.querySelector('#colabArchive').click();await wait();
+      if(document.querySelector('#colabArchive').textContent!=='Unarchive'||rows()!==all)throw Error('An open archived chat should stay listed');
+      await atlasColabHistory.flush();window.colabChatId=id;
+    })()`);
+    await win.reload();
+    await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+    await win.webContents.executeJavaScript(`(async()=>{
+      await atlasColab.ready;
+      const wait=()=>new Promise(resolve=>setTimeout(resolve,40)),rows=()=>document.querySelectorAll('.colab-chat-item').length;
+      const chat=atlasColab.history().find(chat=>chat.archived);
+      if(!chat||chat.folder!=='Work')throw Error('Colab folder and archive state lost on reload');
+      const other=atlasColab.history().find(row=>row.id!==chat.id);atlasColab.selectChat(other.id);await wait();
+      const project=document.querySelector('#colabProjectFilter');project.value='';project.dispatchEvent(new Event('change'));await wait();
+      const filter=document.querySelector('#colabFolderFilter'),before=rows();
+      if(before!==atlasColab.history().length-1)throw Error('Archived chat still in the Colab list: '+before);
+      filter.value='Work';filter.dispatchEvent(new Event('change'));await wait();if(rows()!==0)throw Error('A folder lists archived chats');
+      filter.value=atlasChatRender.ARCHIVED;filter.dispatchEvent(new Event('change'));await wait();if(rows()!==1)throw Error('Archived filter wrong');
+      document.querySelector('.colab-chat-item').click();await wait();
+      document.querySelector('#colabArchive').click();await wait();
+      filter.value='';filter.dispatchEvent(new Event('change'));await wait();
+      if(rows()!==atlasColab.history().length)throw Error('Unarchive did not restore the Colab chat');
+    })()`);
+    console.log('PASS: Colab folders and archive survive a reload, filter the list and restore.');
     console.log(
       'PASS: Efficiency controls, optional brief/budget/check reuse, mixed reported/estimated stage usage, saved report viewer and responsive layout.',
     );
