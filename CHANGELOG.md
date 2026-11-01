@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.4 — 1 November 2026
 
 - Chats are no longer lost when their file is damaged: ATLAS keeps the damaged file, warns you and starts a new list instead of overwriting it. A file that cannot be read for another reason, such as being locked, is left alone.
 - Removes the limits that silently deleted your first chat when you started the 101st, kept only the last 80 messages of a chat and cut saved messages at 12,000 characters.
