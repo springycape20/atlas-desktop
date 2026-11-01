@@ -24,6 +24,7 @@ function parent() {
       'recovery-cleanup',
       'chat-branch',
       'memory-review',
+      'report-problem',
     ]) {
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-data-safety-'));
       const result = cp.spawnSync(process.execPath, [__filename], {
@@ -116,6 +117,7 @@ function child() {
           },
         ]),
       ),
+    'report-problem': () => {},
     'memory-review': () =>
       fs.writeFileSync(
         path.join(data, 'assistant-data.json'),
@@ -210,6 +212,37 @@ function child() {
       );
       assert.match(refused, /not available/);
       assert.equal(saved().length, 2);
+    }
+    if (scenario === 'report-problem') {
+      const opened = [];
+      shell.openExternal = async (url) => opened.push(url);
+      const typed = 'It crashed in ' + home + '\\secret-project with Bearer abc123def456';
+      const shown = await win.webContents.executeJavaScript(`(async()=>{
+        const wait=()=>new Promise(resolve=>setTimeout(resolve,250)),
+          click=text=>[...document.querySelectorAll('.power-body button')].find(node=>node.textContent===text).click(),
+          status=()=>document.querySelector('.power-status').textContent;
+        let copied='';
+        navigator.clipboard.writeText=async text=>{copied=text;};
+        await atlasUi.open('diagnostics','Report a problem');await wait();
+        click('Copy report');await wait();const noDraft=status();
+        const field=document.querySelector('.power-body textarea');
+        click('Prepare report');await wait();const empty=status();
+        field.value=${JSON.stringify(typed)};field.dispatchEvent(new Event('input'));
+        click('Prepare report');await wait();
+        const text=document.querySelector('.power-body pre').textContent;
+        click('Copy report');await wait();
+        click('Open GitHub issues');await wait();
+        return {noDraft,empty,text,copied};
+      })()`);
+      assert.match(shown.noDraft, /Prepare the report first/);
+      assert.match(shown.empty, /Describe the problem first/);
+      assert.equal(shown.copied, shown.text);
+      const report = JSON.parse(shown.text);
+      assert.match(report.description, /It crashed in \[local path\]\\secret-project with Bearer \[REDACTED\]/);
+      assert.ok(!shown.text.includes(home));
+      assert.ok(!shown.text.includes('abc123def456'));
+      assert.equal(report.log, undefined);
+      assert.deepEqual(opened, ['https://github.com/springycape20/atlas-desktop/issues/new']);
     }
     if (scenario === 'memory-review') {
       const shown = await win.webContents.executeJavaScript(`(async()=>{

@@ -39,6 +39,7 @@ function diagnosticBundle({
   log = '',
   includeLogs = false,
   includeOutput = false,
+  description = '',
   privatePaths = [],
 }) {
   const clean = (value) => {
@@ -52,6 +53,7 @@ function diagnosticBundle({
     appVersion: version,
     platform,
     generatedAt: new Date().toISOString(),
+    ...(description ? { description: clean(String(description).slice(0, 4000)) } : {}),
     failedChecks: jobs
       .flatMap((job) => (job.verification || job.result?.verification)?.results || [])
       .filter((row) => row.status !== 'passed')

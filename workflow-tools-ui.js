@@ -83,6 +83,48 @@
     });
     body.append(preview);
   });
+  power.register('Report a problem', async ({ body, node, button, status }) => {
+    body.append(
+      node('h2', 'Report a problem'),
+      node(
+        'p',
+        'ATLAS sends nothing by itself. Prepare the report, read it, then copy it into a GitHub issue. GitHub issues are public and need a GitHub account. Local paths and common secrets are removed on a best effort basis, so check it first.',
+      ),
+    );
+    const label = node('label', 'What went wrong, and what were you doing?'),
+      description = node('textarea'),
+      logLabel = node('label', 'Include recent application logs'),
+      logs = node('input'),
+      preview = node('pre');
+    description.rows = 5;
+    label.append(description);
+    logs.type = 'checkbox';
+    logLabel.prepend(logs);
+    body.append(label, logLabel);
+    let draft;
+    description.oninput = logs.onchange = () => {
+      draft = null;
+      preview.textContent = '';
+    };
+    button('Prepare report', async () => {
+      if (!description.value.trim()) throw Error('Describe the problem first.');
+      draft = await api.workflowTools({
+        action: 'diagnostic-preview',
+        includeLogs: logs.checked,
+        description: description.value,
+      });
+      preview.textContent = draft.text;
+      status.textContent = 'Read the report below before sharing it.';
+    });
+    button('Copy report', async () => {
+      if (!draft) throw Error('Prepare the report first.');
+      await navigator.clipboard.writeText(draft.text);
+      status.textContent = 'Copied. Paste it into the issue.';
+    });
+    button('Open GitHub issues', () => api.openLink('https://github.com/springycape20/atlas-desktop/issues/new'));
+    body.append(preview);
+  });
+  window.atlasUi.register('diagnostics', 'Report a problem');
   power.register('Task comparison', async ({ body, node, button, current }) => {
     const [live, archived] = await Promise.all([api.jobs(), api.workflowTools({ action: 'archive-list' })]);
     const jobs = [

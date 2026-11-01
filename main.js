@@ -1832,6 +1832,7 @@ function setupIpc() {
         log,
         includeLogs: request.includeLogs === true,
         includeOutput: request.includeOutput === true,
+        description: request.description,
         privatePaths: [app.getPath('home'), app.getPath('userData'), ...jobs.map((job) => job.cwd)],
       });
       diagnosticDraft = {

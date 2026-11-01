@@ -99,6 +99,11 @@ test('diagnostic defaults omit content, optional exports redact paths and tokens
   assert(!extra.includes('secret-value'));
   assert(!extra.includes('C:/private'));
   assert(extra.includes('[local path]'));
+  assert.equal(diagnosticBundle(args).description, undefined);
+  const described = diagnosticBundle({ ...args, description: 'In C:/private: token=secret-value ' + 'x'.repeat(5000) });
+  assert(described.description.startsWith('In [local path]:'));
+  assert(!described.description.includes('secret-value'));
+  assert(described.description.length <= 4000);
 });
 test('task evidence uses executed checks, timestamps and only reported usage', () => {
   const { taskEvidence } = require('../workflow-evidence');
