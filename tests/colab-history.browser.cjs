@@ -181,6 +181,31 @@ app.whenReady().then(async () => {
       if(rows()!==atlasColab.history().length)throw Error('Unarchive did not restore the Colab chat');
     })()`);
     console.log('PASS: Colab folders and archive survive a reload, filter the list and restore.');
+    await win.webContents.executeJavaScript(`(async()=>{
+      const wait=()=>new Promise(resolve=>setTimeout(resolve,60)),
+        act=(article,text)=>[...article.querySelectorAll('button')].find(node=>node.textContent===text),
+        row=atlasColab.history().filter(chat=>chat.turns.some(turn=>turn.role==='user')&&chat.turns.some(turn=>turn.role==='assistant'&&!turn.error)).sort((a,b)=>b.turns.length-a.turns.length)[0];
+      atlasColab.selectChat(row.id);await wait();
+      const source=atlasColab.current(),saved=JSON.stringify(source.messages),count=atlasColab.history().length,
+        nodes=()=>[...document.querySelectorAll('.colab-transcript .colab-message')],
+        userAt=source.messages.findLastIndex(message=>message.role==='user');
+      if(nodes().length!==source.messages.length)throw Error('Showing '+nodes().length+' of '+source.messages.length);
+      const answer=nodes().find(node=>act(node,'Copy result'));
+      if(!act(answer,'Branch from here')||act(answer,'Edit and resend'))throw Error('Colab answer actions wrong');
+      act(nodes()[userAt],'Branch from here').click();await wait();
+      let branch=atlasColab.current();
+      if(branch.id===source.id||branch.messages.length!==userAt+1||!branch.title.startsWith('Branch: '))throw Error('Colab branch wrong');
+      if(branch.workspaceId||branch.lastJob||branch.busy)throw Error('Colab branch kept job state');
+      atlasColab.selectChat(source.id);await wait();
+      act(nodes()[userAt],'Edit and resend').click();await wait();
+      branch=atlasColab.current();
+      if(branch.messages.length!==userAt||branch.draft!==source.messages[userAt].content)throw Error('Colab edit wrong');
+      if(document.querySelector('#colabTask').value!==branch.draft)throw Error('Colab composer not filled');
+      if(atlasColab.history().length!==count+2)throw Error('Expected two new chats');
+      atlasColab.selectChat(source.id);await wait();
+      if(JSON.stringify(atlasColab.current().messages)!==saved)throw Error('The original Colab chat changed');
+    })()`);
+    console.log('PASS: Colab edit and resend and branch from here keep the original chat.');
     console.log(
       'PASS: Efficiency controls, optional brief/budget/check reuse, mixed reported/estimated stage usage, saved report viewer and responsive layout.',
     );

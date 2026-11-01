@@ -81,6 +81,34 @@
     return chat;
   }
   if (!current()) makeChat();
+  const messageAction = (label, action) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'quiet-button';
+    button.textContent = label;
+    button.onclick = action;
+    return button;
+  };
+  // Editing also branches, so the original chat and its answers are never overwritten.
+  function branchFrom(message, edit) {
+    const source = current(),
+      index = source.messages.indexOf(message),
+      count = edit ? index : index + 1;
+    if (index < 0 || !historyReady) return;
+    const chat = makeChat();
+    chat.folder = source.folder || '';
+    if (count) {
+      chat.title = ('Branch: ' + source.title).slice(0, 100);
+      chat.customTitle = true;
+      chat.messages = structuredClone(source.messages.slice(0, count)).map(({ checkOffer, ...row }) => row);
+    }
+    if (edit) chat.draft = message.content;
+    save();
+    render();
+    if (edit && message.attachments?.length)
+      void window.atlasWorkspace?.addAttachments('colab', async () => message.attachments);
+    el('colabTask').focus();
+  }
   const style = document.createElement('style');
   style.textContent = `
     .nav-item[aria-current=page]{background:#193038;color:#b0edf0}.workspace-divider{height:1px;background:#233b43;margin:12px 8px}
@@ -843,7 +871,20 @@
               );
               render();
             };
-            actions.append(copy, compare);
+            actions.append(
+              copy,
+              compare,
+              messageAction('Branch from here', () => branchFrom(message, false)),
+            );
+            article.append(actions);
+          }
+          if (message.role === 'user') {
+            const actions = document.createElement('div');
+            actions.className = 'colab-message-actions';
+            actions.append(
+              messageAction('Edit and resend', () => branchFrom(message, true)),
+              messageAction('Branch from here', () => branchFrom(message, false)),
+            );
             article.append(actions);
           }
           if (message.checkOffer && !message.checkOffer.answered && window.atlasCheckOffer)

@@ -165,6 +165,30 @@
   const turnNodes = new Map();
   let renderedTurnsChat = '';
   const { memo, reconcile: reconcileNodes, chatVisible, fillFolderFilter } = window.atlasChatRender;
+  // Editing also branches, so the original chat and its answers are never overwritten.
+  async function branchFrom(index, turn, edit) {
+    const source = selected;
+    if (edit && !index) fresh.click();
+    else {
+      const id = await api.historyBranch({ id: source, count: edit ? index : index + 1 }),
+        folder = metadata['atlas:' + source]?.folder;
+      if (folder) await window.atlasWorkspace.updateChat({ provider: 'atlas', id }, { folder });
+      await refreshList();
+      await open(id);
+    }
+    if (!edit) return;
+    const prompt = $('#prompt');
+    prompt.value = turn.content;
+    prompt.dispatchEvent(new Event('input', { bubbles: true }));
+    if (turn.attachments?.length) await window.atlasWorkspace.addAttachments('assistant', async () => turn.attachments);
+    prompt.focus();
+  }
+  const turnAction = (actions, label, action) => {
+    const button = node('button', label, 'quiet-button');
+    button.type = 'button';
+    button.onclick = () => void action().catch((error) => toast(error.message));
+    actions.append(button);
+  };
   function renderTurns(turns) {
     if (renderedTurnsChat !== selected) {
       turnNodes.clear();
@@ -185,17 +209,16 @@
             time.dateTime = new Date(turn.at).toISOString();
             label.append(time);
           }
-          article.append(label, body);
+          const actions = node('div', undefined, 'assistant-turn-actions');
+          article.append(label, body, actions);
           if (turn.role === 'assistant') {
             renderAnswer(turn.content, body, { conversationId: selected });
-            const actions = node('div', undefined, 'assistant-turn-actions'),
-              copy = node('button', 'Copy result', 'quiet-button');
-            copy.type = 'button';
-            copy.onclick = () =>
-              void navigator.clipboard.writeText(turn.content).catch((error) => toast(error.message));
-            actions.append(copy);
-            article.append(actions);
-          } else body.textContent = turn.content;
+            turnAction(actions, 'Copy result', () => navigator.clipboard.writeText(turn.content));
+          } else {
+            body.textContent = turn.content;
+            turnAction(actions, 'Edit and resend', () => branchFrom(index, turn, true));
+          }
+          turnAction(actions, 'Branch from here', () => branchFrom(index, turn, false));
           window.atlasWorkspace?.messageAttachments(article, turn.attachments);
           return article;
         },

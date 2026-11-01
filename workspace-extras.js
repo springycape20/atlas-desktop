@@ -1162,6 +1162,7 @@
     },
     context,
     takeAttachments,
+    addAttachments,
     messageAttachments,
     review,
     renameColab: () => rename({ ...window.atlasColab.current(), provider: 'colab' }),

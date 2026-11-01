@@ -2068,6 +2068,16 @@ function setupIpc() {
     if (!provider || !/^[a-f0-9]{64}$/.test(id)) throw new Error('Invalid provider history selection.');
     return providerHistory.request('read', { provider, id });
   });
+  ipcMain.handle('atlas:history-branch', async (event, request) => {
+    if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
+    const id = randomUUID();
+    await transactAtlasHistory((all) => {
+      const source = all.find((row) => row.id === request?.id);
+      if (!source) throw new Error('Saved conversation not found.');
+      return [...all, require('./chat-branch').branchChat(source, request.count, id)];
+    });
+    return id;
+  });
   ipcMain.handle('atlas:open-provider-session', async (event, request) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
     const provider = request?.provider === 'codex' ? 'codex' : request?.provider === 'claude' ? 'claude' : '';

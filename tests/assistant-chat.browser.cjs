@@ -55,7 +55,7 @@ const native = Array.from({ length: 125 }, (_, i) => ({
   internal: i === 124,
 }));
 const mock = `localStorage.setItem('atlas.activeConversation','${first}');localStorage.setItem('atlas.colab.chats.v1','{}');window.savedChats=${JSON.stringify(chats)};window.nativeChats=${JSON.stringify(native)};window.jobCallbacks=[];window.textCallbacks=[];window.savedJobs=[];window.importRequests=[];window.performImport=async req=>{importRequests.push(req);const chats=req.chats.map(selected=>({...nativeChats.find(chat=>chat.id===selected.id),turns:Array.from({length:122},(_,i)=>({role:i%2?'assistant':'user',content:i===0?'Imported first message '+ 'z'.repeat(13000):'Imported message '+i}))}));if(req.destination==='colab')return{chats};const results=chats.map(chat=>{let saved=savedChats.find(row=>row.importSource===chat.id);if(!saved){saved={...chat,id:crypto.randomUUID(),importSource:chat.id,provider:'atlas'};savedChats.push(saved);}return saved;});return{chats:results,imported:results.length,skipped:0};};
-window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'windows',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>savedChats[0],jobs:async()=>savedJobs,onJobs:fn=>jobCallbacks.push(fn),onResponseText:fn=>textCallbacks.push(fn),providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'source',currentVersion:'test'}),chatMetadata:async()=>({}),historyList:async()=>savedChats.map(chat=>({...chat,turnCount:chat.turns.length,searchText:chat.turns.map(turn=>turn.content).join(' ')})),historyRead:async req=>{const chat=savedChats.find(chat=>chat.id===req.id);if(!chat)throw Error('No saved conversation');return structuredClone(chat);},attachmentPreview:async()=>({preview:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRqoAAAAASUVORK5CYII='}),importChats:async req=>req.action==='scan'?{chats:nativeChats,workspaces:[],errors:[]}:req.action==='preview'?{turns:[{role:'user',content:'Native preview'}]}:await performImport(req),chat:async req=>{
+window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'windows',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>savedChats[0],jobs:async()=>savedJobs,onJobs:fn=>jobCallbacks.push(fn),onResponseText:fn=>textCallbacks.push(fn),providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'source',currentVersion:'test'}),chatMetadata:async()=>({}),historyList:async()=>savedChats.map(chat=>({...chat,turnCount:chat.turns.length,searchText:chat.turns.map(turn=>turn.content).join(' ')})),historyRead:async req=>{const chat=savedChats.find(chat=>chat.id===req.id);if(!chat)throw Error('No saved conversation');return structuredClone(chat);},historyBranch:async req=>{const source=savedChats.find(chat=>chat.id===req.id),id=crypto.randomUUID();savedChats.push({...structuredClone(source),id,title:'Branch: '+source.title,turns:structuredClone(source.turns.slice(0,req.count))});return id;},attachmentPreview:async()=>({preview:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRqoAAAAASUVORK5CYII='}),importChats:async req=>req.action==='scan'?{chats:nativeChats,workspaces:[],errors:[]}:req.action==='preview'?{turns:[{role:'user',content:'Native preview'}]}:await performImport(req),chat:async req=>{
  window.lastChatRequest=req;let chat=savedChats.find(chat=>chat.id===req.conversationId);if(!chat){chat={id:req.conversationId,provider:'atlas',title:req.prompt,cwd:req.cwd,updatedAt:Date.now(),turns:[]};savedChats.push(chat);}const job={id:req.requestId,conversationId:chat.id,cwd:req.cwd,prompt:req.prompt,status:'running',events:[{kind:'command',text:'node --version',provider:'codex',status:'completed',exitCode:0}],startedAt:Date.now()};savedJobs.push(job);for(const fn of jobCallbacks)fn({upsert:[job],removed:[]});for(const fn of textCallbacks)fn({requestId:req.requestId,text:'Streamed reply'});await new Promise(r=>setTimeout(r,40));chat.turns.push({role:'user',content:req.prompt},{role:'assistant',content:'Completed reply for '+req.prompt,provider:'codex'});chat.updatedAt=Date.now();job.status='completed';job.result={output:'Completed reply for '+req.prompt};for(const fn of jobCallbacks)fn({upsert:[job],removed:[]});return{output:job.result.output,provider:'codex',conversationId:chat.id};}
 },{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
 let win;
@@ -118,6 +118,40 @@ app.whenReady().then(async () => {
       await atlasAssistant.open('${first}');await wait();
     })()`);
     console.log('PASS: Assistant folders and archive: filing, filtering, archiving, search and restoring.');
+    await win.webContents.executeJavaScript(`(async()=>{
+      const wait=()=>new Promise(resolve=>setTimeout(resolve,80)),
+        action=(article,text)=>[...article.querySelectorAll('button')].find(node=>node.textContent===text),
+        turns=()=>[...document.querySelectorAll('.assistant-past .assistant-turn')],
+        source=savedChats.find(chat=>chat.id==='${first}');
+      await atlasAssistant.open('${first}');await wait();
+      const before=JSON.stringify(source.turns),count=savedChats.length,users=turns().filter(node=>node.classList.contains('user'));
+      if(users.length<1||!action(users[0],'Edit and resend')||!action(users[0],'Branch from here'))throw Error('User message actions missing');
+      const answer=turns().find(node=>node.classList.contains('assistant'));
+      if(!action(answer,'Copy result')||!action(answer,'Branch from here')||action(answer,'Edit and resend'))throw Error('Answer actions wrong');
+      const firstAnswer=turns().indexOf(answer);
+      action(answer,'Branch from here').click();await wait();await wait();
+      if(savedChats.length!==count+1)throw Error('Branch not created');
+      if(turns().length!==firstAnswer+1)throw Error('Branch shows '+turns().length+' messages, expected '+(firstAnswer+1));
+      if(document.querySelector('.assistant-chat-heading h1').textContent.indexOf('Branch:')!==0)throw Error('Branch title missing: '+document.querySelector('.assistant-chat-heading h1').textContent);
+      await atlasAssistant.open('${first}');await wait();
+      const later=turns().filter(node=>node.classList.contains('user')).at(-1),index=turns().indexOf(later),text=source.turns[index].content;
+      action(later,'Edit and resend').click();await wait();await wait();
+      if(savedChats.length!==count+2)throw Error('Edit did not branch');
+      if(document.querySelector('#prompt').value!==text)throw Error('Edit did not fill the composer');
+      if(turns().length!==index)throw Error('Edit kept the wrong messages');
+      if(JSON.stringify(source.turns)!==before)throw Error('The original chat changed');
+      await atlasAssistant.open('${first}');await wait();
+      const opening=turns()[0];
+      if(opening.classList.contains('user')){
+        action(opening,'Edit and resend').click();await wait();await wait();
+        if(savedChats.length!==count+2)throw Error('Editing the first message should not save an empty chat');
+        if(document.querySelector('#prompt').value!==source.turns[0].content)throw Error('First message not in the composer');
+      }
+      document.querySelector('#prompt').value='';
+      savedChats.splice(count);await atlasAssistant.refresh();
+      await atlasAssistant.open('${first}');await wait();
+    })()`);
+    console.log('PASS: Assistant edit and resend and branch from here keep the original chat.');
     for (const [width, height] of [
       [1280, 800],
       [800, 600],
