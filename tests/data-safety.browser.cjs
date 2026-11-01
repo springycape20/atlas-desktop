@@ -22,6 +22,7 @@ function parent() {
       'failed-start',
       'auto-backup',
       'recovery-cleanup',
+      'chat-branch',
     ]) {
       const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-data-safety-'));
       const result = cp.spawnSync(process.execPath, [__filename], {
@@ -104,6 +105,16 @@ function child() {
     'bad-restore': () =>
       fs.writeFileSync(path.join(data, '.restore-pending.json'), JSON.stringify({ id: 'gone', expected: [] })),
     'failed-start': () => fs.mkdirSync(path.join(data, 'assistant-data.json')),
+    'chat-branch': () =>
+      fs.writeFileSync(
+        conversations,
+        JSON.stringify([
+          {
+            ...chat(id(1), 1, [turn('user', 'first', 1), turn('assistant', 'answer', 2), turn('user', 'later', 3)]),
+            sessions: { codex: 'old-session', claude: '' },
+          },
+        ]),
+      ),
     'recovery-cleanup': () => {
       for (const name of ['old', 'current'])
         fs.mkdirSync(path.join(data, 'update-recovery', name), { recursive: true });
@@ -168,6 +179,25 @@ function child() {
     if (scenario === 'bad-restore') {
       assert.equal(fs.existsSync(path.join(data, '.restore-pending.json')), false);
       assert.match(warnings.join(), /could not restore/);
+    }
+    if (scenario === 'chat-branch') {
+      const made = await win.webContents.executeJavaScript(
+        `window.atlas.historyBranch({id:${JSON.stringify(id(1))},count:2})`,
+      );
+      const [source, branch] = [saved().find((row) => row.id === id(1)), saved().find((row) => row.id === made)];
+      assert.equal(source.turns.length, 3);
+      assert.equal(source.sessions.codex, 'old-session');
+      assert.equal(branch.title, 'Branch: ' + source.title);
+      assert.equal(branch.turns.length, 2);
+      assert.equal(branch.sessions.codex, '');
+      await ask(made);
+      assert.equal(saved().find((row) => row.id === made).turns.length, 4);
+      assert.equal(saved().find((row) => row.id === id(1)).turns.length, 3);
+      const refused = await win.webContents.executeJavaScript(
+        `window.atlas.historyBranch({id:${JSON.stringify(id(1))},count:9}).then(()=>'made',e=>e.message)`,
+      );
+      assert.match(refused, /not available/);
+      assert.equal(saved().length, 2);
     }
     if (scenario === 'recovery-cleanup') {
       await win.webContents.executeJavaScript(`(async()=>{
