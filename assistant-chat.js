@@ -430,7 +430,18 @@
   void api.jobs().then((items) => {
     for (const job of items) jobs.set(job.id, job);
   });
-  window.atlasAssistant = { open, refresh: refreshList, newChat: () => fresh.click() };
+  window.atlasAssistant = {
+    open,
+    refresh: refreshList,
+    newChat: () => fresh.click(),
+    chats: () =>
+      rows.map((row) => ({
+        id: row.id,
+        title: metadata['atlas:' + row.id]?.title || row.title,
+        archived: Boolean(metadata['atlas:' + row.id]?.archived),
+        updatedAt: row.updatedAt,
+      })),
+  };
   window.atlasAssistant.ready = refreshList()
     .then(() => {
       if (conversationId) return open(conversationId, { quiet: true });

@@ -33,7 +33,7 @@ HTML files have a **Page preview (scripts off)** and a Source view. The page run
 
 ## Navigation and readability
 
-The main sidebar contains Chat, Colab, Projects, Tasks, Library and Settings. Press **Ctrl+K**, or choose **Search** in the top bar, to find a destination. Search only opens screens; it does not start a provider task. Arrow keys and Enter select a result; Escape closes the menu.
+The main sidebar contains Chat, Colab, Projects, Tasks, Library and Settings. Press **Ctrl+K**, or choose **Search** in the top bar, to find any page, tool, settings section or chat, including archived chats, or to start a new chat. Search only opens screens; it does not start a provider task. Arrow keys and Enter select a result; Escape closes the menu.
 
 **Provider activity** in the top bar or Settings shows retained local task counts for Codex, Claude and shared Colab tasks, plus limit cooldowns recorded by ATLAS. Refresh reads local state. These figures do not measure subscription usage, token totals, spending or remaining account allowance, and exclude activity outside ATLAS. Links open each provider's account usage page for those details. The previous sidebar quota rings and automatic quota polling have been removed.
 

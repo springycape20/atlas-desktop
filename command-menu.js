@@ -9,7 +9,7 @@
   actionButton('Close', () => dialog.close(), header);
   const search = node('input');
   search.type = 'search';
-  search.placeholder = 'Search pages, tools and settings';
+  search.placeholder = 'Search pages, tools, settings and chats';
   search.setAttribute('aria-label', 'Search navigation');
   const results = node('div', undefined, 'command-results');
   results.id = 'commandResults';
@@ -18,33 +18,80 @@
   status.setAttribute('role', 'status');
   dialog.append(header, search, status, results);
   document.body.append(dialog);
-  const actions = [
-    ['Search all work', () => window.atlasUi.open('library', 'Search all work')],
-    ...['Plan a task', 'Review centre', 'Progress'].map((name) => [
-      'Tasks · ' + name,
-      () => window.atlasUi.open('tasks', name),
-    ]),
-    ['Library · Project memory', () => window.atlasUi.open('library', 'Project memory')],
-    ['Chat', () => document.querySelector('[data-chat-workspace="assistant"]').click()],
-    ['Colab', () => document.querySelector('[data-chat-workspace="colab"]').click()],
-    ['Projects', () => window.atlasWorkspace.open.projects()],
-    ['Conversation history', () => window.atlasWorkspace.open.history()],
-    ...['Running', 'Queue', 'Parallel', 'Recovery', 'Reminders', 'Approvals'].map((name) => [
-      'Tasks · ' + name,
-      () => window.atlasUi.open('tasks', name),
-    ]),
-    ...['Memories', 'Workflows'].map((name) => ['Library · ' + name, () => window.atlasUi.open('library', name)]),
-    ...[
-      'Provider accounts',
-      'Models',
-      'Appearance',
-      'Provider activity',
-      'Permissions',
-      'Voice',
-      'App updates',
-      'Diagnostics',
-    ].map((name) => ['Settings · ' + name, () => window.atlasUi.settings(name)]),
-  ];
+  const routeNames = { tasks: 'Tasks', library: 'Library', diagnostics: 'Diagnostics' };
+  const showChat = () => document.querySelector('[data-chat-workspace="assistant"]').click();
+  const showColab = () => document.querySelector('[data-chat-workspace="colab"]').click();
+  // Chats sit behind every dialog, so close the ones that would cover them.
+  const inWorkspace = (run) => () => {
+    for (const cover of [window.atlasUi.hub, window.atlasPower.dialog, document.getElementById('settingsDialog')])
+      cover.close();
+    return run();
+  };
+  const matches = (label, query) => query.split(/\s+/).every((word) => label.toLowerCase().includes(word));
+  const chats = (query) =>
+    [
+      ...window.atlasAssistant.chats().map((chat) => ({
+        ...chat,
+        prefix: 'Chat · ',
+        run: () => window.atlasAssistant.open(chat.id),
+      })),
+      ...window.atlasColab
+        .history()
+        .filter((chat) => chat.turns?.length || chat.title !== 'New Colab chat')
+        .map((chat) => ({
+          ...chat,
+          prefix: 'Colab · ',
+          run: () => window.atlasColab.selectChat(chat.id),
+        })),
+    ]
+      .filter((chat) => query || !chat.archived)
+      .map((chat) => ({ ...chat, label: chat.prefix + chat.title + (chat.archived ? ' (archived)' : '') }))
+      .filter((chat) => matches(chat.label, query))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, query ? 20 : 5)
+      .map((chat) => [chat.label, inWorkspace(chat.run)]);
+  // Listed when the menu opens, because pages keep registering after this script loads.
+  const destinations = (query) => {
+    const pages = window.atlasUi.pages(),
+      hubNames = new Set(pages.map((page) => page.name));
+    return [
+      ['Search all work', () => window.atlasUi.open('library', 'Search all work')],
+      [
+        'New chat',
+        inWorkspace(() => {
+          showChat();
+          window.atlasAssistant.newChat();
+        }),
+      ],
+      [
+        'New Colab chat',
+        inWorkspace(() => {
+          showColab();
+          document.getElementById('colabNewChat').click();
+        }),
+      ],
+      ['Chat', inWorkspace(showChat)],
+      ['Colab', inWorkspace(showColab)],
+      ['Projects', () => window.atlasWorkspace.open.projects()],
+      ['Conversation history', () => window.atlasWorkspace.open.history()],
+      // Recent chats come early in the full list; found chats come after pages of the same rank.
+      ...(query ? [] : chats(query)),
+      ...pages
+        .filter((page) => page.name !== 'Search all work')
+        .map(({ route, name }) => [routeNames[route] + ' · ' + name, () => window.atlasUi.open(route, name)]),
+      ...window.atlasPower
+        .names()
+        .filter((name) => !hubNames.has(name))
+        .map((name) => ['Tools · ' + name, () => window.atlasPower.show(name)]),
+      ...window.atlasSettings.sections().map((name) => ['Settings · ' + name, () => window.atlasUi.settings(name)]),
+      ...(query ? chats(query) : []),
+    ];
+  };
+  // Exact names first, then names that start with the search, otherwise keep the listed order.
+  const rank = (label, query) => {
+    const name = label.split(' · ').at(-1).toLowerCase();
+    return name === query ? 0 : name.startsWith(query) ? 1 : 2;
+  };
   let active = 0,
     origin;
   const buttons = () => [...results.querySelectorAll('button')];
@@ -58,9 +105,9 @@
     const query = search.value.toLowerCase().trim();
     active = 0;
     results.replaceChildren();
-    for (const [label, run] of actions.filter(([label]) =>
-      query.split(/\s+/).every((word) => label.toLowerCase().includes(word)),
-    )) {
+    for (const [label, run] of destinations(query)
+      .filter(([label]) => matches(label, query))
+      .sort(([a], [b]) => rank(a, query) - rank(b, query))) {
       actionButton(
         label,
         async () => {

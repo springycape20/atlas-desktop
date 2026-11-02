@@ -327,6 +327,7 @@
     setSelection: saveSelection,
     show,
     register,
+    names: () => [...views.keys()],
     request,
     node,
     button,

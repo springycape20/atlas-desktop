@@ -439,6 +439,8 @@
     node,
     actionButton,
     setListWidth,
+    pages: () =>
+      Object.keys(sections).flatMap((route) => Object.keys(sections[route]).map((name) => ({ route, name }))),
     register: (route, name) => {
       if (sections[route]) sections[route][name] = power(name);
     },
