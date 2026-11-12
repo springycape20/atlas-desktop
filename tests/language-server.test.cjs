@@ -57,6 +57,55 @@ test('push diagnostics match rewritten file URIs and do not outlive a changed fi
   assert.deepEqual(changed.rows, []);
   assert.match(changed.note, /No diagnostic report/);
 });
+test('editor draft hover and completion do not write the source file or return executable suggestions', async (t) => {
+  const { project, service } = await fixture(t);
+  const file = path.join(project, 'main.js'),
+    original = await fs.readFile(file, 'utf8');
+  const hover = await service.action({ action: 'hover', cwd: project, path: 'main.js', text: 'const draftOnly = 2;' });
+  assert.equal(hover.text, 'const draftOnly = 2;');
+  const completion = await service.action({
+    action: 'completion',
+    cwd: project,
+    path: 'main.js',
+    text: 'con',
+    column: 4,
+  });
+  assert.deepEqual(
+    completion.rows.map((row) => row.text),
+    ['console'],
+  );
+  assert.equal(await fs.readFile(file, 'utf8'), original);
+});
+test('rename is previewed, conflict checked, applied and undoable through the editor', async (t) => {
+  const { project, service } = await fixture(t),
+    files = require('../project-files').createProjectFiles(),
+    editor = require('../project-editor').createProjectEditor({ files });
+  const source = await fs.readFile(path.join(project, 'main.js'), 'utf8');
+  const value = await service.action({ action: 'rename', cwd: project, path: 'main.js', newName: 'renamed' });
+  const plan = await editor.action(project, { action: 'editor-rename-preview', edit: value.edit });
+  assert.equal(await fs.readFile(path.join(project, 'main.js'), 'utf8'), source);
+  const preview = await editor.action(project, { action: 'replace-file', id: plan.id, path: 'main.js' });
+  assert(preview.after.includes('const renamed'));
+  await fs.writeFile(path.join(project, 'main.js'), source + '\n// newer');
+  await assert.rejects(
+    editor.action(project, { action: 'replace-apply', id: plan.id, paths: ['main.js'] }),
+    /changed on disk/,
+  );
+  await fs.writeFile(path.join(project, 'main.js'), source);
+  const applied = await editor.action(project, { action: 'replace-apply', id: plan.id, paths: ['main.js'] });
+  assert((await fs.readFile(path.join(project, 'main.js'), 'utf8')).includes('const renamed'));
+  await editor.action(project, { action: 'editor-undo', id: applied.undoId });
+  assert.equal(await fs.readFile(path.join(project, 'main.js'), 'utf8'), source);
+  await assert.rejects(
+    editor.action(project, { action: 'editor-rename-preview', edit: { documentChanges: [] } }),
+    /unsupported/,
+  );
+  await fs.writeFile(path.join(project, 'main.js'), '\uFEFF' + source);
+  await assert.rejects(
+    editor.action(project, { action: 'editor-rename-preview', edit: value.edit }),
+    /byte-order mark/,
+  );
+});
 test('language server save executes nothing; denied start and private files never spawn', async (t) => {
   let spawns = 0;
   const { project, service } = await fixture(t, {

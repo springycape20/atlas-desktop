@@ -171,6 +171,57 @@
       null,
       2,
     );
+    const builder = node('details');
+    builder.append(node('summary', 'Build a browser step'));
+    const kindLabel = node('label', 'Action'),
+      kind = node('select');
+    kind.setAttribute('aria-label', 'Browser step action');
+    for (const action of [
+      'click',
+      'fill',
+      'assert-visible',
+      'assert-text',
+      'assert-path',
+      'wait-visible',
+      'wait-text',
+      'wait',
+    ])
+      kind.append(new Option(action, action));
+    kindLabel.append(kind);
+    builder.append(kindLabel);
+    const selectorLabel = node('label', 'CSS selector'),
+      selector = node('input');
+    selector.setAttribute('aria-label', 'Browser step selector');
+    selectorLabel.append(selector);
+    builder.append(selectorLabel);
+    const valueLabel = node('label', 'Text value or wait milliseconds'),
+      stepValue = node('input');
+    stepValue.setAttribute('aria-label', 'Browser step value');
+    valueLabel.append(stepValue);
+    builder.append(valueLabel);
+    button(
+      'Add step',
+      () => {
+        const rows = JSON.parse(steps.value),
+          action = kind.value;
+        if (!Array.isArray(rows) || rows.length >= 30) throw Error('Up to 30 steps can be saved.');
+        if (action !== 'wait' && action !== 'assert-path' && !selector.value.trim())
+          throw Error('Enter a CSS selector.');
+        const row = { action };
+        if (action === 'wait') {
+          row.ms = Number(stepValue.value);
+          if (!Number.isInteger(row.ms) || row.ms < 0 || row.ms > 5000) throw Error('Wait must be 0–5000 ms.');
+        } else {
+          if (action !== 'assert-path') row.selector = selector.value.trim();
+          if (['fill', 'assert-text', 'assert-path', 'wait-text'].includes(action)) row.value = stepValue.value;
+        }
+        rows.push(row);
+        steps.value = JSON.stringify(rows, null, 2);
+        status.textContent = 'Step added; nothing executed.';
+      },
+      builder,
+    );
+    body.append(builder);
     stepsLabel.append(steps);
     body.append(stepsLabel);
     const recipeLabel = node('label', 'Saved browser recipe'),
@@ -273,6 +324,64 @@
       );
     const images = node('section');
     images.className = 'preview-evidence-images';
+    const savedBox = node('details');
+    savedBox.append(node('summary', 'Saved visual baselines'));
+    savedBox.append(
+      node(
+        'p',
+        'Save a reference image locally to compare after restarting ATLAS. Images enter record backups and remain until deleted. Use the same URL and viewport.',
+      ),
+    );
+    const baselineNameLabel = node('label', 'Baseline name'),
+      baselineName = node('input');
+    baselineName.setAttribute('aria-label', 'Baseline name');
+    baselineNameLabel.append(baselineName);
+    savedBox.append(baselineNameLabel);
+    const savedLabel = node('label', 'Saved baseline'),
+      savedPicker = node('select');
+    savedPicker.setAttribute('aria-label', 'Saved visual baseline');
+    savedLabel.append(savedPicker);
+    savedBox.append(savedLabel);
+    const savedActions = node('div');
+    savedActions.className = 'power-actions';
+    savedBox.append(savedActions);
+    body.append(savedBox);
+    const refreshBaselines = async () => {
+      const rows = await call('saved-baselines');
+      if (!current()) return;
+      savedPicker.replaceChildren(new Option('Choose a baseline', ''));
+      for (const row of rows)
+        savedPicker.append(new Option(row.name + ' · ' + row.size.width + ' × ' + row.size.height, row.id));
+    };
+    button(
+      'Save current baseline',
+      async () => {
+        await call('save-baseline', { name: baselineName.value });
+        await refreshBaselines();
+        status.textContent = 'Visual baseline saved locally.';
+      },
+      savedActions,
+    );
+    button(
+      'Load selected baseline',
+      async () => {
+        const value = await call('load-baseline', { id: savedPicker.value });
+        if (!current()) return;
+        images.replaceChildren();
+        addImage('Saved baseline: ' + value.name, value.image);
+        status.textContent = 'Saved baseline loaded. Compare when the preview is ready.';
+      },
+      savedActions,
+    );
+    button(
+      'Delete selected baseline',
+      async () => {
+        await call('delete-baseline', { id: savedPicker.value });
+        await refreshBaselines();
+        status.textContent = 'Saved baseline deleted.';
+      },
+      savedActions,
+    );
     const addImage = (label, src) => {
       const figure = node('figure'),
         img = node('img');
@@ -344,7 +453,15 @@
           : 'Profile sampled; repeat under similar conditions.';
       });
     body.append(profile);
+    window.atlasUi.toolSections(body, {
+      default: 'Server',
+      'Visual feedback': 'Inspect',
+      'Repeatable browser checks': 'Browser checks',
+      'Visual comparison': 'Visual review',
+      'Project preview profile': 'Performance',
+    });
     await loadRecipes();
+    await refreshBaselines();
     await refresh();
     const tick = () =>
       setTimeout(async () => {

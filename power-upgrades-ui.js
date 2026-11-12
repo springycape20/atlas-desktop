@@ -69,10 +69,13 @@
         name,
         async () => {
           await power.show(view);
-          if (heading)
-            [...document.querySelectorAll('.power-body h3')]
-              .find((item) => item.textContent === heading)
-              ?.scrollIntoView({ block: 'start' });
+          if (heading) {
+            const target = [...document.querySelectorAll('.power-body h3')].find(
+              (item) => item.textContent === heading,
+            );
+            window.atlasUi.reveal(target);
+            target?.scrollIntoView({ block: 'start' });
+          }
         },
         row,
       );

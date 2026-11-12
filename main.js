@@ -35,6 +35,12 @@ if (migrateToLocalAppData) app.setPath('userData', localUserDataPath);
 const startedAt = Date.now();
 const runtimePerformance = require('./runtime-performance').createRuntimePerformance();
 const contextReuse = require('./request-efficiency').createContextReuse();
+const benchmarkRequests = new WeakMap();
+let taskBudgetService;
+let benchmarkService;
+function taskBudgets() {
+  return (taskBudgetService ||= require('./task-budgets').createTaskBudgets(app.getPath('userData')));
+}
 let milestoneHandovers;
 let workSessionService;
 function workSessions() {
@@ -55,7 +61,7 @@ function workSessions() {
           title,
           message: title,
           detail,
-          buttons: ['Cancel', 'Run selected checks'],
+          buttons: ['Cancel', 'Approve'],
           defaultId: 0,
           cancelId: 0,
         })
@@ -189,8 +195,12 @@ function getAppUpdates() {
   return (updateService ||= require('./app-updates').createAppUpdates({
     app,
     updater: app.isPackaged ? require('electron-updater').autoUpdater : null,
-    busy: () => jobsRunning() || Boolean(selectedToolsService?.servicesActive()),
+    busy: () =>
+      jobsRunning() ||
+      Boolean(selectedToolsService?.servicesActive()) ||
+      Boolean(backupClientService?.status().running),
     prepareRecovery: () => updateRecovery().prepare(),
+    readPreferences: readAppSettings,
     notify: (value) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:update-status', value);
     },
@@ -214,12 +224,18 @@ function presence() {
     iconPath: path.join(__dirname, 'assets', 'app-icon.png'),
   }));
 }
+let backupClientService;
+function backupClient() {
+  return (backupClientService ||= require('./backup-client').createBackupClient());
+}
+async function createRecordBackup() {
+  return backupClient().create(app.getPath('userData'), app.getVersion(), await rendererBackup());
+}
 function autoBackups() {
   return (autoBackupService ||= require('./auto-backups').createAutoBackups({
     directory: app.getPath('userData'),
     busy: () => jobsRunning() || Boolean(selectedToolsService?.servicesActive()),
-    make: async () =>
-      require('./local-backups').createBackup(app.getPath('userData'), app.getVersion(), await rendererBackup()),
+    make: createRecordBackup,
   }));
 }
 function updateRecovery() {
@@ -239,8 +255,7 @@ function updateRecovery() {
           cancelId: 0,
         })
       ).response === 1,
-    backupData: async () =>
-      require('./local-backups').createBackup(app.getPath('userData'), app.getVersion(), await rendererBackup()),
+    backupData: createRecordBackup,
     restoreData: async (bytes) => require('./local-backups').stageRestore(app.getPath('userData'), bytes),
     launch: async (executable) => {
       const script =
@@ -488,6 +503,7 @@ const colabJobs = require('./colab-jobs').createColabJobs({
   recordResumeCheckpoint,
   canStart: () => !advancedWorkflowsService?.active(),
   readSettings: readAppSettings,
+  budgetLimits: (cwd) => taskBudgets().action({ cwd }),
   runProvider,
   reportsFolder: () => path.join(app.getPath('userData'), 'colab-reports'),
   quitting: () => quitting,
@@ -512,6 +528,7 @@ function defaultSettings() {
     speakResponses: true,
     showReasoning: false,
     launchAtStartup: false,
+    autoDownloadUpdates: false,
     trayEnabled: false,
     globalHotkey: '',
     voiceEngine: 'windows',
@@ -560,6 +577,7 @@ function sanitizeSettings(value) {
     // Opt-in: providers' own reasoning summaries, shown labelled as model-reported.
     showReasoning: value?.showReasoning === true,
     launchAtStartup: value?.launchAtStartup === true,
+    autoDownloadUpdates: value?.autoDownloadUpdates === true,
     trayEnabled: value?.trayEnabled === true,
     globalHotkey: require('./desktop-presence').HOTKEYS.includes(value?.globalHotkey) ? value.globalHotkey : '',
     speechDetail: value?.speechDetail === 'full' ? 'full' : 'brief',
@@ -595,6 +613,8 @@ const whisperService = new (require('./whisper-service').WhisperService)(
 );
 let quitting = false;
 app.on('before-quit', (event) => {
+  benchmarkService?.dispose();
+  backupClientService?.dispose();
   if (!ownsInstance) return;
   if (quitting) return;
   event.preventDefault();
@@ -1039,7 +1059,12 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
       enabled: settings.contextReuseEnabled !== false && provider !== 'local',
       forceFull: settings.forceFullContext === true,
     });
+    let attempted = false;
     try {
+      job?.budgetController?.before((settings.systemPrompt ? settings.systemPrompt + '\n' : '') + prompt, {
+        repair: settings?.atlasBudgetPhase === 'fix' || job.escalation?.status === 'running' || job.isRepair === true,
+      });
+      attempted = true;
       const result = await runtimePerformance.measure('provider', () =>
         runProviderTurn(
           provider,
@@ -1051,6 +1076,7 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
         ),
       );
       reuse.commit(result.sessionId);
+      job?.budgetController?.record(result);
       const reused = reuse.report();
       if (job && reused?.charactersAvoided > 0) {
         job.events.push({
@@ -1065,6 +1091,7 @@ async function runProvider(provider, prompt, cwd, settings, previousSessionId = 
       }
       return { ...result, contextReuse: reuse.report() };
     } catch (error) {
+      if (attempted) job?.budgetController?.record(null);
       reuse.fail();
       throw error;
     }
@@ -1403,6 +1430,161 @@ function persistJobs() {
 }
 
 function setupIpc() {
+  ipcMain.handle('atlas:workflow-benchmarks', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    benchmarkService ||= require('./workflow-benchmarks').createWorkflowBenchmarks({
+      directory: app.getPath('userData'),
+      sessions: workSessions(),
+      workspace: workspace(),
+      busy: jobsRunning,
+      version: app.getVersion(),
+      approve: async (message, detail) =>
+        (
+          await dialog.showMessageBox(mainWindow, {
+            type: 'question',
+            message,
+            detail,
+            buttons: ['Cancel', 'Run benchmark batch'],
+            defaultId: 0,
+            cancelId: 0,
+          })
+        ).response === 1,
+      runTask: async ({ trial, profile, config, testCase, signal }) => {
+        await taskBudgets().action({ action: 'save', cwd: trial.cwd, limits: config.limits });
+        signal.throwIfAborted();
+        const prompt = testCase.task + '\n\nAcceptance criteria:\n' + testCase.criteria;
+        let id, job;
+        if (config.provider === 'colab') {
+          await workspace().initializeRepository(trial.cwd);
+          signal.throwIfAborted();
+          ({ id } = await colabJobs.start(event, {
+            task: prompt,
+            cwd: trial.cwd,
+            profileId: profile.id,
+            chatId: 'benchmark-' + randomUUID(),
+            isolated: false,
+            mode: config.mode,
+            effort: config.effort,
+            codexModel: config.codexModel,
+            claudeModel: config.claudeModel,
+            maxRounds: 4,
+            contextSelection: { memories: false, history: false },
+          }));
+          job = activeJobs.get(id);
+        } else {
+          id = randomUUID();
+          const request = {
+            requestId: id,
+            conversationId: randomUUID(),
+            prompt: 'Use ' + config.provider + ' for this task.\n\n' + prompt,
+            cwd: trial.cwd,
+            profileId: profile.id,
+            modelTier: 'default',
+            effort: config.effort,
+            contextSelection: { memories: false, history: false },
+          };
+          benchmarkRequests.set(request, { config, signal });
+          const promise = startAssistant(event, request);
+          promise.catch(() => {});
+          job = activeJobs.get(id);
+          while (!job) {
+            // Wait for registration even after cancellation so the new job can be
+            // interrupted and awaited rather than left running in the background.
+            const ended = await Promise.race([
+              promise.then(
+                () => true,
+                () => true,
+              ),
+              new Promise((resolve) => setTimeout(() => resolve(false), 20)),
+            ]);
+            job = activeJobs.get(id);
+            if (ended && !job) {
+              await promise;
+              throw Error('Benchmark task did not start.');
+            }
+          }
+          job.promise ||= promise;
+        }
+        const stop = () => {
+          job.stopped = 'cancelled';
+          job.interrupt?.();
+        };
+        signal.addEventListener('abort', stop, { once: true });
+        if (signal.aborted) stop();
+        try {
+          await job.promise;
+        } catch (error) {
+          return {
+            jobId: id,
+            status: signal.aborted ? 'cancelled' : 'failed',
+            error: error.message,
+            verification: job.verification,
+            usage: job.budget?.usageComplete
+              ? { inputTokens: job.budget.reportedInput, outputTokens: job.budget.reportedOutput }
+              : null,
+          };
+        } finally {
+          signal.removeEventListener('abort', stop);
+        }
+        const actualProvider = job.collaboration ? 'colab' : job.result?.provider;
+        return {
+          jobId: id,
+          status: signal.aborted
+            ? 'cancelled'
+            : job.status !== 'completed'
+              ? job.status
+              : actualProvider === config.provider
+                ? 'completed'
+                : 'substituted',
+          actualProvider,
+          configurationMatched: actualProvider === config.provider,
+          observedModel: job.result?.model || null,
+          verification: job.verification
+            ? {
+                status: job.verification.status,
+                results: (job.verification.results || []).map(({ command, status, exitCode, durationMs }) => ({
+                  command,
+                  status,
+                  exitCode,
+                  durationMs,
+                })),
+              }
+            : null,
+          usage: job.budget?.usageComplete
+            ? { inputTokens: job.budget.reportedInput, outputTokens: job.budget.reportedOutput }
+            : null,
+          partialUsage: job.budget?.usageComplete
+            ? null
+            : { inputTokens: job.budget?.reportedInput, outputTokens: job.budget?.reportedOutput },
+        };
+      },
+    });
+    if (request.action === 'export') {
+      const state = await benchmarkService.action({ action: 'status' }),
+        suite = state.suites.find((row) => row.id === request.id);
+      if (!suite) throw Error('Choose a saved benchmark suite.');
+      const report = {
+        format: 'atlas-workflow-benchmark-v1',
+        exportedAt: new Date().toISOString(),
+        suite,
+        runs: state.runs.filter((row) => row.suiteId === suite.id),
+        summary: await benchmarkService.action({ action: 'summary', id: suite.id }),
+      };
+      const choice = await dialog.showSaveDialog(mainWindow, {
+        title: 'Export local benchmark results',
+        defaultPath: 'atlas-benchmark.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (choice.canceled || !choice.filePath) return { cancelled: true };
+      await writeFile(choice.filePath, JSON.stringify(report, null, 2), 'utf8');
+      return { exported: true };
+    }
+    return benchmarkService.action(request);
+  });
+  ipcMain.handle('atlas:task-budgets', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    return taskBudgets().action(request);
+  });
   let languageServer;
   ipcMain.handle('atlas:language-server', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -1423,6 +1605,11 @@ function setupIpc() {
           ).response === 1,
       });
       app.on('before-quit', () => languageServer.dispose());
+    }
+    if (request.jobId) {
+      const job = activeJobs.get(request.jobId);
+      if (!job) throw Error('This task is no longer available.');
+      request = { ...request, cwd: job.cwd };
     }
     return languageServer.action(request);
   });
@@ -1933,6 +2120,18 @@ function setupIpc() {
       approve,
       updateRecovery,
       autoBackups,
+      backupProgress: () => backupClient().status(),
+      cancelBackup: () => {
+        backupClient().cancel();
+        return { cancelled: true };
+      },
+      chooseBackupFolder: async () => {
+        const picked = await dialog.showOpenDialog(mainWindow, {
+          title: 'Choose a location for automatic backups',
+          properties: ['openDirectory', 'createDirectory'],
+        });
+        return picked.canceled ? { cancelled: true } : autoBackups().setFolder(picked.filePaths[0]);
+      },
       backup: async () => {
         if (
           !(await approve(
@@ -1945,17 +2144,13 @@ function setupIpc() {
           defaultPath: 'ATLAS-' + new Date().toISOString().slice(0, 10) + '.atlas-backup',
         });
         if (target.canceled) return { cancelled: true };
-        const bytes = require('./local-backups').createBackup(
-          app.getPath('userData'),
-          app.getVersion(),
-          await rendererBackup(),
-        );
+        const bytes = await createRecordBackup();
         await writeFile(target.filePath, bytes);
         return { exported: true, bytes: bytes.length };
       },
       restore: async () => {
         const picked = await dialog.showOpenDialog(mainWindow, {
-          defaultPath: autoBackups().folder,
+          defaultPath: (await autoBackups().status()).folder,
           properties: ['openFile'],
           filters: [{ name: 'ATLAS backup', extensions: ['atlas-backup'] }],
         });
@@ -2212,6 +2407,8 @@ function setupIpc() {
     if (data?.localModelEnabled) require('./local-model').modelId(data.localModel);
     const previous = await readAppSettings();
     const saved = await writeAppSettings(data);
+    if (saved.autoDownloadUpdates && !previous.autoDownloadUpdates)
+      void getAppUpdates().action({ action: 'configure' });
     if (process.platform === 'win32' && previous.launchAtStartup !== saved.launchAtStartup) {
       app.setLoginItemSettings({ openAtLogin: saved.launchAtStartup, name: APP_ID });
     }
@@ -2327,6 +2524,10 @@ function setupIpc() {
     const previous = activeJobs.get(data?.resumeJobId),
       usedMs = previous?.budget?.usedMs || 0,
       maxRuntimeSeconds = null;
+    const limits = previous?.budget?.limits || (await taskBudgets().action({ cwd: data.cwd || previous?.cwd }));
+    const benchmark = benchmarkRequests.get(data);
+    benchmark?.signal.throwIfAborted();
+    if (activeJobs.has(id)) throw Error('Duplicate job');
 
     if (previous?.collaboration || previous?.status === 'running')
       throw Error('Resume a stopped Assistant task, or open its Colab chat.');
@@ -2366,8 +2567,16 @@ function setupIpc() {
         events: [],
         signal: controller.signal,
         interrupt: () => controller.abort(),
-        budget: { usedMs, maxRuntimeSeconds, runStartedAt: Date.now() },
+        budget: { ...previous?.budget, usedMs, maxRuntimeSeconds, runStartedAt: Date.now() },
+        isRepair: repairRequests.has(data),
       };
+    job.budgetController = require('./task-budgets').attach(job, limits, () => controller.abort());
+    const cancelBenchmark = () => {
+      job.stopped = 'cancelled';
+      controller.abort();
+    };
+    benchmark?.signal.addEventListener('abort', cancelBenchmark, { once: true });
+    if (benchmark?.signal.aborted) cancelBenchmark();
     activeJobs.set(id, job);
     taskNotifications.started(job);
     persistJobs();
@@ -2380,7 +2589,7 @@ function setupIpc() {
     heartbeat.unref();
     job.promise = jobContext.run(job, async () => {
       try {
-        const result = await handleChat(event, { ...data, conversationId: job.conversationId });
+        const result = await handleChat(event, { ...data, conversationId: job.conversationId }, benchmark);
         if (controller.signal.aborted) throw Error('Task stopped.');
         job.result = result;
         if (result.provider === 'local') {
@@ -2410,7 +2619,22 @@ function setupIpc() {
               changedFiles,
               stopped: job.stopped || controller.signal.aborted,
             });
-          if (escalation) {
+          if (
+            escalation &&
+            (!limits.enabled ||
+              !limits.confirmEscalation ||
+              (
+                await dialog.showMessageBox(mainWindow, {
+                  type: 'question',
+                  message: 'Use a stronger model for one repair?',
+                  detail:
+                    'The executed checks failed. This adds a provider call and may use more allowance. Project budget limits still apply.',
+                  buttons: ['Skip repair', 'Allow one repair'],
+                  defaultId: 0,
+                  cancelId: 0,
+                })
+              ).response === 1)
+          ) {
             job.escalation = { ...escalation, attempted: true, status: 'running' };
             job.statusText = 'One stronger-model repair · ' + escalation.model;
             emitJobs();
@@ -2471,11 +2695,14 @@ function setupIpc() {
         return result;
       } catch (error) {
         job.status = job.stopped || 'failed';
-        job.error = error.message;
+        job.error = job.budget?.stopReason || error.message;
         job.statusText = job.error;
         throw Error(job.error);
       } finally {
+        benchmark?.signal.removeEventListener('abort', cancelBenchmark);
         delete job.efficiencyEnvelope;
+        job.budgetController?.dispose();
+        delete job.budgetController;
         await finishTask(job);
         clearInterval(heartbeat);
         job.budget.usedMs += Date.now() - job.budget.runStartedAt;
@@ -2509,7 +2736,7 @@ function setupIpc() {
     return jobSnapshots();
   });
 }
-async function handleChat(event, data) {
+async function handleChat(event, data, benchmark) {
   const contextSelection = require('./context-selection').selection(data?.contextSelection);
   if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
   const onText = (text) => event.sender.send('atlas:response-text', { requestId: data?.requestId, text });
@@ -2520,6 +2747,7 @@ async function handleChat(event, data) {
   if (!path.isAbsolute(cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory())
     throw new Error('Choose an existing working folder.');
   const settings = await readAppSettings();
+  if (benchmark) Object.assign(settings, { localModelEnabled: false, checkDrivenEscalation: false });
   const project = await workspace().profile(data.profileId);
   if (jobContext.getStore()) jobContext.getStore().projectSnapshot = project;
   if (project?.environmentPreflight) {
@@ -2590,6 +2818,10 @@ async function handleChat(event, data) {
   if (availableProvider && availableProvider !== route.provider) {
     route.provider = availableProvider;
     route.reason = 'temporarily avoiding ' + preferredProvider + ' usage limit';
+  }
+  if (benchmark) {
+    route.provider = benchmark.config.provider;
+    route.reason = 'fixed benchmark configuration';
   }
   const modelChoice = require('./model-policy').select(settings, prompt, {
     provider: route.provider,
@@ -2747,7 +2979,7 @@ async function handleChat(event, data) {
       contextReuse: result.contextReuse,
     };
   } catch (error) {
-    if (route.provider === 'local' || !isUsageLimitError(error)) {
+    if (benchmark || route.provider === 'local' || !isUsageLimitError(error)) {
       conversation.turns.push({
         role: 'assistant',
         content: `Request failed: ${error.message}`,
@@ -2850,6 +3082,7 @@ async function createWindow() {
         '/efficiency-ui.js',
         '/work-sessions-ui.js',
         '/power-upgrades-ui.js',
+        '/execution-tools-ui.js',
         '/hardware-ui.js',
         '/planning-ui.js',
         '/environment-ui.js',

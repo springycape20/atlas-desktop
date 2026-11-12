@@ -5,6 +5,7 @@ function createAppUpdates({
   busy = () => false,
   fetchRelease = defaultFetch,
   prepareRecovery = async () => {},
+  readPreferences = async () => ({}),
 }) {
   const version = app.getVersion(),
     source = !app.isPackaged;
@@ -36,21 +37,21 @@ function createAppUpdates({
     if (request.action === 'install') {
       if (source || state.status !== 'downloaded') throw Error('Download an update before restarting.');
       if (busy()) throw Error('Finish or stop running tasks before installing the update.');
-      await prepareRecovery();
-      if (busy()) throw Error('Work started while recovery was being prepared. Stop it before installing.');
-      set({ status: 'installing' });
-      setImmediate(() => updater.quitAndInstall(false, true));
-      return { ...state };
     }
     if (request.action === 'download' && (source || state.status !== 'available'))
       throw Error('Check for an available installed-app update first.');
-    if (!['check', 'download'].includes(request.action)) throw Error('Unknown update action.');
-    pending = (async () => {
+    if (!['check', 'download', 'install', 'configure'].includes(request.action)) throw Error('Unknown update action.');
+    pending = Promise.resolve().then(async () => {
       try {
-        if (request.action === 'download') {
+        if (request.action === 'install') {
+          await prepareRecovery();
+          if (busy()) throw Error('Work started while recovery was being prepared. Stop it before installing.');
+          set({ status: 'installing' });
+          setImmediate(() => updater.quitAndInstall(false, true));
+        } else if (request.action === 'download') {
           set({ status: 'downloading', percent: 0, error: '' });
           await updater.downloadUpdate();
-        } else if (source) {
+        } else if (request.action === 'check' && source) {
           set({ status: 'checking', error: '' });
           const release = await fetchRelease();
           set({
@@ -58,14 +59,19 @@ function createAppUpdates({
             version: String(release.tag_name || '').replace(/^v/, ''),
             url: 'https://github.com/springycape20/atlas-desktop/releases/latest',
           });
-        } else await updater.checkForUpdates();
+        } else if (request.action === 'check') await updater.checkForUpdates();
+        if (!source && state.status === 'available' && (await readPreferences()).autoDownloadUpdates === true) {
+          set({ status: 'downloading', percent: 0, error: '' });
+          await updater.downloadUpdate();
+        }
       } catch (error) {
+        if (request.action === 'install') throw error;
         set({ status: 'error', error: readable(error) });
       } finally {
         pending = null;
       }
       return { ...state };
-    })();
+    });
     return pending;
   }
   return { action };

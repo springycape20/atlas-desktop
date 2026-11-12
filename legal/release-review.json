@@ -1,15 +1,15 @@
 {
   "status": "technical-review-complete",
-  "version": "0.10.5",
-  "reviewedBy": "Claude automated technical review; not legal counsel",
-  "reviewedAt": "2026-11-02",
-  "packageLockSha256": "3bdb6422af76dee624dc1ff03609dffcd0d70ed510a5e07e65377cbca873a986",
-  "evidence": "docs/RELEASE-0.10.5-REVIEW.md",
+  "version": "0.11.0",
+  "reviewedBy": "Codex automated technical dependency review; not legal counsel",
+  "reviewedAt": "2026-11-13",
+  "packageLockSha256": "32a314f8277e7c7ce08c67397961f104e3c6beb7889e52f03bdb78c5770a827d",
+  "evidence": "docs/RELEASE-0.11.0-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner requested the 0.10.5 patch without scheduled tasks. The previously authorized unsigned-release policy remains in effect. No signing or legal approval is claimed.",
+  "ownerDecision": "Owner requested release of all accumulated workflow, UI and updater changes. The previously authorized unsigned-release policy remains in effect. No signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 568,
+    "unitTests": 603,
     "electronSuites": [
       "assistant",
       "colab",
@@ -28,10 +28,12 @@
       "pdf-package",
       "recovery",
       "data",
-      "menu-audit"
+      "menu-audit",
+      "backup-package"
     ],
-    "productionAudit": "Checked by npm run release:check on 2026-11-02",
-    "package": "Windows x64 unsigned installer checked with build/verify-release.cjs by npm run release:check.",
-    "recovery": "Recovery copy tested in Electron with a built app.asar, and the backup-limit path with fixtures. Restart and install has not been run through the packaged flow end to end, because it can only reach a published release."
+    "productionAudit": "2026-11-13: npm audit --omit=dev reports zero production vulnerabilities.",
+    "package": "Fresh unsigned Windows x64 installer built and verified: version, ASAR, fuses, private-path exclusions, notices/inventory, pinned speech resources, updater manifest and installer hashes. Packaged PDF and backup worker checks passed.",
+    "recovery": "Recovery fixture copied the real built app.asar. Portable app reached Window loaded with isolated app data and inert provider executables. Installed live-feed upgrade to this unpublished version remains untested.",
+    "menuAudit": "131 surfaces, 145 clicks, zero problems; blocked providers/network and refused approvals."
   }
 }

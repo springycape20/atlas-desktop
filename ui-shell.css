@@ -6,6 +6,154 @@
   --atlas-focus: #a6e1e9;
   color-scheme: dark;
 }
+.app-update-prompt {
+  box-sizing: border-box;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid #47616d;
+  border-radius: 10px;
+  background: #101719;
+  color: #e6eeee;
+  font:
+    calc(15px * var(--atlas-text-scale)) / 1.6 'Segoe UI',
+    sans-serif;
+}
+.app-update-prompt::backdrop {
+  background: #0009;
+}
+.app-update-prompt h2 {
+  margin: 0 0 12px;
+  font-size: 1.3em;
+  line-height: 1.3;
+}
+.app-update-prompt p {
+  margin: 0 0 16px;
+  overflow-wrap: anywhere;
+}
+.app-update-prompt .workspace-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+:root[data-ui-theme='light'] .app-update-prompt {
+  background: #fff;
+  color: #17252c;
+}
+:root[data-ui-theme='contrast'] .app-update-prompt {
+  background: #000;
+  color: #fff;
+  border-color: #fff;
+}
+.action-menu {
+  display: inline-flex;
+  align-items: center;
+}
+.action-menu-panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 6px;
+  width: min(300px, calc(100vw - 16px));
+  max-height: min(340px, calc(100vh - 16px));
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid #47616d;
+  border-radius: 8px;
+  background: #142026;
+  color: #e6eeee;
+  box-shadow: 0 8px 24px #0005;
+}
+.action-menu-panel:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+:root body.atlas-ui .action-menu-panel button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  font-size: calc(14px * var(--atlas-text-scale));
+  line-height: 1.45;
+  min-height: 36px;
+  padding: 8px 12px;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-radius: 4px;
+}
+:root body.atlas-ui .action-menu-panel button:hover,
+:root body.atlas-ui .action-menu-panel button:focus-visible {
+  background: #30434c;
+  outline: 2px solid var(--atlas-focus);
+  outline-offset: -2px;
+}
+:root[data-ui-theme='light'] .action-menu-panel {
+  background: #fff;
+  color: #17252c;
+  border-color: #899ba3;
+}
+:root[data-ui-theme='light'] body.atlas-ui .action-menu-panel button:is(:hover, :focus-visible) {
+  background: #e6eef1;
+}
+:root[data-ui-theme='contrast'] .action-menu-panel {
+  background: #000;
+  color: #fff;
+  border: 2px solid #fff;
+}
+.tool-section[hidden] {
+  display: none !important;
+}
+.tool-section-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #151719;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #47616d;
+  margin-bottom: 20px;
+  padding-bottom: 8px;
+}
+:root[data-ui-theme='light'] .tool-section-tabs {
+  background: #fff;
+}
+:root[data-ui-theme='contrast'] .tool-section-tabs {
+  background: #000;
+}
+:root body.atlas-ui .tool-section-tabs button {
+  font: inherit;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+:root body.atlas-ui .tool-section-tabs button[aria-selected='true'] {
+  text-decoration: underline;
+  text-underline-offset: 8px;
+  font-weight: 600;
+  background: #ffffff0a;
+}
+:root body.atlas-ui :is(.power-body, .shell-hub-content, .workspace-dialog-body) {
+  line-height: 1.6;
+}
+:root body.atlas-ui :is(.power-body, .shell-hub-content) h3 {
+  margin-top: 24px;
+  margin-bottom: 10px;
+  font-size: calc(16px * var(--atlas-text-scale));
+}
+:root body.atlas-ui :is(.power-body, .workspace-dialog-body) label {
+  line-height: 1.5;
+}
+:root body.atlas-ui .power-body > p,
+:root body.atlas-ui .tool-section > p {
+  max-width: 78ch;
+}
 .command-menu {
   width: min(620px, calc(100vw - 32px));
   max-height: 80vh;
@@ -609,8 +757,104 @@ body.atlas-ui {
   color: #d1e1e6;
 }
 .shell-hub[open] {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.shell-hub > header {
+  grid-column: 1/-1;
+  grid-row: 1;
+  border-bottom: 1px solid #29414a;
+}
+.shell-hub > nav.shell-hub-groups {
+  display: none;
+}
+.shell-hub > .shell-hub-content {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+}
+.shell-hub-rail {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 12px;
+  border-right: 1px solid #29414a;
+}
+.shell-hub-rail label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+.shell-hub-rail :is(input, select) {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  padding: 8px;
+  margin-top: 6px;
+  border-radius: 6px;
+}
+.shell-hub-rail nav {
   display: flex;
   flex-direction: column;
+  gap: 3px;
+}
+.shell-hub-rail nav[hidden] {
+  display: none;
+}
+:root body.atlas-ui .shell-hub-rail nav button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: normal;
+  padding: 9px 10px;
+}
+.shell-hub-rail nav button[hidden] {
+  display: none;
+}
+.shell-hub-rail .shell-section-picker {
+  display: none;
+}
+@media (max-width: 750px) {
+  .shell-hub[open] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .shell-hub > .shell-hub-content {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .shell-hub-rail {
+    grid-column: 1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 12px 16px;
+    border-right: 0;
+    border-bottom: 1px solid #29414a;
+  }
+  .shell-hub-rail nav,
+  .shell-hub-rail label:has(input) {
+    display: none;
+  }
+  .shell-hub-rail .shell-section-picker {
+    display: block;
+  }
+  .shell-hub-rail label {
+    margin: 0;
+  }
+  .shell-hub-rail label[hidden] {
+    display: none;
+  }
+  .shell-hub-rail:has(> label[hidden]) {
+    grid-template-columns: 1fr;
+  }
 }
 .shell-hub::backdrop {
   background: #000a;

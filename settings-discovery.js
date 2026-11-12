@@ -104,6 +104,18 @@
   const updateSection = make('section');
   updateSection.className = 'setting-section';
   updateSection.append(make('h3', 'App updates'));
+  const automatic = make('input'),
+    automaticLabel = make('label', ' Automatically download updates');
+  automatic.type = 'checkbox';
+  automatic.id = 'autoDownloadUpdates';
+  automatic.checked = settings.autoDownloadUpdates === true;
+  automaticLabel.prepend(automatic);
+  const automaticNote = make(
+    'p',
+    'Check for updates on launch and download them in the background when enabled. Choose Restart and install when you are ready; ATLAS never restarts automatically. Save settings to apply this choice.',
+  );
+  automaticNote.className = 'setting-note';
+  updateSection.append(automaticLabel, automaticNote);
   const updateText = make('p', 'Checking for app updates…');
   updateText.className = 'setting-note';
   updateText.setAttribute('role', 'status');
@@ -128,8 +140,95 @@
     actions.append(button);
     return button;
   }
-  let notified = '';
+  const prompt = make('dialog'),
+    promptTitle = make('h2'),
+    promptText = make('p'),
+    promptNote = make(
+      'p',
+      'You can keep working while an update downloads. Installation requires your confirmation and waits until running work has stopped.',
+    ),
+    promptActions = make('div'),
+    later = make('button', 'Later'),
+    primary = make('button');
+  prompt.id = 'updatePrompt';
+  prompt.className = 'app-update-prompt';
+  promptTitle.id = 'updatePromptTitle';
+  promptText.id = 'updatePromptText';
+  promptText.setAttribute('role', 'status');
+  prompt.setAttribute('aria-labelledby', promptTitle.id);
+  prompt.setAttribute('aria-describedby', promptText.id);
+  promptActions.className = 'workspace-actions';
+  later.type = primary.type = 'button';
+  later.className = primary.className = 'quiet-button';
+  later.autofocus = true;
+  later.onclick = () => prompt.close();
+  promptActions.append(later, primary);
+  prompt.append(promptTitle, promptText, promptNote, promptActions);
+  document.body.append(prompt);
+  const prompted = new Set();
+  let latest = {};
+  function offerUpdate() {
+    if (prompt.open && ['current', 'source'].includes(latest.status)) {
+      prompt.close();
+      return;
+    }
+    if (!prompt.open) {
+      if (
+        !latest.version ||
+        prompted.has(latest.version) ||
+        !['available', 'downloading', 'downloaded', 'source-available'].includes(latest.status)
+      )
+        return;
+      if (document.querySelector('dialog[open]')) return;
+      prompted.add(latest.version);
+      prompt.showModal();
+    }
+    promptTitle.textContent =
+      latest.status === 'error'
+        ? 'ATLAS could not finish updating'
+        : latest.status === 'downloaded'
+          ? 'Your ATLAS update is ready'
+          : 'An ATLAS update is available';
+    promptText.textContent = updateText.textContent;
+    primary.textContent =
+      latest.status === 'downloaded'
+        ? 'Restart and install'
+        : latest.status === 'source-available'
+          ? 'Open GitHub Releases'
+          : latest.status === 'available'
+            ? 'Download update'
+            : latest.status === 'error'
+              ? 'Try again'
+              : latest.status === 'installing'
+                ? 'Restarting…'
+                : 'Downloading…';
+    primary.disabled = ['checking', 'downloading', 'installing'].includes(latest.status);
+    promptNote.textContent =
+      latest.source || latest.status === 'source-available'
+        ? 'This is a source checkout. Use Git or the published installer to update it.'
+        : 'You can keep working while an update downloads. Installation requires your confirmation and waits until running work has stopped.';
+  }
+  primary.onclick = async () => {
+    if (latest.status === 'source-available') {
+      await api.openLink('https://github.com/springycape20/atlas-desktop/releases/latest');
+      return;
+    }
+    const action = latest.status === 'downloaded' ? 'install' : latest.status === 'available' ? 'download' : 'check';
+    primary.disabled = true;
+    try {
+      render(await api.updates({ action }));
+    } catch (error) {
+      promptText.textContent = error.message;
+      primary.disabled = false;
+    }
+  };
+  new MutationObserver(offerUpdate).observe(document.body, {
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['open'],
+  });
   function render(value) {
+    latest = value;
     actions.replaceChildren();
     const version = value.version ? ' ' + value.version : '';
     const messages = {
@@ -151,10 +250,7 @@
     if (!['checking', 'downloading', 'installing'].includes(value.status)) actionButton('Check for updates', 'check');
     if (value.status === 'available') actionButton('Download update', 'download');
     if (value.status === 'downloaded') actionButton('Restart and install', 'install');
-    if (['available', 'downloaded', 'source-available'].includes(value.status) && notified !== value.status) {
-      notified = value.status;
-      toast(updateText.textContent + ' Open Settings → App updates.');
-    }
+    offerUpdate();
     const releases = make('button', 'Open GitHub Releases');
     releases.type = 'button';
     releases.className = 'quiet-button';

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, protocol } = require('electron');
+const { offscreenFrame } = require('./fixtures/offscreen-frame.cjs');
 const fs = require('node:fs'),
   path = require('node:path'),
   os = require('node:os');
@@ -10,7 +11,7 @@ app.setPath('userData', path.join(temp, 'data'));
 protocol.registerSchemesAsPrivileged([
   { scheme: 'atlas', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
-const mock = `window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'windows',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>null,jobs:async()=>[],providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'current',currentVersion:'test'}),chatMetadata:async()=>({}),saveSettings:async(next)=>next},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
+const mock = `window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'windows',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>null,jobs:async()=>[],providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'current',currentVersion:'test'}),onUpdateStatus:fn=>{window.pushUpdate=fn;return()=>{};},chatMetadata:async()=>({}),saveSettings:async(next)=>next},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
 const timeout = setTimeout(() => {
   console.error('Settings browser test timed out');
   app.exit(1);
@@ -40,7 +41,7 @@ app.whenReady().then(async () => {
       show: false,
       width: 1280,
       height: 800,
-      webPreferences: { backgroundThrottling: false },
+      webPreferences: { offscreen: true, backgroundThrottling: false },
     });
     win.webContents.on('console-message', (event) => {
       if (event.level === 'error') console.error(event.message);
@@ -126,7 +127,59 @@ app.whenReady().then(async () => {
       if(body.height<120)throw Error('Too little room for settings in a narrow window: '+body.height);
     })()`);
     if (process.env.ATLAS_SETTINGS_NARROW_SHOT)
-      fs.writeFileSync(process.env.ATLAS_SETTINGS_NARROW_SHOT, (await win.webContents.capturePage()).toPNG());
+      fs.writeFileSync(process.env.ATLAS_SETTINGS_NARROW_SHOT, (await offscreenFrame(win)).toPNG());
+    await win.webContents.executeJavaScript(`(async()=>{
+      document.querySelector('#settingsClose').click();
+      window.updateRequests=[];window.updateBusy=true;
+      atlas.saveSettings=async value=>{window.updateSaved=value;return value;};
+      await new Promise(r=>setTimeout(r,20));document.querySelector('#settingsOpen').click();await new Promise(r=>setTimeout(r,50));
+      atlasSettings.show('App updates');
+      const automatic=document.querySelector('#autoDownloadUpdates');
+      if(automatic.checked)throw Error('Automatic updates must be opt-in');
+      automatic.checked=true;automatic.dispatchEvent(new Event('change',{bubbles:true}));
+      document.querySelector('#settingsSave').click();await new Promise(r=>setTimeout(r,80));
+      if(!updateSaved.autoDownloadUpdates)throw Error('Automatic download preference missing from Save');
+    })()`);
+    // Drive the registered startup listener with an asynchronous release notification.
+    await win.webContents.executeJavaScript(`(async()=>{
+      window.updateVersion='1.2.0';
+      atlas.updates=async request=>{updateRequests.push(request.action);if(request.action==='download')return {status:'downloaded',version:updateVersion,currentVersion:'1.0.0'};if(request.action==='install'){if(updateBusy)throw Error('Finish or stop running tasks before installing the update.');return {status:'installing',version:updateVersion};}return {status:'available',version:updateVersion,currentVersion:'1.0.0'};};
+      const button=[...document.querySelectorAll('#settingsDialog button')].find(b=>b.textContent==='Check for updates');
+      button.click();await new Promise(r=>setTimeout(r,50));
+      if(!document.querySelector('#updatePrompt').open)throw Error('Update announcement missing');
+      if(!document.querySelector('#updatePrompt').textContent.includes('1.2.0'))throw Error('Available version missing');
+      if(updateRequests.includes('download')||updateRequests.includes('install'))throw Error('Prompt started an unrequested update');
+    })()`);
+    const shots = path.join(root, '.handover', 'update-ui');
+    fs.mkdirSync(shots, { recursive: true });
+    for (const width of [1280, 640, 390]) {
+      win.setContentSize(width, width === 390 ? 844 : 800);
+      await new Promise((r) => setTimeout(r, 50));
+      await win.webContents.executeJavaScript(
+        `(()=>{const d=document.querySelector('#updatePrompt');const box=d.getBoundingClientRect();if(box.left<0||box.right>innerWidth+1||d.scrollWidth>d.clientWidth+1)throw Error('Update prompt overflow');})()`,
+      );
+      fs.writeFileSync(path.join(shots, 'available-' + width + '.png'), (await offscreenFrame(win)).toPNG());
+    }
+    await win.webContents.executeJavaScript(`(async()=>{
+      const dialog=document.querySelector('#updatePrompt'),buttons=()=>[...dialog.querySelectorAll('button')];
+      buttons().find(b=>b.textContent==='Download update').click();await new Promise(r=>setTimeout(r,50));
+      if(!buttons().some(b=>b.textContent==='Restart and install')||updateRequests.includes('install'))throw Error('Download did not await explicit restart');
+      buttons().find(b=>b.textContent==='Restart and install').click();await new Promise(r=>setTimeout(r,50));
+      if(!dialog.textContent.includes('Finish or stop running tasks'))throw Error('Busy install error missing');
+      buttons().find(b=>b.textContent==='Later').click();await new Promise(r=>setTimeout(r,30));
+      if(dialog.open)throw Error('Later did not dismiss update');
+      [...document.querySelectorAll('#settingsDialog button')].find(b=>b.textContent==='Check for updates').click();await new Promise(r=>setTimeout(r,50));
+      if(dialog.open)throw Error('Same update prompted twice during one launch');
+      updateVersion='1.3.0';
+      document.querySelector('#settingsOpen').click();await new Promise(r=>setTimeout(r,60));atlasSettings.show('App updates');
+      [...document.querySelectorAll('#settingsDialog button')].find(b=>b.textContent==='Check for updates').click();await new Promise(r=>setTimeout(r,50));
+      if(dialog.open)throw Error('Update stole focus from another dialog');
+      document.querySelector('#settingsClose').click();await new Promise(r=>setTimeout(r,50));
+      if(!dialog.open)throw Error('Deferred update prompt missing after Settings closed');
+      buttons().find(b=>b.textContent==='Download update').click();await new Promise(r=>setTimeout(r,50));
+      updateBusy=false;buttons().find(b=>b.textContent==='Restart and install').click();await new Promise(r=>setTimeout(r,50));
+      if(!dialog.textContent.includes('Restarting'))throw Error('Explicit install request missing');
+    })()`);
     console.log(
       'PASS: Settings lists sections in order, switches by click and keyboard, searches across sections, keeps buttons in the right sections, tracks unsaved changes and fits a narrow window.',
     );

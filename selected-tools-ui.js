@@ -165,7 +165,7 @@
   });
   register(
     'Backups and recovery',
-    async ({ body, node: n, button: b, status }) => {
+    async ({ body, node: n, button: b, status, current }) => {
       body.append(
         n(
           'p',
@@ -193,6 +193,65 @@
       autoBox.onchange = async () => showAuto(await call('auto-backup', 'set', { enabled: autoBox.checked }));
       body.append(auto, autoStatus);
       showAuto(await call('auto-backup', 'status'));
+      const progress = n('p');
+      progress.setAttribute('role', 'status');
+      body.append(progress);
+      const refreshProgress = async () => {
+        const value = await call('auto-backup', 'progress');
+        if (!current()) return;
+        progress.textContent = value.running
+          ? 'Backup ' +
+            value.phase +
+            ' · ' +
+            value.files +
+            ' files · ' +
+            (value.bytes / 1048576).toFixed(1) +
+            ' MiB read'
+          : value.error
+            ? 'Backup stopped: ' + value.error
+            : value.phase === 'complete'
+              ? 'Backup completed.'
+              : '';
+      };
+      b('Back up now', async () => {
+        await call('auto-backup', 'run');
+        showAuto(await call('auto-backup', 'status'));
+        await refreshProgress();
+      });
+      const destinationActions = n('div');
+      destinationActions.className = 'power-actions';
+      body.append(destinationActions);
+      b(
+        'Choose automatic backup location…',
+        async () => {
+          const row = await call('auto-backup', 'choose-folder');
+          if (!row.cancelled) showAuto(row);
+        },
+        destinationActions,
+      );
+      b(
+        'Use default backup location',
+        async () => showAuto(await call('auto-backup', 'reset-folder')),
+        destinationActions,
+      );
+      b(
+        'Cancel current backup',
+        async () => {
+          await call('auto-backup', 'cancel');
+          await refreshProgress();
+        },
+        destinationActions,
+      );
+      const poll = async () => {
+        if (!current()) return;
+        try {
+          await refreshProgress();
+        } catch (error) {
+          if (current()) progress.textContent = error.message;
+        }
+        if (current()) setTimeout(poll, 750);
+      };
+      void poll();
       b('Export local-record backup…', async () => (status.textContent = plain(await call('backup', 'export'))));
       b('Review and restore backup…', () => call('backup', 'restore'));
       b('Inspect update recovery', async () => (status.textContent = plain(await call('updates', 'status'))));

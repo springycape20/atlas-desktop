@@ -60,6 +60,34 @@ function createProjectEditor({ files, busy = () => false }) {
   }
   async function action(root, request) {
     if (request.action === 'editor-read') return read(root, request.path);
+    if (request.action === 'editor-rename-preview') {
+      const edit = request.edit;
+      if (!edit || edit.documentChanges || !edit.changes || typeof edit.changes !== 'object')
+        throw Error(
+          'This rename format is unsupported; only text changes without resource operations can be reviewed.',
+        );
+      const entries = Object.entries(edit.changes);
+      if (entries.length > 50) throw Error('Rename affects too many files (50 maximum).');
+      const rows = [],
+        seen = new Set();
+      let bytes = 0;
+      for (const [uri, edits] of entries) {
+        const name = require('node:url').fileURLToPath(uri),
+          file = await read(root, name);
+        if (file.text.startsWith('\uFEFF'))
+          throw Error('Rename preview currently requires files without a byte-order mark.');
+        if (seen.has(file.path)) throw Error('Duplicate rename target.');
+        seen.add(file.path);
+        if ((bytes += Buffer.byteLength(file.text)) > 4 * 1048576) throw Error('Rename preview exceeds 4 MiB.');
+        const after = require('./language-edits').editText(file.text, edits);
+        if (Buffer.byteLength(after) > 262144) throw Error('Renamed file exceeds editor limit.');
+        rows.push({ ...file, after, count: edits.length });
+      }
+      const id = randomUUID();
+      plans.set(id, { root, rows, createdAt: Date.now() });
+      prune(plans);
+      return { id, files: rows.map(({ path, count }) => ({ path, count })) };
+    }
     if (request.action === 'editor-save') {
       if (typeof request.text !== 'string') throw Error('Enter text to save.');
       const result = await apply(root, [{ path: request.path, after: request.text, version: request.version }]);

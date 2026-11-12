@@ -11,6 +11,9 @@ function createSelectedTools({
   restore,
   updateRecovery,
   autoBackups,
+  backupProgress = () => ({ running: false }),
+  cancelBackup = () => ({ cancelled: false }),
+  chooseBackupFolder,
 }) {
   const services = require('./project-services').createProjectServices(directory, { approve }),
     git = require('./git-panel').createGitPanel({ approve, busy }),
@@ -66,8 +69,17 @@ function createSelectedTools({
           return { cancelled: true };
         return recoveryCleanup.remove(request.names);
       }
-      if (request.tool === 'auto-backup')
+      if (request.tool === 'auto-backup') {
+        if (request.action === 'progress') return backupProgress();
+        if (request.action === 'cancel') return cancelBackup();
+        if (request.action === 'choose-folder') return chooseBackupFolder();
+        if (request.action === 'reset-folder') return autoBackups().setFolder();
+        if (request.action === 'run') {
+          if (busy() || services.active()) throw Error('Finish work and stop services before backing up.');
+          return { created: await autoBackups().tick({ force: true }) };
+        }
         return request.action === 'set' ? autoBackups().setEnabled(request.enabled) : autoBackups().status();
+      }
       if (request.tool === 'backup') {
         if (busy() || services.active()) throw Error('Finish work and stop services before backing up/restoring.');
         return request.action === 'restore' ? restore() : backup();

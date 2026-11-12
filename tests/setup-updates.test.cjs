@@ -198,6 +198,120 @@ test('source update checks never install and network failures remain recoverable
   const updates = createAppUpdates({ app: { isPackaged: true, getVersion: () => '1.0.0' }, updater });
   assert.equal((await updates.action({ action: 'check' })).status, 'error');
 });
+test('automatic downloads require saved opt-in, coalesce requests and never install implicitly', async () => {
+  const updater = new EventEmitter();
+  let enabled = false,
+    checks = 0,
+    downloads = 0,
+    installs = 0;
+  updater.checkForUpdates = async () => {
+    checks++;
+    updater.emit('update-available', { version: '1.1.0' });
+  };
+  updater.downloadUpdate = async () => {
+    downloads++;
+    await new Promise((r) => setImmediate(r));
+    updater.emit('update-downloaded', { version: '1.1.0' });
+  };
+  updater.quitAndInstall = () => installs++;
+  const updates = createAppUpdates({
+    app: { isPackaged: true, getVersion: () => '1.0.0' },
+    updater,
+    readPreferences: async () => ({ autoDownloadUpdates: enabled }),
+  });
+  await updates.action({ action: 'check' });
+  assert.equal(downloads, 0);
+  enabled = true;
+  await Promise.all([updates.action({ action: 'configure' }), updates.action({ action: 'download' })]);
+  assert.equal(downloads, 1);
+  assert.equal(checks, 1);
+  assert.equal(installs, 0);
+  assert.equal((await updates.action()).status, 'downloaded');
+  enabled = false;
+  await updates.action({ action: 'check' });
+  assert.equal(downloads, 1);
+});
+test('launch checks auto-download when opted in, surface failures and can be retried', async () => {
+  const updater = new EventEmitter();
+  let fail = true,
+    downloads = 0;
+  updater.checkForUpdates = async () => updater.emit('update-available', { version: '1.1.0' });
+  updater.downloadUpdate = async () => {
+    downloads++;
+    if (fail) throw Error('Network offline');
+    updater.emit('update-downloaded', { version: '1.1.0' });
+  };
+  const updates = createAppUpdates({
+    app: { isPackaged: true, getVersion: () => '1.0.0' },
+    updater,
+    readPreferences: async () => ({ autoDownloadUpdates: true }),
+  });
+  assert.equal((await updates.action({ action: 'check' })).status, 'error');
+  fail = false;
+  assert.equal((await updates.action({ action: 'check' })).status, 'downloaded');
+  assert.equal(downloads, 2);
+});
+test('configure without an update does not wedge future checks and source checkouts never auto-download', async () => {
+  let checks = 0;
+  const updates = createAppUpdates({
+    app: { isPackaged: false, getVersion: () => '1.0.0' },
+    readPreferences: async () => ({ autoDownloadUpdates: true }),
+    fetchRelease: async () => {
+      checks++;
+      return { tag_name: 'v1.1.0' };
+    },
+  });
+  assert.equal((await updates.action({ action: 'configure' })).status, 'idle');
+  assert.equal((await updates.action({ action: 'check' })).status, 'source-available');
+  assert.equal(checks, 1);
+});
+test('simultaneous install requests share recovery and recheck work before restarting', async () => {
+  const updater = new EventEmitter();
+  let prepare = 0,
+    installs = 0,
+    running = false,
+    release;
+  updater.checkForUpdates = async () => updater.emit('update-available', { version: '1.1.0' });
+  updater.downloadUpdate = async () => updater.emit('update-downloaded', { version: '1.1.0' });
+  updater.quitAndInstall = () => installs++;
+  const gate = new Promise((r) => (release = r)),
+    updates = createAppUpdates({
+      app: { isPackaged: true, getVersion: () => '1.0.0' },
+      updater,
+      busy: () => running,
+      prepareRecovery: async () => {
+        prepare++;
+        await gate;
+      },
+    });
+  await updates.action({ action: 'check' });
+  await updates.action({ action: 'download' });
+  const one = updates.action({ action: 'install' }),
+    two = updates.action({ action: 'install' });
+  running = true;
+  release();
+  const results = await Promise.allSettled([one, two]);
+  assert.ok(results.every((r) => r.status === 'rejected'));
+  assert.equal(prepare, 1);
+  assert.equal(installs, 0);
+  assert.equal((await updates.action()).status, 'downloaded');
+});
+test('automatic-download preference defaults off and persists only a boolean through trusted settings IPC', async (t) => {
+  const h = await require('./fixtures/main-harness.cjs').mainHarness(t);
+  h.setupIpc();
+  const event = { sender: h.sender, senderFrame: { url: 'atlas://app/' } },
+    call = (name, r) => h.handlers.get('atlas:' + name)(event, r);
+  const initial = await call('get-settings');
+  assert.equal(initial.autoDownloadUpdates, false);
+  await call('save-settings', { ...initial, autoDownloadUpdates: true });
+  assert.equal((await call('get-settings')).autoDownloadUpdates, true);
+  const saved = JSON.parse(await fs.readFile(path.join(h.paths.userData, 'settings.json'), 'utf8'));
+  assert.equal(saved.autoDownloadUpdates, true);
+  await call('save-settings', { ...initial, autoDownloadUpdates: 'true' });
+  assert.equal((await call('get-settings')).autoDownloadUpdates, false);
+  await assert.rejects(h.handlers.get('atlas:updates')({}, { action: 'check' }), /Untrusted/);
+  await h.assistantService.flush();
+});
 test('Git setup requires confirmation and rejects untrusted windows', async () => {
   const handlers = new Map();
   let response = 1,

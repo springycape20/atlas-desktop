@@ -623,6 +623,7 @@
     return details;
   }
   const messageNodes = new Map(),
+    messagePages = new Map(),
     activityNodes = new Map(),
     sidebarNodes = new Map(),
     searchText = new Map();
@@ -741,7 +742,9 @@
       messageNodes.clear();
       activityNodes.clear();
     }
-    const atBottom = forceLatest.delete(chat.id) || !priorScroll || priorScroll.atBottom;
+    const forcedLatest = forceLatest.delete(chat.id);
+    if (forcedLatest) messagePages.set(chat.id, 0);
+    const atBottom = forcedLatest || !priorScroll || priorScroll.atBottom;
     if (switched) {
       el('colabFind').value = '';
       matchIndex = 0;
@@ -782,7 +785,40 @@
       place(empty);
     }
     const shownRuns = new Set();
-    for (const [messageIndex, message] of chat.messages.entries()) {
+    const messagePage = window.atlasChatRender.messagePage(
+      chat.messages,
+      el('colabFind').value,
+      messagePages.get(chat.id) || 0,
+    );
+    messagePages.set(chat.id, messagePage.page);
+    if (messagePage.pages > 1) {
+      const controls = document.createElement('div');
+      controls.className = 'power-actions';
+      for (const [label, direction, disabled] of [
+        ['Older messages', 1, messagePage.page === messagePage.pages - 1],
+        ['Newer messages', -1, messagePage.page === 0],
+      ]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'quiet-button';
+        button.textContent = label;
+        button.disabled = disabled;
+        button.onclick = () => {
+          messagePages.set(chat.id, messagePage.page + direction);
+          render();
+          transcript.scrollTop = 0;
+        };
+        controls.append(button);
+      }
+      controls.append(
+        document.createTextNode(
+          messagePage.total + ' messages · page ' + (messagePage.pages - messagePage.page) + ' of ' + messagePage.pages,
+        ),
+      );
+      place(controls);
+    }
+    for (const messageIndex of messagePage.indices) {
+      const message = chat.messages[messageIndex];
       const run = message.role === 'assistant' && (chat.activityRuns || []).find((run) => run.id === message.jobId);
       if (run && !shownRuns.has(run.id)) {
         place(activity(run));
@@ -914,9 +950,16 @@
       );
       place(cachedArticle);
     }
-    for (const run of chat.activityRuns || []) if (!shownRuns.has(run.id)) place(activity(run));
+    for (const run of chat.activityRuns || [])
+      if (
+        !shownRuns.has(run.id) &&
+        (chat.messages.length <= 150 ||
+          run.status === 'running' ||
+          (messagePage.page === 0 && !chat.messages.some((message) => message.jobId === run.id)))
+      )
+        place(activity(run));
     reconcileNodes(transcript, transcriptNodes);
-    const liveMessages = new Set(chat.messages.map((message, i) => (message.id || 'legacy') + ':' + i)),
+    const liveMessages = new Set(messagePage.indices.map((i) => (chat.messages[i].id || 'legacy') + ':' + i)),
       liveRuns = new Set((chat.activityRuns || []).map((run) => run.id));
     for (const key of messageNodes.keys()) if (!liveMessages.has(key)) messageNodes.delete(key);
     for (const key of activityNodes.keys()) if (!liveRuns.has(key)) activityNodes.delete(key);
@@ -998,7 +1041,8 @@
   }
   el('colabFind').oninput = () => {
     matchIndex = 0;
-    refreshFind();
+    messagePages.set(selected, 0);
+    render();
     showMatch();
   };
   el('colabPreviousMatch').onclick = () => {
@@ -1019,6 +1063,9 @@
     refreshBrowse();
   });
   el('colabLatest').onclick = () => {
+    messagePages.set(selected, 0);
+    el('colabFind').value = '';
+    render();
     el('colabTranscript').scrollTop = el('colabTranscript').scrollHeight;
     refreshBrowse();
   };

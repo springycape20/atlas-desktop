@@ -1,5 +1,7 @@
 # Project tools (0.10.0)
 
+For the 0.11.0 interface improvements, see [readability and navigation](UI-NAVIGATION.md).
+
 ATLAS 0.10.2 adds [Power tools](POWER-TOOL-UPGRADES.md): installed language servers, saved browser checks, screenshot comparisons and preview profiling. The behavior below remains available.
 
 Use **Tasks** for running work, the queue, parallel batches, recovery, reminders and approvals. **Library** contains memories and workflows. **Settings > Models** opens local-model configuration, and **Settings > Diagnostics** opens performance measurements. **Context** beside either composer previews context for the current chat. These tools are included in ATLAS 0.10.0.
@@ -33,7 +35,7 @@ HTML files have a **Page preview (scripts off)** and a Source view. The page run
 
 ## Navigation and readability
 
-The main sidebar contains Chat, Colab, Projects, Tasks, Library and Settings. Press **Ctrl+K**, or choose **Search** in the top bar, to find a destination. Search only opens screens; it does not start a provider task. Arrow keys and Enter select a result; Escape closes the menu.
+The main sidebar contains Chat, Colab, Projects, Tasks, Library and Settings. Press **Ctrl+K**, or choose **Search** in the top bar, to find any page, tool, settings section or chat, including archived chats, or to start a new chat. Search only opens screens; it does not start a provider task. Arrow keys and Enter select a result; Escape closes the menu.
 
 **Provider activity** in the top bar or Settings shows retained local task counts for Codex, Claude and shared Colab tasks, plus limit cooldowns recorded by ATLAS. Refresh reads local state. These figures do not measure subscription usage, token totals, spending or remaining account allowance, and exclude activity outside ATLAS. Links open each provider's account usage page for those details. The previous sidebar quota rings and automatic quota polling have been removed.
 

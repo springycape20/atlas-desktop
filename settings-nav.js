@@ -226,6 +226,7 @@
   window.atlasSettings = {
     show: (name) => show(name),
     current: () => current,
+    sections: () => sections().map(title),
     register: (section) => {
       body.append(section);
       known = names();

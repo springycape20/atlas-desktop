@@ -17,10 +17,25 @@ const tooLarge = () =>
   Object.assign(Error('ATLAS records are over the backup limit of 256 MiB or 20,000 files.'), {
     code: 'ATLAS_BACKUP_LIMIT',
   });
-function collect(root) {
+function collect(root, { progress = () => {} } = {}) {
   assertDirectory(root);
   const rows = [];
   let total = 0;
+  const record = (name, file, stat) => {
+    const bytes = fs.readFileSync(file),
+      after = fs.lstatSync(file);
+    if (
+      after.isSymbolicLink() ||
+      stat.ino !== after.ino ||
+      stat.size !== after.size ||
+      stat.mtimeMs !== after.mtimeMs ||
+      bytes.length !== after.size
+    )
+      throw Error('Local records changed during backup. Try again after saves finish.');
+    rows.push({ path: name, size: bytes.length, sha256: digest(bytes), data: bytes.toString('base64') });
+    if (rows.length % 100 === 0) progress({ phase: 'collecting', files: rows.length, bytes: total });
+  };
+  progress({ phase: 'collecting', files: 0, bytes: 0 });
   function walk(folder, prefix) {
     for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
       const name = prefix + entry.name,
@@ -30,8 +45,7 @@ function collect(root) {
       if (entry.isDirectory()) walk(file, name + '/');
       else if (entry.isFile()) {
         if ((total += stat.size) > 256 * 1024 * 1024 || rows.length >= 20000) throw tooLarge();
-        const bytes = fs.readFileSync(file);
-        rows.push({ path: name, size: bytes.length, sha256: digest(bytes), data: bytes.toString('base64') });
+        record(name, file, stat);
       }
     }
   }
@@ -43,8 +57,7 @@ function collect(root) {
     if (stat.isDirectory()) walk(file, name + '/');
     else {
       if ((total += stat.size) > 256 * 1024 * 1024 || rows.length >= 20000) throw tooLarge();
-      const bytes = fs.readFileSync(file);
-      rows.push({ path: name, size: bytes.length, sha256: digest(bytes), data: bytes.toString('base64') });
+      record(name, file, stat);
     }
   }
   return rows;
@@ -65,8 +78,9 @@ function validate(bytes) {
   }
   return value;
 }
-function createBackup(root, version, renderer) {
-  const files = collect(root);
+function createBackup(root, version, renderer, { progress = () => {} } = {}) {
+  const files = collect(root, { progress });
+  progress({ phase: 'compressing', files: files.length, bytes: files.reduce((sum, row) => sum + row.size, 0) });
   return zlib.gzipSync(
     Buffer.from(JSON.stringify({ format: 'atlas-backup-v1', version, createdAt: Date.now(), files, renderer })),
   );
@@ -135,13 +149,31 @@ function applyRestore(root, marker) {
     throw error;
   }
 }
-module.exports = { createBackup, validate, stageRestore, applyPendingRestore, collect };
+module.exports = { createBackup, validate, stageRestore, applyPendingRestore, collect, canonicalDirectory };
+// Expand Windows 8.3 aliases without accepting a symlink/junction at any level.
+// realpath alone cannot distinguish those two cases.
+function canonicalDirectory(root, { allowMissing = false } = {}) {
+  const absolute = path.resolve(root),
+    base = path.parse(absolute).root,
+    parts = path.relative(base, absolute).split(path.sep).filter(Boolean);
+  let current = base;
+  for (let i = 0; i < parts.length; i++) {
+    const parent = current;
+    current = path.join(current, parts[i]);
+    let stat;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (error) {
+      if (error.code === 'ENOENT' && allowMissing) return path.join(fs.realpathSync.native(parent), ...parts.slice(i));
+      throw error;
+    }
+    if (stat.isSymbolicLink()) throw Error('Linked app data directory refused.');
+    if (!stat.isDirectory()) throw Error('Choose an app data directory.');
+  }
+  return fs.realpathSync.native(absolute);
+}
 function assertDirectory(root) {
-  if (
-    fs.lstatSync(root).isSymbolicLink() ||
-    path.resolve(fs.realpathSync(root)).toLowerCase() !== path.resolve(root).toLowerCase()
-  )
-    throw Error('Linked app data directory refused.');
+  canonicalDirectory(root);
 }
 function assertChildDirectory(root, name) {
   const target = path.join(root, name);

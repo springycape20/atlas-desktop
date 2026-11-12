@@ -40,7 +40,24 @@
     );
     select.value = value === ARCHIVED || names.includes(value) ? value : '';
   }
-  const api = { memo, reconcile, ARCHIVED, chatVisible, fillFolderFilter };
+  function messagePage(items, query = '', page = 0, size = 150) {
+    const needle = query.trim().toLowerCase(),
+      indices = [];
+    for (let i = 0; i < items.length; i++)
+      if (
+        items.length <= size ||
+        !needle ||
+        String(items[i].content || '')
+          .toLowerCase()
+          .includes(needle)
+      )
+        indices.push(i);
+    const pages = Math.max(1, Math.ceil(indices.length / size));
+    page = Math.max(0, Math.min(pages - 1, page));
+    const end = Math.max(0, indices.length - page * size);
+    return { indices: indices.slice(Math.max(0, end - size), end), page, pages, total: indices.length };
+  }
+  const api = { memo, reconcile, ARCHIVED, chatVisible, fillFolderFilter, messagePage };
   if (typeof module === 'object') module.exports = api;
   else root.atlasChatRender = api;
 })(globalThis);

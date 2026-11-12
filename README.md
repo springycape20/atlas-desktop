@@ -1,6 +1,8 @@
 # ATLAS
 
-ATLAS 0.10.5 adds chat folders, automatic backups, edit and resend, and easier ways to review what ATLAS keeps. If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
+ATLAS 0.11.0 adds clearer navigation, richer editor and browser tools, background backups, task budgets, reviewed trial promotion, workflow benchmarks and optional automatic update downloads. If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
+
+Version 0.11.0 includes [clearer navigation](docs/UI-NAVIGATION.md), [editor and browser workflow improvements](docs/WORKFLOW-PERFORMANCE.md), [background backups and saved visual baselines](docs/BACKUPS-AND-VISUAL-BASELINES.md), and [task budgets, reviewed trial promotion and workflow benchmarks](docs/EXECUTION-CONTROLS.md). See the linked guides for controls and limits.
 
 ATLAS 0.10.2 added [Power tools](docs/POWER-TOOL-UPGRADES.md), which connects the twelve project capabilities and adds installed-language-server navigation, saved browser checks, visual comparisons and preview profiling. It also regroups the Tasks menu and fixes menu errors.
 
@@ -91,6 +93,10 @@ ATLAS installs for your Windows account in `%LOCALAPPDATA%\Programs\atlas-local-
 
 ATLAS checks for new releases when it starts. Open **Settings → App updates**, download the update, then choose **Restart and install**. Updates never install while a task is running, and your settings and conversations are kept.
 
+In 0.11.0, a launch prompt announces a newer version with **Download update** and **Later**. Enable **Automatically download updates** in **Settings → App updates** and save to download releases in the background. Downloads default off; installation still requires **Restart and install** and the existing recovery confirmation. Dismissing a version silences its prompt until the next launch, while its status stays available in Settings.
+
+![The update prompt with Download update and Later](docs/images/update-prompt.png)
+
 Starting with 0.10.0, later in-app updates offer to preserve the current app and a local-record backup first. **Diagnostics → Backups and recovery** can export records or launch the preserved version. Backups are compressed, not encrypted, and exclude external project worktrees and provider-owned histories. Keep them private. Updating an older ATLAS release to 0.10.0 uses that older release's update flow.
 
 ## Your data and privacy
@@ -126,6 +132,7 @@ Setup installs dependencies, downloads the speech runtime and models (checksum-v
 | `npm run test:colab-ui`, `test:assistant-ui`, `test:graph-ui`, `test:approvals-ui`, `test:dispute-ui`, `test:settings-ui` | Electron UI checks |
 | `npm run test:files-ui`, `test:navigation-ui`, `test:preview-ui`, `test:power-ui` | Project tools, layout and preview checks |
 | `npm run test:pty-ui`, `test:pty-render-ui`, `test:restore-ui` | Native terminal, prompt alignment and browser-record restoration |
+| `npm run test:pdf-package-ui`, `test:backup-package-ui` | PDF extraction and backup-worker startup from a freshly built package |
 | `npm run format` / `npm run format:check` | Prettier formatting |
 | `npm run dist:win` | Build the Windows installer into `dist/` |
 | `npx electron build/capture-screenshots.cjs` | Re-capture the README screenshots with demo data |
