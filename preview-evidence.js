@@ -54,36 +54,61 @@ function stepScript(step) {
     return true;
   })()`;
 }
-function comparePixels(before, after, threshold = 16) {
+function cleanRegions(value, size) {
+  if (!Array.isArray(value) || value.length > 20) throw Error('Use up to 20 ignored pixel rectangles.');
+  return value.map((row) => {
+    if (
+      !row ||
+      !['x', 'y', 'width', 'height'].every((key) => Number.isInteger(row[key])) ||
+      row.x < 0 ||
+      row.y < 0 ||
+      row.width < 1 ||
+      row.height < 1 ||
+      row.x + row.width > size.width ||
+      row.y + row.height > size.height
+    )
+      throw Error('Ignored rectangles must fit inside the screenshot.');
+    return { x: row.x, y: row.y, width: row.width, height: row.height };
+  });
+}
+function comparePixels(before, after, threshold = 16, regions = []) {
   const a = before.getSize(),
     b = after.getSize();
   if (a.width !== b.width || a.height !== b.height)
     throw Error('Screenshot dimensions changed. Capture a baseline at the current viewport.');
   const first = before.toBitmap(),
     second = after.toBitmap();
+  regions = cleanRegions(regions, a);
   if (first.length !== second.length || first.length !== a.width * a.height * 4)
     throw Error('Unsupported screenshot pixel scale.');
-  let changed = 0,
+  let ignored = 0,
+    changed = 0,
     left = a.width,
     right = -1,
     top = a.height,
     bottom = -1;
   for (let offset = 0; offset < first.length; offset += 4) {
-    if (![0, 1, 2, 3].some((channel) => Math.abs(first[offset + channel] - second[offset + channel]) > threshold))
-      continue;
-    changed++;
     const pixel = offset / 4,
       x = pixel % a.width,
       y = Math.floor(pixel / a.width);
+    if (regions.some((row) => x >= row.x && x < row.x + row.width && y >= row.y && y < row.y + row.height)) {
+      ignored++;
+      continue;
+    }
+    if (![0, 1, 2, 3].some((channel) => Math.abs(first[offset + channel] - second[offset + channel]) > threshold))
+      continue;
+    changed++;
     left = Math.min(left, x);
     right = Math.max(right, x);
     top = Math.min(top, y);
     bottom = Math.max(bottom, y);
   }
+  if (ignored === a.width * a.height) throw Error('Ignored regions cover the entire screenshot.');
   return {
     changedPixels: changed,
-    totalPixels: a.width * a.height,
-    changedPercent: Math.round((changed / (a.width * a.height)) * 10000) / 100,
+    totalPixels: a.width * a.height - ignored,
+    ignoredPixels: ignored,
+    changedPercent: Math.round((changed / (a.width * a.height - ignored)) * 10000) / 100,
     bounds: changed ? { x: left, y: top, width: right - left + 1, height: bottom - top + 1 } : null,
     threshold,
     note: 'Pixel differences include animation, fonts and dynamic content; they do not by themselves identify a regression.',
@@ -102,4 +127,4 @@ function profileDelta(before, after) {
     ]),
   );
 }
-module.exports = { cleanSteps, stepScript, comparePixels, profileDelta };
+module.exports = { cleanSteps, stepScript, comparePixels, profileDelta, cleanRegions };

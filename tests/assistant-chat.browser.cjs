@@ -289,12 +289,25 @@ app.whenReady().then(async () => {
       atlas.historyRead=async()=>({id:'large-fixture',cwd:'C:/Projects',turns:Array.from({length:5000},(_,i)=>({role:i%2?'assistant':'user',content:i===3?'Ancient unique needle':'Message '+i}))});
       await atlasAssistant.open('large-fixture');
       const count=()=>document.querySelectorAll('.assistant-past .assistant-turn').length;
-      if(count()!==150)throw Error('Large history was not bounded');
+      await new Promise(r=>setTimeout(r,60));if(document.querySelectorAll('.assistant-past .atlas-message-slot').length!==150||count()>30)throw Error('Large history was not virtualized');
       [...document.querySelectorAll('.assistant-chat-find button')].find(b=>b.textContent==='Older messages').click();
-      if(count()!==150||!document.querySelector('.assistant-past').textContent.includes('Message 4700'))throw Error('Older page missing');
+      await new Promise(r=>setTimeout(r,60));if(document.querySelectorAll('.assistant-past .atlas-message-slot').length!==150||count()>30||!document.querySelector('.assistant-past').textContent.includes('Message 4700'))throw Error('Older virtual page missing '+JSON.stringify({count:count(),slots:document.querySelectorAll('.assistant-past .atlas-message-slot').length,text:document.querySelector('.assistant-past').textContent.slice(0,250),top:document.querySelector('#response').scrollTop,height:document.querySelector('#response').scrollHeight}));
       const find=document.querySelector('[aria-label="Find Assistant messages"]');find.value='Ancient unique needle';find.dispatchEvent(new Event('input'));
       if(count()!==1||!document.querySelector('.assistant-past').textContent.includes('Ancient unique needle'))throw Error('Search lost unmounted history');
-      find.value='';find.dispatchEvent(new Event('input'));if(count()!==150)throw Error('Search reset lost latest page');
+      find.value='';find.dispatchEvent(new Event('input'));await new Promise(r=>setTimeout(r,60));if(document.querySelectorAll('.assistant-past .atlas-message-slot').length!==150||count()>30)throw Error('Search reset lost latest page');
+    })()`);
+    await win.webContents.executeJavaScript(`(async()=>{
+      const source=Array.from({length:5000},(_,index)=>({role:index%2?'assistant':'user',content:index===3?'Disk needle':'Disk message '+index}));
+      window.historyPageCalls=[];
+      atlas.historyRead=async request=>{historyPageCalls.push(request);const indices=source.map((_,index)=>index).filter(index=>!request.query||source[index].content.includes(request.query)),total=indices.length,page=request.page||0,selected=indices.slice(Math.max(0,total-(page+1)*150),Math.max(0,total-page*150));return {id:request.id,cwd:'C:/Projects',turns:selected.map(index=>source[index]),historyPage:{page,pages:Math.max(1,Math.ceil(total/150)),total,indices:selected}};};
+      await atlasAssistant.open('disk-paged-fixture');await new Promise(r=>setTimeout(r,60));
+      if(historyPageCalls.at(-1).page!==0||!document.querySelector('.assistant-past').textContent.includes('Disk message 4999'))throw Error('Disk page zero not requested');
+      [...document.querySelectorAll('.assistant-chat-find button')].find(b=>b.textContent==='Older messages').click();await new Promise(r=>setTimeout(r,40));
+      if(historyPageCalls.at(-1).page!==1||!document.querySelector('.assistant-past').textContent.includes('Disk message 4700'))throw Error('Disk older page missing');
+      const find=document.querySelector('[aria-label="Find Assistant messages"]');find.value='Disk needle';find.dispatchEvent(new Event('input'));await new Promise(r=>setTimeout(r,40));
+      if(document.querySelectorAll('.assistant-past .assistant-turn').length!==1||historyPageCalls.at(-1).query!=='Disk needle')throw Error('Disk search missing');
+      let count;atlas.historyBranch=async request=>{count=request.count;return 'fixture-branch';};
+      [...document.querySelectorAll('.assistant-past button')].find(b=>b.textContent==='Branch from here').click();await new Promise(r=>setTimeout(r,60));if(count!==4)throw Error('Disk branch used a page-relative offset');
     })()`);
   } catch (error) {
     console.error(error);

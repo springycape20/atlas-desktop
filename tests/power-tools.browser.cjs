@@ -274,14 +274,40 @@ app.whenReady().then(async () => {
       if(!executionCalls.some(r=>r.action==='promotion-apply'&&r.paths.join(',')==='app.js'))throw Error('Promotion selection missing');
       await atlasPower.show('Workflow benchmarks');
       if(executionCalls.some(r=>r.tool==='benchmarks'&&r.action==='run'))throw Error('Benchmark opening started providers');
+      const field=label=>document.querySelector('[aria-label="'+label+'"]');
+      const create=[...document.querySelectorAll('.power-body details')].find(row=>row.querySelector('summary')?.textContent==='Create a benchmark suite');create.open=true;
+      field('Suite name').value='Form fixture';field('Task').value='Implement fixture';field('Acceptance criteria').value='Fixture passes';field('Check commands').value='node --test';
+      field('Codex model').value='__custom__';field('Codex model').dispatchEvent(new Event('change'));field('Custom codex model ID').value='fixture-pinned';
+      [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Save benchmark suite').click();await new Promise(r=>setTimeout(r,40));
+      const saved=executionCalls.find(row=>row.tool==='benchmarks'&&row.action==='save');
+      if(!saved||saved.cases[0].task!=='Implement fixture'||saved.configs[0].model!=='fixture-pinned'||saved.configs[0].seconds!==600)throw Error('Guided benchmark form did not save its values');
+      await atlasPower.show('Workflow benchmarks');
       [...document.querySelectorAll('.power-body details')].find(d=>d.textContent.includes('Open benchmark task')).open=true;
       [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Open benchmark task').click();await new Promise(r=>setTimeout(r,30));
       if(!executionCalls.some(r=>r.tool==='open-task'&&r.id==='fixture-task'))throw Error('Benchmark task link did not use recorded ID');
     })()`);
+    await win.webContents.executeJavaScript(`(async()=>{
+      window.layoutCalls=[];
+      atlas.livePreview=async r=>{layoutCalls.push(r);return {url:'http://127.0.0.1:5173/project?private=value#part'};};
+      await atlasPower.show('Saved workspace');
+      const click=text=>[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent===text).click();
+      if(layoutCalls.length)throw Error('Opening saved workspace connected to preview');
+      click('Save current workspace');await new Promise(r=>setTimeout(r,30));
+      const saved=JSON.parse(localStorage.getItem('atlas.saved-workspaces.v1'))[0];
+      if(saved.url!=='http://127.0.0.1:5173/project'||saved.terminal.commands||saved.editor.draft)throw Error('Workspace included private or executable state');
+      click('Open saved preview');await new Promise(r=>setTimeout(r,30));if(!layoutCalls.some(r=>r.action==='open'&&r.url===saved.url))throw Error('Preview restoration missing');
+      window.debugCalls=[];atlas.nodeDebugger=async r=>{debugCalls.push(r);return {active:false,frames:[],breakpoints:[],output:''};};
+      await atlasPower.show('Debugger');
+      if(debugCalls.some(r=>r.action!=='status'))throw Error('Debugger opened a process passively');
+    })()`);
     for (const width of [1280, 640, 390]) {
       win.setContentSize(width, width === 390 ? 844 : 800);
-      for (const name of ['Task budgets', 'Trial promotion', 'Workflow benchmarks']) {
+      for (const name of ['Task budgets', 'Trial promotion', 'Workflow benchmarks', 'Saved workspace', 'Debugger']) {
         await win.webContents.executeJavaScript(`atlasPower.show(${JSON.stringify(name)})`);
+        if (name === 'Workflow benchmarks')
+          await win.webContents.executeJavaScript(
+            `[...document.querySelectorAll('.power-body details')].find(row=>row.querySelector('summary')?.textContent==='Create a benchmark suite').open=true`,
+          );
         await new Promise((r) => setTimeout(r, 60));
         await win.webContents.executeJavaScript(
           `(()=>{const body=document.querySelector('.power-body');if(body.scrollWidth>body.clientWidth+2)throw Error('Execution tools overflow');for(const field of body.querySelectorAll('input,select,textarea'))if(field.getBoundingClientRect().right>body.getBoundingClientRect().right+1)throw Error('Execution field overflow');})()`,

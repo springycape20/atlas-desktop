@@ -1,6 +1,6 @@
 # ATLAS
 
-ATLAS 0.11.0 adds clearer navigation, richer editor and browser tools, background backups, task budgets, reviewed trial promotion, workflow benchmarks and optional automatic update downloads. If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
+ATLAS 0.11.1 adds guided benchmarks, reviewed editor actions, saved workspaces, browser recording, focused project context, stable visual comparisons, chunked histories and a Node.js debugger. If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
 
 Version 0.11.0 includes [clearer navigation](docs/UI-NAVIGATION.md), [editor and browser workflow improvements](docs/WORKFLOW-PERFORMANCE.md), [background backups and saved visual baselines](docs/BACKUPS-AND-VISUAL-BASELINES.md), and [task budgets, reviewed trial promotion and workflow benchmarks](docs/EXECUTION-CONTROLS.md). See the linked guides for controls and limits.
 
@@ -57,6 +57,8 @@ Also in Colab:
 - **Resumable runs.** Stopped or paused tasks continue from their saved stages.
 
 ## Project tools in 0.10.0
+
+Version 0.11.1 adds guided benchmark forms, reviewed editor quick fixes/import organisation/file moves, saved workspaces, local browser recording, focused context slices, stable masked visual comparisons, chunked histories with visible-message mounting and a Node.js debugger. See the [new project tools guide](docs/PROJECT-TOOLS-NEXT.md) for locations and limits.
 
 Project tools include local project indexing, context controls, runtime measurements, task recovery, reusable Colab workflows, parallel batches with combined integration checks, and optional local-model text chat. See the [project tools guide](docs/PROJECT-TOOLS.md) for usage and limits.
 

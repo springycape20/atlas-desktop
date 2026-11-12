@@ -1223,3 +1223,7 @@ body.atlas-ui {
     padding: 0 16px 12px;
   }
 }
+.atlas-message-slot {
+  display: flow-root;
+  min-width: 0;
+}

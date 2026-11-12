@@ -46,6 +46,10 @@ app.whenReady().then(async () => {
   try {
     protocol.handle('atlas', (request) => {
       const file = new URL(request.url).pathname.slice(1);
+      if (file === '__blank')
+        return new Response('<html><body>Migration fixture</body></html>', {
+          headers: { 'Content-Type': 'text/html' },
+        });
       if (file === '__test-mock.js')
         return new Response(mock, { headers: { 'Content-Type': 'application/javascript;charset=utf-8' } });
       if (!file)
@@ -216,13 +220,44 @@ app.whenReady().then(async () => {
       'PASS: IndexedDB migration/reload, 14 chats and 73 turns, project selection, old-message search, comparison, live-update scroll preservation and three viewport sizes.',
     );
     console.log('Preview: ' + path.join(temp, 'colab-history.png'));
-    await win.webContents.executeJavaScript(`(()=>{
+    await win.webContents.executeJavaScript(`(async()=>{
       const chat=atlasColab.current(),turns=atlasColab.history().find(row=>row.id===chat.id).turns;turns.splice(0,turns.length,...Array.from({length:5000},(_,i)=>({id:'large-'+i,role:i%2?'assistant':'user',content:i===3?'Ancient unique needle':'Message '+i})));atlasColab.selectChat(chat.id);
       const count=()=>document.querySelectorAll('#colabTranscript .colab-message').length;
-      if(count()!==150)throw Error('Colab history was not bounded');
-      [...document.querySelectorAll('#colabTranscript button')].find(b=>b.textContent==='Older messages').click();if(count()!==150||!document.querySelector('#colabTranscript').textContent.includes('Message 4700'))throw Error('Colab older page missing');
+      await new Promise(r=>setTimeout(r,60));if(document.querySelectorAll('#colabTranscript .atlas-message-slot').length!==150||count()>30)throw Error('Colab history was not virtualized');
+      [...document.querySelectorAll('#colabTranscript button')].find(b=>b.textContent==='Older messages').click();await new Promise(r=>setTimeout(r,60));if(document.querySelectorAll('#colabTranscript .atlas-message-slot').length!==150||count()>30||!document.querySelector('#colabTranscript').textContent.includes('Message 4700'))throw Error('Colab older virtual page missing');
       const find=document.querySelector('#colabFind');find.value='Ancient unique needle';find.dispatchEvent(new Event('input'));if(count()!==1)throw Error('Colab search lost unmounted history');
     })()`);
+    const migration = new BrowserWindow({
+      show: false,
+      webPreferences: { backgroundThrottling: false },
+    });
+    try {
+      await migration.loadURL('atlas://migration/__blank');
+      await migration.webContents.executeJavaScript(`(async()=>{
+        const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('atlas-colab-history',1);r.onupgradeneeded=()=>{r.result.createObjectStore('chats',{keyPath:'id'});r.result.createObjectStore('meta');};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+        const tx=db.transaction(['chats','meta'],'readwrite');
+        tx.objectStore('chats').put({id:'v1-history',title:'Migrated full history',cwd:'C:/Projects/Migration',createdAt:1,messages:Array.from({length:5001},(_,i)=>({id:'v1-'+i,role:i%2?'assistant':'user',content:'Preserved message '+i}))});
+        tx.objectStore('meta').put({selected:'v1-history',migrated:true},'state');
+        await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+      })()`);
+      await migration.loadURL('atlas://migration/');
+      await migration.webContents.executeJavaScript(`(async()=>{
+        await atlasColab.ready;if(atlasColab.current().messages.length!==5001||atlasColab.current().messages[0].content!=='Preserved message 0')throw Error('v1 migration lost messages');
+        atlasColab.history()[0].turns.push({id:'after-migration',role:'user',content:'Appended after migration'});atlasColab.metadata('v1-history',{draft:'Saved draft'});await atlasColabHistory.flush();
+        const db=await new Promise(resolve=>{const r=indexedDB.open('atlas-colab-history',2);r.onsuccess=()=>resolve(r.result);});const tx=db.transaction(['chats','chunks'],'readonly'),row=tx.objectStore('chats').get('v1-history'),count=tx.objectStore('chunks').count();await new Promise(resolve=>tx.oncomplete=resolve);
+        if(row.result.messages!==undefined||row.result.messageCount!==5002||count.result!==34)throw Error('History was not stored in metadata plus chunks');db.close();
+      })()`);
+      await migration.reload();
+      await new Promise((resolve) => migration.webContents.once('did-finish-load', resolve));
+      await migration.webContents.executeJavaScript(
+        `(async()=>{await atlasColab.ready;if(atlasColab.current().messages.length!==5002||atlasColab.current().messages.at(-1).content!=='Appended after migration')throw Error('Chunked history reload lost appended messages');})()`,
+      );
+      console.log(
+        'PASS: IndexedDB v1 migration preserves 5,001 messages, appends through chunks and reloads 5,002 complete messages.',
+      );
+    } finally {
+      migration.destroy();
+    }
   } catch (error) {
     console.error(error);
     process.exitCode = 1;

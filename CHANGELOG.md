@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.1 — 13 November 2026
+
+- Add guided benchmark task/model forms with advanced JSON retained.
+- Add reviewed language-server quick fixes, refactors, import organisation and text-file resource edits; support richer completions and basic snippets.
+- Add explicit workspace save/restore for file tabs, preview locations and approved terminal definitions.
+- Add opt-in local browser interaction recording with private-field exclusions and recipe review.
+- Select bounded function/class context and recently changed index lines, with existing exclusions and budgets.
+- Stabilise visual captures and save ignored pixel regions with baselines; enforce matching capture conditions.
+- Migrate Assistant history to an atomic chunk index and Colab IndexedDB to message chunks; mount visible messages with a scroll buffer.
+- Add approved Node.js debug launches, breakpoints, stepping, call stacks, source links and local-scope inspection.
+
+See [new project tools](docs/PROJECT-TOOLS-NEXT.md) for capabilities and boundaries.
+
 ## 0.11.0 — 13 November 2026
 
 - Expands Ctrl+K navigation to every page, tool, setting and saved chat, including legacy dialogs.

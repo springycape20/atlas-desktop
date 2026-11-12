@@ -168,7 +168,25 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
         rootUri: pathToFileURL(cwd).href,
         capabilities: {
           general: { positionEncodings: ['utf-16'] },
-          textDocument: { publishDiagnostics: {}, definition: { linkSupport: true }, references: {} },
+          textDocument: {
+            publishDiagnostics: {},
+            definition: { linkSupport: true },
+            references: {},
+            completion: { completionItem: { snippetSupport: true, insertReplaceSupport: true } },
+            codeAction: {
+              codeActionLiteralSupport: {
+                codeActionKind: { valueSet: ['quickfix', 'refactor', 'source.organizeImports'] },
+              },
+              resolveSupport: { properties: ['edit'] },
+            },
+          },
+          workspace: {
+            workspaceEdit: {
+              documentChanges: true,
+              resourceOperations: ['create', 'rename', 'delete'],
+              failureHandling: 'abort',
+            },
+          },
         },
         workspaceFolders: [{ uri: pathToFileURL(cwd).href, name: path.basename(cwd) }],
       });
@@ -211,7 +229,18 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
       await store.flush();
       return { saved: true };
     }
-    if (!['definition', 'references', 'diagnostics', 'hover', 'completion', 'rename'].includes(input.action))
+    if (
+      ![
+        'definition',
+        'references',
+        'diagnostics',
+        'hover',
+        'completion',
+        'rename',
+        'code-actions',
+        'organize-imports',
+      ].includes(input.action)
+    )
       throw Error('Unknown language-server action.');
     if (!saved[cwd]) throw Error('Configure an installed language server for this project first.');
     const target = await files.resolve(cwd, input.path),
@@ -278,7 +307,7 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
         params: { textDocument: { uri, languageId: saved[cwd].languageId, version: previous.version + 1, text } },
       });
     }
-    current.documents.set(uri, { text, version: (previous?.version || 0) + 1 });
+    current.documents.set(uri, { text, version: previous ? previous.version + (previous.text === text ? 0 : 1) : 1 });
     while (current.documents.size > 10) {
       const old = current.documents.keys().next().value;
       send(current, { method: 'textDocument/didClose', params: { textDocument: { uri: old } } });
@@ -306,6 +335,63 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
           : 'No diagnostic report received yet. Refresh after analysis finishes; this does not prove the file is error-free.',
       };
     }
+    const cleanWorkspaceEdit = (edit) => {
+      if (!edit) return edit;
+      const value = structuredClone(edit);
+      const uris = [
+        ...Object.keys(value.changes || {}),
+        ...(value.documentChanges || [])
+          .map((change) => change.textDocument?.uri || change.oldUri || (change.kind === 'delete' ? change.uri : null))
+          .filter(Boolean),
+      ];
+      value.atlasDocumentHashes = {};
+      for (const uri of uris) {
+        const known = [...current.documents].find(([key]) => documentKey(key) === documentKey(uri));
+        if (known)
+          value.atlasDocumentHashes[uri] = require('node:crypto')
+            .createHash('sha256')
+            .update(known[1].text)
+            .digest('hex');
+      }
+      for (const change of value.documentChanges || []) {
+        if (change.textDocument?.version !== undefined && change.textDocument.version !== null) {
+          const known = [...current.documents].find(
+            ([key]) => documentKey(key) === documentKey(change.textDocument.uri),
+          );
+          if (!known || known[1].version !== change.textDocument.version)
+            throw Error('Language-server edit uses a stale document version.');
+          change.textDocument.version = null;
+        }
+      }
+      return value;
+    };
+    if (input.action === 'code-actions' || input.action === 'organize-imports') {
+      const result = await request(current, 'textDocument/codeAction', {
+        textDocument: { uri },
+        range: { start: { line: line - 1, character: column - 1 }, end: { line: line - 1, character: column - 1 } },
+        context: {
+          diagnostics: current.diagnostics.get(documentKey(uri)) || [],
+          ...(input.action === 'organize-imports' ? { only: ['source.organizeImports'] } : {}),
+          triggerKind: 1,
+        },
+      });
+      const rows = [];
+      for (let row of (Array.isArray(result) ? result : []).slice(0, 50)) {
+        if (row.disabled || row.command || !row.title) continue;
+        if (!row.edit && current.capabilities.codeActionProvider?.resolveProvider)
+          row = await request(current, 'codeAction/resolve', row);
+        if (!row.edit || row.command) continue;
+        rows.push({
+          title: String(row.title).slice(0, 200),
+          kind: String(row.kind || ''),
+          edit: cleanWorkspaceEdit(row.edit),
+        });
+      }
+      return {
+        rows,
+        note: 'Edit-based language-server actions only. Review the complete patch before applying; command actions are omitted.',
+      };
+    }
     if (input.action === 'rename') {
       if (!/^[A-Za-z_$][\w$]{0,99}$/.test(input.newName || ''))
         throw Error('Enter an identifier using letters, digits, underscore or dollar (up to 100 characters).');
@@ -314,7 +400,7 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
         position: { line: line - 1, character: column - 1 },
         newName: input.newName,
       });
-      return { edit };
+      return { edit: cleanWorkspaceEdit(edit) };
     }
     if (input.action === 'hover' || input.action === 'completion') {
       const value = await request(current, 'textDocument/' + input.action, {
@@ -330,16 +416,28 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
             .slice(0, 10000),
         };
       }
-      return {
-        rows: (Array.isArray(value) ? value : value?.items || [])
-          .slice(0, 100)
-          .filter((row) => row.insertTextFormat !== 2 && !row.textEdit && !row.additionalTextEdits && !row.command)
-          .map((row) => ({
+      const rows = [],
+        cursor = require('./language-edits').offsetAt(text, { line: line - 1, character: column - 1 });
+      for (const row of (Array.isArray(value) ? value : value?.items || []).slice(0, 100)) {
+        if (row.command) continue;
+        try {
+          const item = {
             label: String(row.label || '').slice(0, 200),
-            text: String(row.insertText || row.label || '').slice(0, 2000),
+            text: String(row.insertText || row.textEdit?.newText || row.label || '').slice(0, 10000),
             detail: String(row.detail || '').slice(0, 500),
-          })),
-        note: 'Plain-text suggestions only; snippets and suggestions requiring extra edits are omitted.',
+            insertTextFormat: row.insertTextFormat,
+            textEdit: row.textEdit,
+            additionalTextEdits: row.additionalTextEdits,
+          };
+          require('./language-edits').completionChange(text, cursor, item);
+          rows.push(item);
+        } catch {
+          /* Unsupported/invalid edits are not offered. */
+        }
+      }
+      return {
+        rows,
+        note: 'Plain text, text edits, additional same-file edits and simple snippet placeholders are supported. Executable commands and complex snippet variables are omitted.',
       };
     }
     const value = await request(

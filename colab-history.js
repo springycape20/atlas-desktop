@@ -1,12 +1,33 @@
 (() => {
   let database, pending, running;
-  const versions = new Map();
+  const versions = new Map(),
+    chunkVersions = new Map(),
+    counts = new Map();
+  const digest = async (value) =>
+    [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))]
+      .map((n) => n.toString(16).padStart(2, '0'))
+      .join('');
   function open() {
     return (database ||= new Promise((resolve, reject) => {
-      const request = indexedDB.open('atlas-colab-history', 1);
-      request.onupgradeneeded = () => {
-        request.result.createObjectStore('chats', { keyPath: 'id' });
-        request.result.createObjectStore('meta');
+      const request = indexedDB.open('atlas-colab-history', 2);
+      request.onupgradeneeded = (event) => {
+        const db = request.result;
+        if (event.oldVersion < 1) {
+          db.createObjectStore('chats', { keyPath: 'id' });
+          db.createObjectStore('meta');
+        }
+        const chunks = db.createObjectStore('chunks', { keyPath: ['chatId', 'index'] });
+        const chats = request.transaction.objectStore('chats'),
+          cursor = chats.openCursor();
+        cursor.onsuccess = () => {
+          const item = cursor.result;
+          if (!item) return;
+          const { messages = [], ...metadata } = item.value;
+          for (let index = 0; index * 150 < messages.length; index++)
+            chunks.put({ chatId: item.key, index, messages: messages.slice(index * 150, (index + 1) * 150) });
+          item.update({ ...metadata, messageCount: messages.length });
+          item.continue();
+        };
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -25,42 +46,83 @@
   }
   async function load(legacy) {
     const db = await open(),
-      read = db.transaction(['chats', 'meta'], 'readonly'),
+      read = db.transaction(['chats', 'meta', 'chunks'], 'readonly'),
       done = completed(read),
       chats = read.objectStore('chats').getAll(),
-      meta = read.objectStore('meta').get('state');
+      meta = read.objectStore('meta').get('state'),
+      chunks = read.objectStore('chunks').openCursor();
+    const messages = new Map();
+    chunks.onsuccess = () => {
+      const item = chunks.result;
+      if (!item) return;
+      const row = item.value;
+      if (!messages.has(row.chatId)) messages.set(row.chatId, []);
+      messages.get(row.chatId).push(...row.messages);
+      item.continue();
+    };
     await done;
-    let state = { chats: chats.result, selected: meta.result?.selected || legacy.selected };
+    let state = {
+      chats: chats.result.map(({ messageCount, ...row }) => ({ ...row, messages: messages.get(row.id) || [] })),
+      selected: meta.result?.selected || legacy.selected,
+    };
+    for (const chat of state.chats) {
+      const count = chats.result.find((row) => row.id === chat.id).messageCount || 0;
+      if (count !== chat.messages.length)
+        throw Error('Saved message chunks are incomplete. Existing data was retained.');
+      counts.set(chat.id, Math.ceil(count / 150));
+      const { messages, ...metadata } = chat;
+      versions.set(chat.id, await digest({ ...metadata, messageCount: count }));
+      for (let index = 0; index * 150 < messages.length; index++)
+        chunkVersions.set(
+          chat.id + ':' + index,
+          await digest({ chatId: chat.id, index, messages: messages.slice(index * 150, (index + 1) * 150) }),
+        );
+    }
     if (!meta.result?.migrated) {
       const merged = new Map(state.chats.map((chat) => [chat.id, chat]));
       for (const chat of legacy.chats) if (!merged.has(chat.id)) merged.set(chat.id, chat);
       state.chats = [...merged.values()];
       await write(state);
     }
-    for (const chat of state.chats) versions.set(chat.id, JSON.stringify(chat));
     return state;
   }
-  async function write(state) {
+  async function write(state, insert = false) {
     const db = await open(),
-      changed = state.chats
-        .map((chat) => ({ chat, text: JSON.stringify(chat) }))
-        .filter((item) => versions.get(item.chat.id) !== item.text);
-    const transaction = db.transaction(['chats', 'meta'], 'readwrite'),
+      changes = [];
+    for (const chat of state.chats) {
+      const { messages, ...metadata } = chat,
+        value = { ...metadata, messageCount: messages.length },
+        version = await digest(value),
+        chunks = [];
+      for (let index = 0; index * 150 < messages.length; index++) {
+        const row = { chatId: chat.id, index, messages: messages.slice(index * 150, (index + 1) * 150) },
+          key = chat.id + ':' + index,
+          version = await digest(row);
+        if (insert || chunkVersions.get(key) !== version) chunks.push({ row, key, version });
+      }
+      changes.push({
+        value,
+        version,
+        changed: insert || versions.get(chat.id) !== version,
+        chunks,
+        count: Math.ceil(messages.length / 150),
+      });
+    }
+    const transaction = db.transaction(['chats', 'meta', 'chunks'], 'readwrite'),
       done = completed(transaction);
-    for (const { chat } of changed) transaction.objectStore('chats').put(chat);
-    transaction.objectStore('meta').put({ selected: state.selected, migrated: true }, 'state');
+    for (const change of changes) {
+      if (change.changed) transaction.objectStore('chats')[insert ? 'add' : 'put'](change.value);
+      for (const chunk of change.chunks) transaction.objectStore('chunks')[insert ? 'add' : 'put'](chunk.row);
+      for (let index = change.count; index < (counts.get(change.value.id) || 0); index++)
+        transaction.objectStore('chunks').delete([change.value.id, index]);
+    }
+    if (!insert) transaction.objectStore('meta').put({ selected: state.selected, migrated: true }, 'state');
     await done;
-    for (const { chat, text } of changed) versions.set(chat.id, text);
-  }
-  async function insert(chats) {
-    if (!chats.length) return;
-    const db = await open(),
-      transaction = db.transaction('chats', 'readwrite'),
-      done = completed(transaction);
-    // Imports must not be coalesced away by a draft autosave in another chat.
-    for (const chat of chats) transaction.objectStore('chats').add(chat);
-    await done;
-    for (const chat of chats) versions.set(chat.id, JSON.stringify(chat));
+    for (const change of changes) {
+      versions.set(change.value.id, change.version);
+      counts.set(change.value.id, change.count);
+      for (const chunk of change.chunks) chunkVersions.set(chunk.key, chunk.version);
+    }
   }
   function save(state) {
     pending = structuredClone(state);
@@ -75,6 +137,10 @@
         running = null;
       });
     return running;
+  }
+  async function insert(chats) {
+    if (running) await running;
+    if (chats.length) await write({ chats }, true);
   }
   window.atlasColabHistory = { load, save, insert, flush: () => running || Promise.resolve() };
 })();

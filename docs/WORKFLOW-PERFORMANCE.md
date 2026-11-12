@@ -2,6 +2,8 @@
 
 ATLAS 0.11.0 improves long conversations, connects editor drafts to language intelligence and adds a browser-step builder.
 
+This page records the released 0.11.0 behaviour. The [0.11.1 project tools guide](PROJECT-TOOLS-NEXT.md) supersedes the history-storage, completion, workspace-edit and recording limits below in version 0.11.1.
+
 ## Long conversations
 
 Assistant and Colab render up to 150 saved messages per page. Older messages and Newer messages move between pages; Latest returns to the newest page. Saved history is preserved in full. Search in a long conversation scans all saved message text and pages matching messages, including messages outside the current rendered page. Small conversations retain their existing find/highlight behavior. Sending a task returns to the latest page.

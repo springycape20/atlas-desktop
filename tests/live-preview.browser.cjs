@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, nativeImage } = require('electron'),
+const { app, BrowserWindow, session, nativeImage, ipcMain } = require('electron'),
   fs = require('node:fs/promises'),
   os = require('node:os'),
   path = require('node:path'),
@@ -23,6 +23,21 @@ app.whenReady().then(async () => {
     temp = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-live-ui-'));
     const cwd = path.join(temp, 'project');
     await fs.mkdir(cwd);
+    await fs.writeFile(path.join(cwd, 'debug.js'), 'const value = 1;\nsetTimeout(() => {}, 20000);');
+    const debuggerService = require('../node-debugger').createNodeDebugger({ approve: async () => true });
+    try {
+      await debuggerService.action({ action: 'start', cwd, path: 'debug.js' });
+      let paused;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        paused = await debuggerService.action({ action: 'status' });
+        if (paused.paused) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert(paused.paused);
+      assert.equal(paused.frames[0].path, 'debug.js');
+    } finally {
+      await debuggerService.action({ action: 'stop' });
+    }
     remote = http.createServer((_req, res) => {
       remoteRequests++;
       res.end('remote');
@@ -41,6 +56,7 @@ app.whenReady().then(async () => {
     let imported = 0;
     service = createLivePreview({
       electron: {
+        ipcMain,
         session,
         nativeImage,
         app,
@@ -80,6 +96,31 @@ app.whenReady().then(async () => {
     assert.equal(capture.selected.selector, 'button#target');
     assert.equal(capture.attachments[0].id, 'screenshot');
     assert.equal(imported, 1);
+    assert.equal((await service.action({ action: 'record-start', cwd })).cancelled, true);
+    approval = true;
+    await service.action({ action: 'record-start', cwd });
+    await windowRef.webContents.executeJavaScript(
+      "document.body.insertAdjacentHTML('beforeend','<input id=fixtureQuery><input id=privateToken type=password>')",
+    );
+    for (const [id, text] of [
+      ['fixtureQuery', 'fixture value'],
+      ['privateToken', 'never-record-secret'],
+    ]) {
+      await windowRef.webContents.executeJavaScript('document.getElementById(' + JSON.stringify(id) + ').focus()');
+      await windowRef.webContents.insertText(text);
+      await windowRef.webContents.executeJavaScript('document.activeElement.blur()');
+    }
+    const target = await windowRef.webContents.executeJavaScript(
+      "(()=>{const r=document.getElementById('target').getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)};})()",
+    );
+    windowRef.webContents.sendInputEvent({ type: 'mouseDown', ...target, button: 'left', clickCount: 1 });
+    windowRef.webContents.sendInputEvent({ type: 'mouseUp', ...target, button: 'left', clickCount: 1 });
+    await new Promise((r) => setTimeout(r, 100));
+    const recording = await service.action({ action: 'record-stop', cwd });
+    assert(recording.steps.some((row) => row.action === 'fill' && row.value === 'fixture value'));
+    assert(recording.steps.some((row) => row.action === 'click' && row.selector === '#target'));
+    assert(!JSON.stringify(recording).includes('never-record-secret'));
+    approval = false;
     const checks = [
       { action: 'fill', selector: '#name', value: 'Browser fixture' },
       { action: 'click', selector: '#apply' },

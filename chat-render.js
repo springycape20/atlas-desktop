@@ -11,7 +11,7 @@
     cache.set(key, { signature, value });
     return value;
   }
-  function reconcile(parent, nodes) {
+  function reconcilePlain(parent, nodes) {
     let cursor = parent.firstChild;
     for (const node of nodes) {
       if (node === cursor) cursor = cursor.nextSibling;
@@ -22,6 +22,69 @@
       cursor.remove();
       cursor = next;
     }
+  }
+  const windows = new WeakMap();
+  function reconcile(parent, nodes) {
+    const enabled = parent.classList.contains('atlas-large-history') && parent.dataset.finding !== 'true';
+    let state = windows.get(parent);
+    if (!enabled) {
+      if (state) {
+        state.root.removeEventListener('scroll', state.refresh);
+        state.observer?.disconnect();
+        windows.delete(parent);
+      }
+      reconcilePlain(parent, nodes);
+      return;
+    }
+    if (!state) {
+      const root = parent.closest('.response,.colab-transcript');
+      state = { slots: new Map(), root, painting: false };
+      state.refresh = () => {
+        if (state.painting || windows.get(parent) !== state || !root.clientHeight || !root.getClientRects().length)
+          return;
+        state.painting = true;
+        const viewport = root.getBoundingClientRect(),
+          atBottom = root.scrollHeight - root.scrollTop - root.clientHeight < 60;
+        try {
+          for (const [item, slot] of state.slots) {
+            const before = slot.getBoundingClientRect(),
+              near = before.bottom >= viewport.top - 600 && before.top <= viewport.bottom + 600;
+            if (near && !slot.firstChild) {
+              const above = before.bottom < viewport.top;
+              slot.style.height = '';
+              slot.append(item);
+              if (above) root.scrollTop += slot.getBoundingClientRect().height - before.height;
+            } else if (!near && slot.firstChild && !slot.contains(document.activeElement)) {
+              slot.style.height = Math.max(1, before.height) + 'px';
+              slot.replaceChildren();
+            }
+          }
+          if (atBottom) root.scrollTop = root.scrollHeight;
+        } finally {
+          state.painting = false;
+        }
+      };
+      root.addEventListener('scroll', state.refresh, { passive: true });
+      state.observer = new ResizeObserver(state.refresh);
+      state.observer.observe(root);
+      windows.set(parent, state);
+    }
+    const alive = new Set(nodes),
+      visible = nodes.map((item) => {
+        if (!item.matches?.('.assistant-turn,.colab-message')) return item;
+        let slot = state.slots.get(item);
+        if (!slot) {
+          slot = document.createElement('div');
+          slot.className = 'atlas-message-slot';
+          slot.style.height = '220px';
+          state.slots.set(item, slot);
+        }
+        return slot;
+      });
+    for (const [item] of state.slots) if (!alive.has(item)) state.slots.delete(item);
+    reconcilePlain(parent, visible);
+    state.refresh();
+    setTimeout(state.refresh, 0);
   }
   const ARCHIVED = '\0archived';
   // An archived chat stays out of the list unless you ask for it: under Archived, in a search, or while it is open.

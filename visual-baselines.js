@@ -50,6 +50,8 @@ function createVisualBaselines(directory) {
         name,
         url: request.url,
         size: request.size,
+        regions: require('./preview-evidence').cleanRegions(request.regions || [], request.size),
+        conditions: request.conditions || null,
         at: Date.now(),
         byteLength: bytes.length,
         sha256: createHash('sha256').update(bytes).digest('hex'),

@@ -122,6 +122,8 @@
   intelligence.setAttribute('aria-label', 'Language intelligence results');
   async function queryLanguage(action) {
     if (!active) throw Error('Open a file first.');
+    if (['code-actions', 'organize-imports'].includes(action) && tabs.some((tab) => tab.draft !== tab.text))
+      throw Error('Save all open drafts before previewing file actions.');
     const tab = active,
       draft = tab.draft,
       cursor = area.selectionStart,
@@ -144,14 +146,18 @@
     if (action === 'hover') intelligence.append(node('pre', result.text || 'No hover information received.'));
     else
       for (const row of result.rows || []) {
-        if (action === 'completion')
+        if (action === 'code-actions' || action === 'organize-imports')
+          button(row.title, () => reviewWorkspaceEdit(tab, row.edit, row.title), intelligence);
+        else if (action === 'completion')
           button(
             row.label + (row.detail ? ' · ' + row.detail : ''),
             () => {
               if (active !== tab || tab.draft !== draft) throw Error('Document changed; request new completions.');
-              const word = prefix.match(/[\w$]*$/)[0];
-              area.setSelectionRange(cursor - word.length, cursor);
-              change(row.text);
+              const result = window.atlasLanguageEdits.completionChange(draft, cursor, row);
+              area.value = result.text;
+              area.setSelectionRange(...result.selection);
+              area.dispatchEvent(new Event('input', { bubbles: true }));
+              area.focus();
               intelligence.replaceChildren();
             },
             intelligence,
@@ -180,9 +186,91 @@
     ['Diagnostics', 'diagnostics'],
     ['Hover info', 'hover'],
     ['Complete', 'completion'],
+    ['Quick fixes and refactors', 'code-actions'],
+    ['Organise imports', 'organize-imports'],
   ])
     button(label, () => queryLanguage(action), tools);
   button('Configure language server', () => power.show('Language intelligence'), tools);
+  async function reviewWorkspaceEdit(tab, edit, label) {
+    if (tabs.some((tab) => tab.draft !== tab.text)) throw Error('Save all open drafts before reviewing file changes.');
+    const plan = await request(tab.context, 'editor-workspace-preview', { edit });
+    intelligence.replaceChildren(node('strong', 'Review ' + label + ' · ' + plan.files.length + ' files'));
+    const reviewed = new Set(),
+      applyButton = button(
+        'Apply reviewed changes',
+        async () => {
+          if (reviewed.size !== plan.files.length || tabs.some((tab) => tab.draft !== tab.text))
+            throw Error('Review each file and save or discard new drafts before applying.');
+          const result = await request(tab.context, 'editor-workspace-apply', { id: plan.id });
+          undo = { context: tab.context, id: result.undoId, kind: 'workspace' };
+          for (const openTab of [...tabs]) {
+            if (JSON.stringify(openTab.context) !== JSON.stringify(tab.context) || !result.files.includes(openTab.path))
+              continue;
+            if (plan.files.find((file) => file.path === openTab.path)?.kind === 'deleted')
+              tabs.splice(tabs.indexOf(openTab), 1);
+            else {
+              Object.assign(openTab, await request(openTab.context, 'editor-read', { path: openTab.path }));
+              openTab.draft = openTab.text;
+            }
+          }
+          intelligence.replaceChildren();
+          if (tabs.includes(tab)) select(tab);
+          else if (tabs.length) select(tabs.at(-1));
+          else {
+            active = null;
+            area.value = '';
+            render();
+          }
+          status.textContent =
+            result.files.length +
+            ' files changed.' +
+            (result.error ? ' Stopped: ' + result.error : ' Undo last edit is available.');
+        },
+        intelligence,
+      );
+    applyButton.disabled = true;
+    for (const file of plan.files) {
+      const value = await request(tab.context, 'editor-workspace-file', { id: plan.id, path: file.path }),
+        details = node('details'),
+        check = node('input'),
+        label = node('label', ' Reviewed ' + file.path);
+      check.type = 'checkbox';
+      check.disabled = true;
+      label.prepend(check);
+      details.append(
+        node('summary', file.kind + ' · ' + file.path),
+        node(
+          'pre',
+          'Before:\n' + (value.before ?? '(file absent)') + '\n\nAfter:\n' + (value.after ?? '(file removed)'),
+        ),
+        label,
+      );
+      details.ontoggle = () => {
+        if (details.open) check.disabled = false;
+      };
+      check.onchange = () => {
+        check.checked ? reviewed.add(file.path) : reviewed.delete(file.path);
+        applyButton.disabled = reviewed.size !== plan.files.length;
+      };
+      intelligence.insertBefore(details, applyButton);
+    }
+    if (!plan.files.length) status.textContent = 'No file changes proposed.';
+  }
+  button(
+    'Move file…',
+    async () => {
+      if (!active) throw Error('Open a file first.');
+      const tab = active,
+        name = prompt('New project-relative file path', tab.path);
+      if (!name || name === tab.path) return;
+      await reviewWorkspaceEdit(
+        tab,
+        { documentChanges: [{ kind: 'rename', oldUri: tab.path, newUri: name }] },
+        'file move',
+      );
+    },
+    tools,
+  );
   button(
     'Rename symbol…',
     async () => {
@@ -201,39 +289,7 @@
         column: prefix.at(-1).length + 1,
         newName,
       });
-      const plan = await request(tab.context, 'editor-rename-preview', { edit: value.edit });
-      intelligence.replaceChildren(node('strong', 'Review rename: ' + plan.files.length + ' files'));
-      for (const file of plan.files) {
-        const diff = await request(tab.context, 'replace-file', { id: plan.id, path: file.path });
-        const details = node('details');
-        details.append(
-          node('summary', file.path + ' · ' + file.count + ' edits'),
-          node('pre', 'Before:\n' + diff.before + '\n\nAfter:\n' + diff.after),
-        );
-        intelligence.append(details);
-      }
-      if (plan.files.length)
-        button(
-          'Apply reviewed rename',
-          async () => {
-            if (tabs.some((tab) => tab.draft !== tab.text)) throw Error('Save or discard new drafts before applying.');
-            const result = await request(tab.context, 'replace-apply', {
-              id: plan.id,
-              paths: plan.files.map((file) => file.path),
-            });
-            undo = { context: tab.context, id: result.undoId };
-            if (result.error) throw Error(result.error);
-            for (const openTab of tabs)
-              if (plan.files.some((file) => file.path === openTab.path)) {
-                Object.assign(openTab, await request(openTab.context, 'editor-read', { path: openTab.path }));
-                openTab.draft = openTab.text;
-              }
-            select(tab);
-            intelligence.replaceChildren();
-            status.textContent = 'Rename applied. Undo last edit restores the reviewed files.';
-          },
-          intelligence,
-        );
+      await reviewWorkspaceEdit(tab, value.edit, 'rename');
     },
     tools,
   );
@@ -302,7 +358,9 @@
       )
     )
       return;
-    const result = await request(undo.context, 'editor-undo', { id: undo.id });
+    const result = await request(undo.context, undo.kind === 'workspace' ? 'editor-workspace-undo' : 'editor-undo', {
+      id: undo.id,
+    });
     if (result.error) throw Error(result.error);
     undo = null;
     status.textContent = 'Undo complete. Reload open files before further editing.';
@@ -420,7 +478,7 @@
   surface.append(gutter, area);
   const editorButtons = [...tools.children];
   for (const [label, names] of [
-    ['File', ['Reload from disk', 'Close tab']],
+    ['File', ['Move file…', 'Reload from disk', 'Close tab']],
     ['Edit', ['Undo last edit', 'Go to line', 'Format JSON']],
     [
       'Code',
@@ -430,6 +488,8 @@
         'Diagnostics',
         'Hover info',
         'Complete',
+        'Quick fixes and refactors',
+        'Organise imports',
         'Rename symbol…',
         'Check document',
         'Configure language server',
@@ -567,7 +627,31 @@
     button('Undo last edit', undoLast);
     body.append(results);
   });
-  window.atlasProjectEditor = { open };
+  window.atlasProjectEditor = {
+    open,
+    snapshot(cwd) {
+      return {
+        files: tabs.filter((tab) => tab.context.cwd === cwd).map((tab) => tab.path),
+        active: active?.context.cwd === cwd ? active.path : null,
+      };
+    },
+    async restore(context, value) {
+      const failures = [];
+      for (const path of (value?.files || []).slice(0, 8)) {
+        try {
+          await open(context, path);
+        } catch (error) {
+          failures.push(path + ': ' + error.message);
+        }
+      }
+      const tab = tabs.find((tab) => tab.path === value?.active && tab.context.cwd === context.cwd);
+      if (tab) select(tab);
+      status.textContent = failures.length
+        ? 'Some files could not be restored: ' + failures.join('; ')
+        : 'Workspace file tabs restored. Existing unsaved drafts were retained.';
+      return failures;
+    },
+  };
   window.atlasUi.register('tasks', 'Project editor');
   window.atlasUi.register('tasks', 'Find and replace');
 })();

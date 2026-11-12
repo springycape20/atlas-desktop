@@ -206,7 +206,7 @@ test('imported history persists provenance, deduplicates after saves and supplie
   const again = await h.handlers.get('atlas:history-import')(event, request);
   assert.equal(again.skipped, 1);
   assert.equal((await h.readAtlasHistory())[0].turns.length, 4);
-  const disk = JSON.parse(await fs.readFile(path.join(h.paths.userData, 'conversations.json'), 'utf8'));
+  const disk = await require('../chunked-history').createChunkedHistory(h.paths.userData).all();
   assert.equal(disk[0].importSource.provider, 'codex');
 });
 
@@ -304,7 +304,7 @@ test('saved Assistant turns keep attachment references without storing image byt
       ],
     },
   ]);
-  const data = JSON.parse(await fs.readFile(path.join(h.paths.userData, 'conversations.json')));
+  const data = await require('../chunked-history').createChunkedHistory(h.paths.userData).all();
   assert.deepEqual(data[0].turns[0].attachments, [{ id: 'photo1', name: 'Screenshot.png', type: 'image', size: 123 }]);
   assert.deepEqual(data[0].turns[1].attachments, []);
   assert(!JSON.stringify(data).includes('base64'));
@@ -572,7 +572,7 @@ test('imported full histories remain intact on disk after Assistant follow-ups',
     prompt: 'Use Codex to continue.',
     cwd: h.dir,
   });
-  const disk = JSON.parse(await fs.readFile(path.join(h.paths.userData, 'conversations.json'), 'utf8'))[0];
+  const disk = (await require('../chunked-history').createChunkedHistory(h.paths.userData).all())[0];
   assert.equal(disk.turns.length, 124);
   assert.equal(disk.turns[0].content, source.turns[0].content);
   assert.equal(disk.turns.at(-1).content, 'Follow-up result');

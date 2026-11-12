@@ -50,6 +50,8 @@ In ATLAS 0.10.1, automatic completion-check logs also stay in the ATLAS data fol
 
 ## Choices and limitations
 
+Version 0.11.1 adds local workspace snapshots (file paths, preview origin/path and terminal layout), optional reviewed browser recipes and chunked history storage. Recording starts only after approval, excludes likely private fields heuristically and should use test data. Debugger output and inspected values stay local unless you separately copy/share them; debugged project code has its own filesystem/network access. Assistant retains its legacy migration file and unreferenced message chunks for recovery. Managed backups and local-data reset include the new chunk directory; exported backups remain separate. See the [project tool boundaries](PROJECT-TOOLS-NEXT.md).
+
 You can type instead of using a microphone, choose local speech, remove a saved ElevenLabs key, revoke screen/shell permissions per chat, stop tasks, export chats, and reset current app records. AI replies can be wrong. A reviewer acceptance or passing test is evidence about the reported review/checks, not a guarantee that an answer is correct. A project worktree and remembered command permission are not an operating-system sandbox. Do not enable provider approval bypass for untrusted work.
 
 This explanation describes the application, not every third-party CLI's internal traffic. There is no blanket waiver of rights that Australian law does not permit to be excluded. The publisher should reassess this statement before adding hosted features, analytics, support uploads or a website with data-collection features. Updated: 13 November 2026.

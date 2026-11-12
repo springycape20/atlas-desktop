@@ -26,18 +26,45 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
   let browserErrors = [],
     lastRun = null,
     baseline = null,
-    profileBaseline = null;
+    profileBaseline = null,
+    recording = false,
+    recordedSteps = [];
+  const recordStep = (event, row) => {
+    if (
+      !recording ||
+      !win ||
+      win.isDestroyed() ||
+      event.sender !== win.webContents ||
+      event.senderFrame !== win.webContents.mainFrame
+    )
+      return;
+    try {
+      const step = require('./preview-evidence').cleanSteps([row])[0];
+      if (!['click', 'fill'].includes(step.action)) return;
+      const previous = recordedSteps.at(-1);
+      if (step.action === 'fill' && previous?.action === 'fill' && previous.selector === step.selector)
+        recordedSteps[recordedSteps.length - 1] = step;
+      else if (recordedSteps.length < 30) recordedSteps.push(step);
+      if (recordedSteps.length >= 30) {
+        recording = false;
+        win.webContents.send('atlas:preview-recording', false);
+      }
+    } catch {}
+  };
+  electron.ipcMain?.on('atlas:preview-record-step', recordStep);
   const baselineStore = require('./visual-baselines').createVisualBaselines(directory);
   const key = '__atlasPick' + randomUUID().replaceAll('-', '');
   const state = () => ({
     open: Boolean(win && !win.isDestroyed()),
     cwd: root,
     running: Boolean(child),
-    url: origin || '',
+    url: win && !win.isDestroyed() ? win.webContents.getURL() : origin || '',
     output,
     selected,
     browserErrors,
     lastRun,
+    recording,
+    recordedCount: recordedSteps.length,
   });
   const stop = () => {
     stopped = true;
@@ -63,6 +90,25 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       throw Error('ATLAS could not capture the preview window. Make sure it is open and visible, then try again.');
     }
   }
+  async function stableCapture() {
+    const css = await win.webContents.insertCSS(
+      '*,*::before,*::after{animation-play-state:paused!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}',
+    );
+    try {
+      const conditions = await win.webContents.executeJavaScript(
+        `(async()=>{const key=${JSON.stringify(key + 'capture')};window[key]=document.getAnimations().map(animation=>{const state={animation,time:animation.currentTime,playState:animation.playState};animation.pause();animation.currentTime=0;return state;});await Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,2000))]);await Promise.race([new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))),new Promise(r=>setTimeout(r,1000))]);return {width:innerWidth,height:innerHeight,scale:devicePixelRatio,scrollX,scrollY};})()`,
+      );
+      return { image: await capturePreview(), conditions };
+    } finally {
+      if (win && !win.isDestroyed())
+        await win.webContents
+          .executeJavaScript(
+            `(()=>{const key=${JSON.stringify(key + 'capture')};for(const row of window[key]||[]){try{row.animation.currentTime=row.time;if(row.playState==='running')row.animation.play();}catch{}}delete window[key];})()`,
+          )
+          .catch(() => {});
+      await win.webContents.removeInsertedCSS(css).catch(() => {});
+    }
+  }
   async function open(cwd, value) {
     const url = previewUrl(value);
     cwd = await guard.assertProject(cwd);
@@ -74,6 +120,8 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
     lastRun = null;
     baseline = null;
     profileBaseline = null;
+    recording = false;
+    recordedSteps = [];
     if (win && !win.isDestroyed()) win.destroy();
     const isolated = session.fromPartition('atlas-preview-' + randomUUID());
     isolated.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
@@ -103,9 +151,11 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
         sandbox: true,
         webSecurity: true,
         devTools: false,
+        preload: path.join(__dirname, 'preview-recorder-preload.cjs'),
       },
     });
     win.setMenu(null);
+    win.webContents.on('did-finish-load', () => win.webContents.send('atlas:preview-recording', recording));
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('console-message', (details) => {
       if (details && typeof details === 'object' && ['error', 'warning'].includes(details.level))
@@ -189,6 +239,28 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
     return { ...state(), url: recipe.url };
   }
   async function action(request) {
+    if (request.action === 'record-stop') {
+      if ((await guard.assertProject(request.cwd)) !== root) throw Error('Return to the preview project first.');
+      recording = false;
+      if (win && !win.isDestroyed()) win.webContents.send('atlas:preview-recording', false);
+      return { steps: recordedSteps, recording: false };
+    }
+    if (request.action === 'record-start') {
+      if (!win || win.isDestroyed()) throw Error('Open a preview first.');
+      if ((await guard.assertProject(request.cwd)) !== root) throw Error('Return to the preview project first.');
+      if (
+        !(await approve(
+          'Record preview interactions?',
+          'Records local clicks and changed form fields, up to 30 steps. Password and likely personal fields are excluded heuristically. Use test data only. Review every captured value before saving or running. Nothing is sent to a model.',
+        ))
+      )
+        return { cancelled: true };
+      recordedSteps = [];
+      recording = true;
+      win.webContents.send('atlas:preview-recording', true);
+      win.focus();
+      return { recording: true };
+    }
     if (['saved-baselines', 'load-baseline', 'delete-baseline'].includes(request.action)) {
       const saved = baselineStore;
       if (request.action === 'saved-baselines') return saved.action({ ...request, action: 'list' });
@@ -200,7 +272,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       if (row.url !== win.webContents.getURL()) throw Error('Open the saved baseline URL before loading it.');
       const image = electron.nativeImage.createFromBuffer(row.bytes);
       if (image.isEmpty()) throw Error('Saved baseline image is unavailable.');
-      baseline = { image, url: row.url, at: row.at };
+      baseline = { image, url: row.url, at: row.at, regions: row.regions || [], conditions: row.conditions };
       return { loaded: true, image: image.toDataURL(), name: row.name, size: row.size };
     }
     if (['browser-recipes', 'save-browser-recipe', 'delete-browser-recipe'].includes(request.action)) {
@@ -328,20 +400,30 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
         url: baseline.url,
         size: baseline.image.getSize(),
         bytes: baseline.image.toPNG(),
+        regions: baseline.regions || [],
+        conditions: baseline.conditions,
       });
     }
     if (['visual-baseline', 'visual-compare'].includes(request.action)) {
-      const image = await capturePreview(),
+      const { image, conditions } = await stableCapture(),
         png = image.toPNG(),
         url = win.webContents.getURL();
       if (image.isEmpty() || png.length > 8 * 1048576) throw Error('Screenshot is empty or exceeds 8 MiB.');
       if (request.action === 'visual-baseline') {
-        baseline = { image, url, at: Date.now() };
+        baseline = {
+          image,
+          url,
+          at: Date.now(),
+          conditions,
+          regions: require('./preview-evidence').cleanRegions(request.regions || [], image.getSize()),
+        };
         return { saved: true, at: baseline.at, image: image.toDataURL(), size: image.getSize() };
       }
       if (!baseline || baseline.url !== url) throw Error('Capture a baseline for this page first.');
+      if (baseline.conditions && JSON.stringify(baseline.conditions) !== JSON.stringify(conditions))
+        throw Error('Viewport, scale or scroll position changed. Restore the baseline conditions first.');
       return {
-        ...require('./preview-evidence').comparePixels(baseline.image, image),
+        ...require('./preview-evidence').comparePixels(baseline.image, image, 16, baseline.regions || []),
         before: baseline.image.toDataURL(),
         after: image.toDataURL(),
         baselineAt: baseline.at,
@@ -402,6 +484,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       return next;
     },
     dispose() {
+      electron.ipcMain?.removeListener('atlas:preview-record-step', recordStep);
       stop();
       if (win && !win.isDestroyed()) win.destroy();
     },

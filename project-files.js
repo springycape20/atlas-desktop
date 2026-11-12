@@ -212,4 +212,11 @@ function createProjectFiles({
   }
   return { resolve, list, read, search };
 }
-module.exports = { createProjectFiles, referencePath, allowed, within, imageType };
+module.exports = {
+  createProjectFiles,
+  referencePath,
+  allowed,
+  within,
+  imageType,
+  isTextFile: (name) => textTypes.has(path.extname(name).toLowerCase()),
+};
