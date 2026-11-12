@@ -933,7 +933,7 @@ function chatHistory() {
   return (atlasHistoryStore ||= require('./chunked-history').createChunkedHistory(app.getPath('userData'), {
     legacy: async () => {
       const saved = require('./atomic-store').readStored(atlasHistoryPath(), Array.isArray);
-      if (saved?.damaged) throw Error('Saved chats need recovery: ' + saved.damaged);
+      if (saved?.damaged) warnDamaged('your saved chats', saved.damaged);
       return (saved?.value || []).filter((item) => item && typeof item.id === 'string' && Array.isArray(item.turns));
     },
   }));

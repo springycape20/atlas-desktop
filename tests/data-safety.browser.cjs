@@ -94,7 +94,17 @@ function child() {
     turns,
   });
   const id = (n) => 'chat-' + String(n).padStart(20, '0');
-  const saved = () => JSON.parse(fs.readFileSync(conversations, 'utf8'));
+  const saved = () => {
+    const index = JSON.parse(fs.readFileSync(path.join(data, 'chat-index.json'), 'utf8'));
+    return index.chats.map(({ chunks, ...row }) => ({
+      ...row,
+      turns: chunks.flatMap(({ hash }) => {
+        const bytes = fs.readFileSync(path.join(data, 'chat-chunks', hash + '.json'));
+        assert.equal(require('node:crypto').createHash('sha256').update(bytes).digest('hex'), hash);
+        return JSON.parse(bytes);
+      }),
+    }));
+  };
   ({
     'damaged-chats': () => fs.writeFileSync(conversations, '[{"id":"precious","turns":[{"role"'),
     'many-chats': () =>
