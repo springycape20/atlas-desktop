@@ -9,7 +9,7 @@
   "ownerDecision": "Owner requested release of all accumulated workflow, UI and updater changes. The previously authorized unsigned-release policy remains in effect. No signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 601,
+    "unitTests": 603,
     "electronSuites": [
       "assistant",
       "colab",

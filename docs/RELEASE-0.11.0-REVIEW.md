@@ -12,7 +12,7 @@ There are no dependency additions or version changes beyond the root application
 
 ## Validation
 
-Local validation passed: 601 unit/integration tests, all 17 existing release Electron suites, the new packaged-backup-worker check, and the real-main menu audit across 131 surfaces and 145 clicks with zero problems. The menu audit uses throwaway data, blocks provider launches and web traffic, and refuses approvals.
+Local validation passed: 603 unit/integration tests, all 17 existing release Electron suites, the new packaged-backup-worker check, and the real-main menu audit across 131 surfaces and 145 clicks with zero problems. The menu audit uses throwaway data, blocks provider launches and web traffic, and refuses approvals.
 
 The unsigned Windows x64 installer was freshly built and verified for version, ASAR contents/integrity, binary security fuses, private-path exclusions, notices, the 125-component npm inventory, pinned speech resources and exact updater manifest/installer hashes. PDF extraction and the backup worker were exercised through the built ASAR. The update-recovery fixture copied the real built app.asar as a file. The final release gate reruns these checks against the committed release record before publication.
 
@@ -29,3 +29,5 @@ The project-file UI fixture initially failed because its saved-baseline action r
 - Budgets govern ATLAS invocations and rough outgoing text estimates, not provider-internal tools/retries/output or billed spend. Benchmarks require pinned model IDs; unknown usage/version fields remain unknown. Fixed inputs do not make model behavior deterministic.
 - The unsigned installer and checksums do not authenticate a signing publisher. The existing SignPath denial and unsigned policy remain disclosed.
 - An installed-app update to this unpublished version cannot be completed through the live GitHub feed yet. No actual user installation will be replaced during pre-release checks. Record the packaged startup/recovery evidence separately and retain this end-to-end limitation.
+
+GitHub CI exposed a Windows 8.3 path-alias mismatch in automatic-backup validation. Native canonicalization now expands aliases while checking every directory component for symlinks/junctions. New real-alias and ancestor-junction regressions pass with the full 603-test local suite.

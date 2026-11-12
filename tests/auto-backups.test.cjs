@@ -22,6 +22,61 @@ async function fixture(t, options = {}) {
   };
 }
 const names = async (directory) => fs.readdir(path.join(directory, 'auto-backups')).catch(() => []);
+test(
+  'Windows short-path aliases work for default backups and identify the same destination owner',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-backup-long-name-')));
+    t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 5 }));
+    const alias = require('node:child_process')
+      .execFileSync('cmd.exe', ['/d', '/c', `for %I in ("${root}") do @echo %~sI`], {
+        encoding: 'utf8',
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+      })
+      .trim();
+    assert.equal(await fs.realpath(alias), root);
+    if (path.resolve(alias).toLowerCase() === root.toLowerCase()) {
+      t.skip('8.3 aliases are disabled for this volume');
+      return;
+    }
+    const directory = path.join(root, 'data'),
+      outside = path.join(root, 'outside');
+    await fs.mkdir(directory);
+    await fs.mkdir(outside);
+    const short = createAutoBackups({ directory: path.join(alias, 'data'), make: async () => Buffer.from('fixture') });
+    assert.equal(await short.tick({ force: true }), true);
+    await short.setFolder(outside);
+    await short.tick({ force: true });
+    const long = createAutoBackups({ directory, make: async () => Buffer.from('fixture') });
+    assert.equal((await long.setFolder(outside)).copies, 1);
+    assert.equal((await long.status()).lastError, '');
+    await fs.writeFile(path.join(directory, 'settings.json'), '{}');
+    assert.ok(createBackup(path.join(alias, 'data'), 'fixture', {}).length);
+  },
+);
+test('backup path aliases do not permit a junction in an ancestor directory', async (t) => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-backup-link-')));
+  t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 5 }));
+  const outside = path.join(root, 'outside'),
+    alias = path.join(root, 'alias');
+  await fs.mkdir(path.join(outside, 'data'), { recursive: true });
+  await fs.symlink(outside, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.throws(() => createBackup(path.join(alias, 'data'), 'fixture', {}), /linked/i);
+  let wrote = false;
+  await assert.rejects(
+    async () =>
+      createAutoBackups({
+        directory: path.join(alias, 'data'),
+        make: async () => {
+          wrote = true;
+          return Buffer.from('fixture');
+        },
+      }).tick({ force: true }),
+    /link/i,
+  );
+  assert.equal(wrote, false);
+});
 test('custom destinations are scoped to this data directory and preserve old copies when reset', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-backup-location-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
@@ -31,11 +86,11 @@ test('custom destinations are scoped to this data directory and preserve old cop
   await fs.mkdir(outside);
   const service = createAutoBackups({ directory, make: async () => Buffer.from('fixture') });
   const selected = await service.setFolder(outside);
-  assert.equal(selected.folder, path.join(outside, 'ATLAS automatic backups'));
+  assert.equal(selected.folder, path.join(await fs.realpath(outside), 'ATLAS automatic backups'));
   await service.tick({ force: true });
   assert.equal((await service.status()).copies, 1);
   await service.setFolder();
-  assert.equal((await service.status()).folder, path.join(directory, 'auto-backups'));
+  assert.equal((await service.status()).folder, path.join(await fs.realpath(directory), 'auto-backups'));
   assert.equal((await fs.readdir(selected.folder)).filter((name) => name.endsWith('.atlas-backup')).length, 1);
   await assert.rejects(service.setFolder(directory), /outside ATLAS/);
   const other = path.join(root, 'other');

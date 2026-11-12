@@ -149,13 +149,31 @@ function applyRestore(root, marker) {
     throw error;
   }
 }
-module.exports = { createBackup, validate, stageRestore, applyPendingRestore, collect };
+module.exports = { createBackup, validate, stageRestore, applyPendingRestore, collect, canonicalDirectory };
+// Expand Windows 8.3 aliases without accepting a symlink/junction at any level.
+// realpath alone cannot distinguish those two cases.
+function canonicalDirectory(root, { allowMissing = false } = {}) {
+  const absolute = path.resolve(root),
+    base = path.parse(absolute).root,
+    parts = path.relative(base, absolute).split(path.sep).filter(Boolean);
+  let current = base;
+  for (let i = 0; i < parts.length; i++) {
+    const parent = current;
+    current = path.join(current, parts[i]);
+    let stat;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (error) {
+      if (error.code === 'ENOENT' && allowMissing) return path.join(fs.realpathSync.native(parent), ...parts.slice(i));
+      throw error;
+    }
+    if (stat.isSymbolicLink()) throw Error('Linked app data directory refused.');
+    if (!stat.isDirectory()) throw Error('Choose an app data directory.');
+  }
+  return fs.realpathSync.native(absolute);
+}
 function assertDirectory(root) {
-  if (
-    fs.lstatSync(root).isSymbolicLink() ||
-    path.resolve(fs.realpathSync(root)).toLowerCase() !== path.resolve(root).toLowerCase()
-  )
-    throw Error('Linked app data directory refused.');
+  canonicalDirectory(root);
 }
 function assertChildDirectory(root, name) {
   const target = path.join(root, name);

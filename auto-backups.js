@@ -2,6 +2,7 @@ const fs = require('node:fs/promises'),
   path = require('node:path');
 const NAME = /^ATLAS-auto-[\dT-]+\.atlas-backup$/;
 function createAutoBackups({ directory, make, busy = () => false, keep = 7, every = 86400000, now = Date.now }) {
+  directory = require('./local-backups').canonicalDirectory(directory, { allowMissing: true });
   const defaultFolder = path.join(directory, 'auto-backups'),
     file = path.join(directory, 'auto-backup.json');
   const store = require('./atomic-store').createAtomicStore(file);
@@ -18,6 +19,7 @@ function createAutoBackups({ directory, make, busy = () => false, keep = 7, ever
   };
   async function destination(state = {}) {
     const folder = state.folder || defaultFolder;
+    const canonical = require('./local-backups').canonicalDirectory(folder, { allowMissing: true });
     const stat = await fs.lstat(folder).catch((error) => {
       if (error.code === 'ENOENT') return null;
       throw error;
@@ -26,7 +28,7 @@ function createAutoBackups({ directory, make, busy = () => false, keep = 7, ever
       stat &&
       (stat.isSymbolicLink() ||
         !stat.isDirectory() ||
-        path.resolve(await fs.realpath(folder)).toLowerCase() !== path.resolve(folder).toLowerCase())
+        path.resolve(canonical).toLowerCase() !== path.resolve(folder).toLowerCase())
     )
       throw Error('Backup destination changed or points through a link. Choose the folder again.');
     if (state.folder) {
