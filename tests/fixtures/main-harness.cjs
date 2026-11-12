@@ -26,6 +26,7 @@ async function mainHarness(t, options = {}) {
       on: (name, fn) => events.set(name, fn),
       whenReady: () => ({ then() {} }),
       getPath: (name) => paths[name] || dir,
+      getVersion: () => require('../../package.json').version,
       setPath(name, value) {
         paths[name] = value;
       },

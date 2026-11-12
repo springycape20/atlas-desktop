@@ -1,5 +1,7 @@
 # Work sessions (0.10.1)
 
+The 0.11.0 [execution controls](EXECUTION-CONTROLS.md) add guided selective trial promotion with conflict protection and durable undo, plus fixed-case benchmark runs in fresh trial copies. The export/Git workflow below remains available.
+
 These ten additions are included in ATLAS 0.10.1. They are not in the older ATLAS 0.10.0 installer. They add no dependencies, publisher telemetry or automatic provider calls.
 
 ![The project map with a declared entry point and module links](images/project-map.png)

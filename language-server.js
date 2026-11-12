@@ -211,7 +211,7 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
       await store.flush();
       return { saved: true };
     }
-    if (!['definition', 'references', 'diagnostics'].includes(input.action))
+    if (!['definition', 'references', 'diagnostics', 'hover', 'completion', 'rename'].includes(input.action))
       throw Error('Unknown language-server action.');
     if (!saved[cwd]) throw Error('Configure an installed language server for this project first.');
     const target = await files.resolve(cwd, input.path),
@@ -239,6 +239,11 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
       await handle.close();
     }
     if (text.includes('\0')) throw Error('Choose a UTF-8 text file.');
+    if (input.text !== undefined) {
+      if (typeof input.text !== 'string' || Buffer.byteLength(input.text) > 256000 || input.text.includes('\0'))
+        throw Error('Editor text exceeds the language-server limit.');
+      text = input.text;
+    }
     const lines = text.split(/\r?\n/),
       line = Number(input.line || 1),
       column = Number(input.column || 1);
@@ -299,6 +304,42 @@ function createLanguageServer({ directory, files, approve, spawnProcess = spawn,
         note: rows
           ? 'Language-server diagnostics; results may update as analysis finishes.'
           : 'No diagnostic report received yet. Refresh after analysis finishes; this does not prove the file is error-free.',
+      };
+    }
+    if (input.action === 'rename') {
+      if (!/^[A-Za-z_$][\w$]{0,99}$/.test(input.newName || ''))
+        throw Error('Enter an identifier using letters, digits, underscore or dollar (up to 100 characters).');
+      const edit = await request(current, 'textDocument/rename', {
+        textDocument: { uri },
+        position: { line: line - 1, character: column - 1 },
+        newName: input.newName,
+      });
+      return { edit };
+    }
+    if (input.action === 'hover' || input.action === 'completion') {
+      const value = await request(current, 'textDocument/' + input.action, {
+        textDocument: { uri },
+        position: { line: line - 1, character: column - 1 },
+      });
+      if (input.action === 'hover') {
+        const values = Array.isArray(value?.contents) ? value.contents : [value?.contents];
+        return {
+          text: values
+            .map((row) => (typeof row === 'string' ? row : row?.value || ''))
+            .join('\n')
+            .slice(0, 10000),
+        };
+      }
+      return {
+        rows: (Array.isArray(value) ? value : value?.items || [])
+          .slice(0, 100)
+          .filter((row) => row.insertTextFormat !== 2 && !row.textEdit && !row.additionalTextEdits && !row.command)
+          .map((row) => ({
+            label: String(row.label || '').slice(0, 200),
+            text: String(row.insertText || row.label || '').slice(0, 2000),
+            detail: String(row.detail || '').slice(0, 500),
+          })),
+        note: 'Plain-text suggestions only; snippets and suggestions requiring extra edits are omitted.',
       };
     }
     const value = await request(

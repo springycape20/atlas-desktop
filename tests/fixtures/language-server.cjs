@@ -8,6 +8,7 @@ const reply = value => {
   process.stdout.write(frame.subarray(0, 11));
   process.stdout.write(frame.subarray(11));
 };
+let openedText = '';
 process.stdin.on('data', part => {
   buffer = Buffer.concat([buffer, part]);
   while (true) {
@@ -17,6 +18,10 @@ process.stdin.on('data', part => {
     const message = JSON.parse(buffer.subarray(end + 4, end + 4 + size));
     buffer = buffer.subarray(end + 4 + size);
     if (message.method === 'initialize') reply({ id: message.id, result: { capabilities: { definitionProvider: true, referencesProvider: true } } });
+    if (message.method === 'textDocument/didOpen') openedText = message.params.textDocument.text;
+    if (message.method === 'textDocument/hover') reply({ id: message.id, result: { contents: { kind: 'plaintext', value: openedText } } });
+    if (message.method === 'textDocument/rename') reply({id:message.id,result:{changes:{[message.params.textDocument.uri]:[{range:{start:{line:0,character:6},end:{line:0,character:10}},newText:message.params.newName}]}}});
+    if (message.method === 'textDocument/completion') reply({ id: message.id, result: [{ label: 'console', insertText: 'console' }, { label: 'snippet', insertTextFormat: 2 }, { label: 'command', command: { command: 'unsafe' } }] });
     if (message.method === 'textDocument/didOpen' && !(process.argv.includes('--publish-once') && published)) {
       published = true;
       // --normalize-uri mimics servers that rewrite file:///C:/ as file:///c%3A/ on Windows.

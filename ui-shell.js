@@ -23,7 +23,142 @@
     parent.append(el);
     return el;
   };
+  let menuId = 0;
+  function actionMenu(parent, label, items) {
+    const wrap = node('span', undefined, 'action-menu'),
+      trigger = node('button', label + ' ▾', 'quiet-button'),
+      panel = node('div', undefined, 'action-menu-panel');
+    trigger.type = 'button';
+    panel.id = 'atlas-action-menu-' + ++menuId;
+    panel.setAttribute('popover', 'auto');
+    panel.setAttribute('role', 'menu');
+    panel.setAttribute('aria-label', label);
+    trigger.setAttribute('popovertarget', panel.id);
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'false');
+    for (const item of items) {
+      item.setAttribute('role', 'menuitem');
+      panel.append(item);
+    }
+    const available = () => [...panel.querySelectorAll('button')].filter((item) => !item.disabled && !item.hidden);
+    panel.addEventListener('toggle', (event) => {
+      trigger.setAttribute('aria-expanded', String(event.newState === 'open'));
+      if (event.newState === 'open') {
+        const rect = trigger.getBoundingClientRect();
+        panel.style.left = Math.max(8, Math.min(rect.left, innerWidth - Math.min(300, innerWidth - 16) - 8)) + 'px';
+        panel.style.top =
+          Math.max(8, Math.min(rect.bottom + 5, innerHeight - Math.min(panel.scrollHeight, 340) - 8)) + 'px';
+        available()[0]?.focus();
+      }
+    });
+    panel.addEventListener('click', (event) => {
+      if (event.target.closest('button')) panel.hidePopover();
+    });
+    panel.addEventListener('keydown', (event) => {
+      const buttons = available(),
+        index = buttons.indexOf(document.activeElement);
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        buttons[
+          event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? buttons.length - 1
+              : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
+        ]?.focus();
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        panel.hidePopover();
+        trigger.focus();
+      }
+    });
+    trigger.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        panel.showPopover();
+      }
+    });
+    wrap.append(trigger, panel);
+    parent.append(wrap);
+    return wrap;
+  }
+  function compactActions(parent, keep = 2, label = 'More actions') {
+    if (!parent || parent.dataset.compactActions) return;
+    const buttons = [...parent.children].filter((item) => item.tagName === 'BUTTON');
+    if (buttons.length <= keep + 1) return;
+    parent.dataset.compactActions = 'true';
+    actionMenu(parent, label, buttons.slice(keep));
+  }
+  function toolSections(body, labels) {
+    const children = [...body.children],
+      bar = node('nav', undefined, 'tool-section-tabs'),
+      sections = [];
+    bar.setAttribute('aria-label', 'Tool views');
+    bar.setAttribute('role', 'tablist');
+    let current;
+    const select = (chosen) => {
+      for (const row of sections) {
+        row.panel.hidden = row !== chosen;
+        row.button.setAttribute('aria-selected', String(row === chosen));
+        row.button.tabIndex = row === chosen ? 0 : -1;
+      }
+    };
+    for (const child of children) {
+      const label = child.tagName === 'H3' ? labels[child.textContent] : !current ? labels.default : null;
+      if (label) {
+        const panel = node('section', undefined, 'tool-section'),
+          button = node('button', label),
+          row = { panel, button };
+        panel.id = 'atlas-tool-section-' + ++menuId;
+        button.type = 'button';
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-controls', panel.id);
+        panel.setAttribute('role', 'tabpanel');
+        panel.setAttribute('aria-label', label);
+        button.onclick = () => select(row);
+        panel._reveal = () => select(row);
+        sections.push(row);
+        current = panel;
+        bar.append(button);
+        body.append(panel);
+      }
+      current.append(child);
+    }
+    for (const [index, row] of sections.entries())
+      row.button.onkeydown = (event) => {
+        if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+          event.preventDefault();
+          const target =
+            sections[
+              event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? sections.length - 1
+                  : (index + (event.key === 'ArrowRight' ? 1 : -1) + sections.length) % sections.length
+            ];
+          select(target);
+          target.button.focus();
+        }
+      };
+    body.prepend(bar);
+    select(sections[0]);
+    for (const row of sections) {
+      const direct = [...row.panel.children].filter((item) => item.tagName === 'BUTTON');
+      if (row.button.textContent === 'Browser checks')
+        direct.sort(
+          (a, b) => Number(b.textContent.startsWith('Run browser')) - Number(a.textContent.startsWith('Run browser')),
+        );
+      if (direct.length > 3) {
+        const actions = node('div', undefined, 'power-actions');
+        row.panel.append(actions);
+        for (const button of direct) actions.append(button);
+        compactActions(actions, 2);
+      }
+    }
+  }
   const routeButton = (label, route, icon) => {
+    // Main destinations stay visible; secondary toolbars use the shared action menu below.
     const button = actionButton(label, () => openHub(route), nav);
     button.className = 'nav-item';
     button.dataset.mainRoute = route;
@@ -66,6 +201,64 @@
   content.id = 'shellHubContent';
   content.setAttribute('role', 'tabpanel');
   hub.append(header, groups, tabs, content);
+  const rail = node('aside', undefined, 'shell-hub-rail'),
+    categoryLabel = node('label', 'Category'),
+    category = node('select'),
+    filterLabel = node('label', 'Find a tool'),
+    filter = node('input');
+  category.setAttribute('aria-label', 'Tool category');
+  categoryLabel.append(category);
+  filter.type = 'search';
+  filter.placeholder = 'Filter tools…';
+  filter.setAttribute('aria-label', 'Filter tools');
+  filterLabel.append(filter);
+  rail.append(categoryLabel, filterLabel, tabs);
+  hub.append(rail);
+  const sectionLabel = node('label', 'Tool'),
+    sectionPicker = node('select');
+  sectionLabel.className = 'shell-section-picker';
+  sectionPicker.setAttribute('aria-label', 'Open tool');
+  sectionLabel.append(sectionPicker);
+  rail.append(sectionLabel);
+  sectionPicker.onchange = () => renderTab(currentRoute, sectionPicker.value);
+  let currentRoute, activeSection;
+  filter.oninput = () => {
+    const query = filter.value.trim().toLowerCase();
+    if (!query) {
+      shownGroup = null;
+      showGroup(currentRoute, groupOf(currentRoute, activeSection));
+      return;
+    }
+    tabs.hidden = false;
+    tabs.replaceChildren();
+    content.setAttribute('aria-label', activeSection);
+    for (const name of Object.keys(sections[currentRoute]).filter((name) => name.toLowerCase().includes(query))) {
+      const button = actionButton(name, () => renderTab(currentRoute, name), tabs);
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', String(name === activeSection));
+      button.setAttribute('aria-controls', content.id);
+      button.title = groupOf(currentRoute, name) || name;
+      button.onkeydown = (event) => {
+        if (['ArrowDown', 'ArrowUp'].includes(event.key)) {
+          event.preventDefault();
+          const buttons = [...tabs.children],
+            index = buttons.indexOf(button);
+          buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+        }
+      };
+    }
+  };
+  filter.onkeydown = (event) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      tabs.querySelector('button')?.focus();
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      tabs.querySelector('button')?.click();
+    }
+  };
+  category.onchange = () => renderTab(currentRoute, sectionsIn(currentRoute, category.value)[0]);
   document.body.append(hub);
   let cleanup,
     generation = 0,
@@ -112,6 +305,7 @@
       'Reminders',
       'Recovery',
       'Repair loops',
+      'Task budgets',
       'Milestone handovers',
     ],
     Review: [
@@ -124,6 +318,7 @@
       'Check logs',
       'Acceptance evidence',
       'Saved task evidence',
+      'Workflow benchmarks',
     ],
     Project: [
       'Live preview',
@@ -136,6 +331,7 @@
       'Permissions',
       'Named checkpoints',
       'Trial checkpoints',
+      'Trial promotion',
     ],
     Context: [
       'Project intelligence',
@@ -159,10 +355,14 @@
   function showGroup(route, group) {
     if (shownGroup === route + ':' + group) return;
     shownGroup = route + ':' + group;
+    category.value = group || '';
+    filter.value = '';
     for (const button of groups.querySelectorAll('button'))
       button.setAttribute('aria-pressed', String(button.textContent === group));
     const names = sectionsIn(route, group);
+    sectionPicker.replaceChildren(...names.map((name) => new Option(name, name)));
     tabs.hidden = names.length < 2;
+    tabs.setAttribute('aria-orientation', 'vertical');
     tabs.replaceChildren();
     for (const section of names) {
       const button = actionButton(section, () => renderTab(route, section), tabs);
@@ -173,16 +373,15 @@
       button.onkeydown = (event) => {
         const buttons = [...tabs.querySelectorAll('button')],
           index = buttons.indexOf(button);
-        const target =
-          event.key === 'ArrowRight'
-            ? buttons[(index + 1) % buttons.length]
-            : event.key === 'ArrowLeft'
-              ? buttons[(index + buttons.length - 1) % buttons.length]
-              : event.key === 'Home'
-                ? buttons[0]
-                : event.key === 'End'
-                  ? buttons.at(-1)
-                  : null;
+        const target = ['ArrowRight', 'ArrowDown'].includes(event.key)
+          ? buttons[(index + 1) % buttons.length]
+          : ['ArrowLeft', 'ArrowUp'].includes(event.key)
+            ? buttons[(index + buttons.length - 1) % buttons.length]
+            : event.key === 'Home'
+              ? buttons[0]
+              : event.key === 'End'
+                ? buttons.at(-1)
+                : null;
         if (target) {
           event.preventDefault();
           target.focus();
@@ -192,11 +391,13 @@
     }
   }
   async function renderTab(route, name) {
+    activeSection = name;
     const revision = ++generation;
     cleanup?.();
     cleanup = null;
     content.replaceChildren();
     showGroup(route, groupOf(route, name));
+    sectionPicker.value = name;
     for (const button of tabs.querySelectorAll('button')) {
       const active = button.dataset.section === name;
       button.setAttribute('aria-selected', String(active));
@@ -210,6 +411,13 @@
   async function openHub(route, name) {
     if (route === 'settings') return settingsButton.click();
     if (!sections[route]) return;
+    currentRoute = route;
+    categoryLabel.hidden = route !== 'tasks';
+    category.replaceChildren(
+      ...[...Object.keys(taskGroups), 'More']
+        .filter((group) => sectionsIn(route, group).length)
+        .map((group) => new Option(group, group)),
+    );
     focusBefore = document.activeElement;
     title.textContent = route === 'tasks' ? 'Tasks' : route === 'library' ? 'Library' : 'Diagnostics';
     shownGroup = null;
@@ -433,6 +641,12 @@
   new MutationObserver(titleTooltips).observe(document.querySelector('.layout'), { childList: true, subtree: true });
   titleTooltips();
   window.atlasUi = {
+    actionMenu,
+    compactActions,
+    toolSections,
+    reveal: (element) => {
+      element?.closest('.tool-section')?._reveal?.();
+    },
     open: openHub,
     settings: openSettings,
     hub,

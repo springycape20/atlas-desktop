@@ -117,6 +117,126 @@
     status.textContent = 'Saved ' + tab.path;
   }
   button('Save', save, tools);
+  const intelligence = node('section');
+  intelligence.className = 'editor-intelligence';
+  intelligence.setAttribute('aria-label', 'Language intelligence results');
+  async function queryLanguage(action) {
+    if (!active) throw Error('Open a file first.');
+    const tab = active,
+      draft = tab.draft,
+      cursor = area.selectionStart,
+      prefix = draft.slice(0, cursor),
+      lines = prefix.split('\n');
+    status.textContent = 'Querying language server…';
+    const result = await api.languageServer({
+      ...tab.context,
+      action,
+      path: tab.path,
+      text: draft,
+      line: lines.length,
+      column: lines.at(-1).length + 1,
+    });
+    if (active !== tab || tab.draft !== draft) {
+      status.textContent = 'Document changed; query again.';
+      return;
+    }
+    intelligence.replaceChildren();
+    if (action === 'hover') intelligence.append(node('pre', result.text || 'No hover information received.'));
+    else
+      for (const row of result.rows || []) {
+        if (action === 'completion')
+          button(
+            row.label + (row.detail ? ' · ' + row.detail : ''),
+            () => {
+              if (active !== tab || tab.draft !== draft) throw Error('Document changed; request new completions.');
+              const word = prefix.match(/[\w$]*$/)[0];
+              area.setSelectionRange(cursor - word.length, cursor);
+              change(row.text);
+              intelligence.replaceChildren();
+            },
+            intelligence,
+          );
+        else
+          button(
+            (row.path || tab.path) + ':' + row.line + (row.message ? ' · ' + row.message : ''),
+            async () => {
+              if (row.path) await open(tab.context, row.path);
+              const offset = area.value
+                .split('\n')
+                .slice(0, row.line - 1)
+                .reduce((sum, line) => sum + line.length + 1, 0);
+              area.setSelectionRange(offset, offset);
+              area.scrollTop = (row.line - 1) * 20;
+              area.focus();
+            },
+            intelligence,
+          );
+      }
+    status.textContent = result.note || 'Language-server results for the current draft.';
+  }
+  for (const [label, action] of [
+    ['Definitions', 'definition'],
+    ['References', 'references'],
+    ['Diagnostics', 'diagnostics'],
+    ['Hover info', 'hover'],
+    ['Complete', 'completion'],
+  ])
+    button(label, () => queryLanguage(action), tools);
+  button('Configure language server', () => power.show('Language intelligence'), tools);
+  button(
+    'Rename symbol…',
+    async () => {
+      if (!active || tabs.some((tab) => tab.draft !== tab.text))
+        throw Error('Save all open drafts before previewing a rename.');
+      const tab = active,
+        cursor = area.selectionStart,
+        prefix = tab.text.slice(0, cursor).split('\n'),
+        newName = prompt('New symbol name');
+      if (!newName) return;
+      const value = await api.languageServer({
+        ...tab.context,
+        action: 'rename',
+        path: tab.path,
+        line: prefix.length,
+        column: prefix.at(-1).length + 1,
+        newName,
+      });
+      const plan = await request(tab.context, 'editor-rename-preview', { edit: value.edit });
+      intelligence.replaceChildren(node('strong', 'Review rename: ' + plan.files.length + ' files'));
+      for (const file of plan.files) {
+        const diff = await request(tab.context, 'replace-file', { id: plan.id, path: file.path });
+        const details = node('details');
+        details.append(
+          node('summary', file.path + ' · ' + file.count + ' edits'),
+          node('pre', 'Before:\n' + diff.before + '\n\nAfter:\n' + diff.after),
+        );
+        intelligence.append(details);
+      }
+      if (plan.files.length)
+        button(
+          'Apply reviewed rename',
+          async () => {
+            if (tabs.some((tab) => tab.draft !== tab.text)) throw Error('Save or discard new drafts before applying.');
+            const result = await request(tab.context, 'replace-apply', {
+              id: plan.id,
+              paths: plan.files.map((file) => file.path),
+            });
+            undo = { context: tab.context, id: result.undoId };
+            if (result.error) throw Error(result.error);
+            for (const openTab of tabs)
+              if (plan.files.some((file) => file.path === openTab.path)) {
+                Object.assign(openTab, await request(openTab.context, 'editor-read', { path: openTab.path }));
+                openTab.draft = openTab.text;
+              }
+            select(tab);
+            intelligence.replaceChildren();
+            status.textContent = 'Rename applied. Undo last edit restores the reviewed files.';
+          },
+          intelligence,
+        );
+    },
+    tools,
+  );
   button(
     'Reload from disk',
     async () => {
@@ -282,6 +402,10 @@
   );
   new MutationObserver(updateLines).observe(nav, { childList: true });
   pane.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && event.code === 'Space') {
+      event.preventDefault();
+      void queryLanguage('completion').catch((error) => (status.textContent = error.message));
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
       void save().catch((error) => (status.textContent = error.message));
@@ -294,7 +418,39 @@
     }
   });
   surface.append(gutter, area);
-  pane.append(header, nav, tools, surface, highlighted, status);
+  const editorButtons = [...tools.children];
+  for (const [label, names] of [
+    ['File', ['Reload from disk', 'Close tab']],
+    ['Edit', ['Undo last edit', 'Go to line', 'Format JSON']],
+    [
+      'Code',
+      [
+        'Definitions',
+        'References',
+        'Diagnostics',
+        'Hover info',
+        'Complete',
+        'Rename symbol…',
+        'Check document',
+        'Configure language server',
+      ],
+    ],
+    ['View', ['Syntax preview', 'Edit text']],
+  ])
+    window.atlasUi.actionMenu(
+      tools,
+      label,
+      editorButtons.filter((button) => names.includes(button.textContent)),
+    );
+  const updateTop = () => {
+    const top = document.querySelector('.app > header.top');
+    if (top) pane.style.top = Math.ceil(top.getBoundingClientRect().bottom + 8) + 'px';
+  };
+  window.addEventListener('resize', updateTop);
+  const appHeader = document.querySelector('.app > header.top');
+  if (appHeader) new ResizeObserver(updateTop).observe(appHeader);
+  updateTop();
+  pane.append(header, nav, tools, surface, highlighted, intelligence, status);
   document.body.append(pane);
   const context = () => {
     const input = power.request();

@@ -212,10 +212,13 @@ app.whenReady().then(async () => {
       if(upgradeCalls.some(r=>r.action==='definition'))throw Error('Saving a server ran a query');
       [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Go to definition').click();await new Promise(r=>setTimeout(r,30));
       if(!document.querySelector('.power-body').textContent.includes('Open src/app.js:3'))throw Error('Language navigation result missing');
-      atlas.livePreview=async request=>{upgradeCalls.push(request);if(request.action==='browser-recipes')return [];if(request.action==='status')return {open:true,running:false,output:'Fixture server ready'};if(request.action==='profile')return {domNodes:24,jsHeapMB:12,rendererWorkingSetMB:48,rendererCpuPercent:0,domReadyMs:15,loadMs:null,delta:{domNodes:1,jsHeapMB:-2},note:'Fixture measurements for UI validation.'};if(request.action==='browser-checks')return {status:'passed',results:[{action:'assert-visible',status:'passed',durationMs:2}],browserErrors:[],skipped:0};return {};};
+      atlas.livePreview=async request=>{upgradeCalls.push(request);if(['browser-recipes','saved-baselines'].includes(request.action))return [];if(request.action==='status')return {open:true,running:false,output:'Fixture server ready'};if(request.action==='profile')return {domNodes:24,jsHeapMB:12,rendererWorkingSetMB:48,rendererCpuPercent:0,domReadyMs:15,loadMs:null,delta:{domNodes:1,jsHeapMB:-2},note:'Fixture measurements for UI validation.'};if(request.action==='browser-checks')return {status:'passed',results:[{action:'assert-visible',status:'passed',durationMs:2}],browserErrors:[],skipped:0};return {};};
       await atlasPower.show('Live preview');
       [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Run browser checks…').click();await new Promise(r=>setTimeout(r,30));
       if(!document.querySelector('.power-body').textContent.includes('Browser checks · passed'))throw Error('Browser check evidence missing');
+      const action=document.querySelector('[aria-label="Browser step action"]'), selector=document.querySelector('[aria-label="Browser step selector"]');action.value='wait-visible';selector.value='#ready';
+      const before=upgradeCalls.length;[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Add step').click();await new Promise(r=>setTimeout(r,20));
+      if(JSON.parse(document.querySelector('[aria-label="Browser steps (JSON array)"]').value).at(-1).action!=='wait-visible'||upgradeCalls.length!==before)throw Error('Builder did not prepare a passive step');
     })()`);
     for (const name of ['Power tools', 'Language intelligence', 'Live preview']) {
       await win.webContents.executeJavaScript(`atlasPower.show(${JSON.stringify(name)})`);
@@ -231,14 +234,62 @@ app.whenReady().then(async () => {
         );
         if (name === 'Live preview') {
           await win.webContents.executeJavaScript(
-            `(async()=>{[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Measure project preview').click();await new Promise(r=>setTimeout(r,30));const profile=document.querySelector('.preview-profile');if(!profile.textContent.includes('12 MB')||!profile.textContent.includes('-2 MB')||!profile.textContent.includes('0%'))throw Error('Profile units or zero values missing');document.querySelector('.power-body').scrollTop=100000;})()`,
+            `(async()=>{const heading=[...document.querySelectorAll('.power-body h3')].find(b=>b.textContent==='Project preview profile');atlasUi.reveal(heading);[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Measure project preview').click();await new Promise(r=>setTimeout(r,30));const profile=document.querySelector('.preview-profile');if(!profile.textContent.includes('12 MB')||!profile.textContent.includes('-2 MB')||!profile.textContent.includes('0%'))throw Error('Profile units or zero values missing');document.querySelector('.power-body').scrollTop=100000;})()`,
           );
           fs.writeFileSync(path.join(shots, 'project-profile-' + width + '.png'), (await offscreenFrame(win)).toPNG());
           await win.webContents.executeJavaScript(
-            `[...document.querySelectorAll('.power-body h3')].find(b=>b.textContent==='Repeatable browser checks').scrollIntoView({block:'start'})`,
+            `(()=>{const heading=[...document.querySelectorAll('.power-body h3')].find(b=>b.textContent==='Repeatable browser checks');atlasUi.reveal(heading);heading.scrollIntoView({block:'start'});})()`,
           );
           fs.writeFileSync(path.join(shots, 'browser-checks-' + width + '.png'), (await offscreenFrame(win)).toPNG());
         }
+      }
+    }
+    await win.webContents.executeJavaScript(`(async()=>{
+      const original=atlas.selectedTools;window.backupUiCalls=[];let running=true;
+      atlas.selectedTools=async request=>{backupUiCalls.push(request);if(request.tool==='auto-backup'&&request.action==='progress')return {running,phase:running?'collecting':'complete',files:120,bytes:1048576};if(request.tool==='auto-backup'&&request.action==='run'){running=false;return {created:true};}return {enabled:true,lastAt:1,keep:7,folder:'C:/Fixture backups',copies:1};};
+      await atlasPower.show('Backups and recovery');await new Promise(r=>setTimeout(r,40));
+      if(!document.querySelector('.power-body').textContent.includes('collecting · 120 files · 1.0 MiB'))throw Error('Backup progress missing');
+      if(backupUiCalls.some(row=>row.action==='run'))throw Error('Opening backups started a run');
+      [...document.querySelectorAll('#powerDialog button')].find(button=>button.textContent==='Back up now').click();await new Promise(r=>setTimeout(r,50));
+      if(!document.querySelector('.power-body').textContent.includes('Backup completed.'))throw Error('Backup completion missing');
+      await atlasPower.show('Power tools');atlas.selectedTools=original;
+    })()`);
+    await win.webContents.executeJavaScript(`(async()=>{
+      window.executionCalls=[];
+      atlas.taskBudgets=async r=>{executionCalls.push({tool:'budgets',...r});return {enabled:false,confirmEscalation:true,providerCalls:3};};
+      atlas.jobs=async()=>[{id:'budget-task',prompt:'Fixture budget',status:'paused',budget:{limits:{enabled:true},calls:3,repairs:0,estimatedTokens:125,reportedInput:null,reportedOutput:null,usageComplete:false,stopReason:'ATLAS provider-call budget reached.'}}];
+      atlas.workSession=async r=>{executionCalls.push({tool:'trials',...r});if(r.action==='list')return {snapshots:[{id:'checkpoint',name:'Fixed fixture'}],branches:[{id:'trial',name:'Reviewed fixture'}]};if(r.action==='promotion-list')return [];if(r.action==='promotion-preview')return {id:'preview',source:'C:/Projects/ATLAS',files:[{path:'app.js',patch:'-old'+String.fromCharCode(10)+'+new'},{path:'conflict.js',conflict:true,patch:'conflict'}]};if(r.action==='promotion-apply')return {applied:r.paths,undoId:'undo'};return {};};
+      atlas.workflowBenchmarks=async r=>{executionCalls.push({tool:'benchmarks',...r});if(r.action==='status')return {suites:[{id:'suite',name:'Fixture comparisons',configs:[{name:'Pinned',model:'fixture'}]}],runs:[{suiteId:'suite',caseName:'Repair',config:{name:'Pinned'},jobId:'fixture-task',status:'completed',cwd:'C:/Trials/Fixture',verification:{status:'passed',results:[]}}]};if(r.action==='summary')return [{caseName:'Repair',configuration:'Pinned',runs:1,checksPassed:1,medianMs:1250,knownUsageRuns:0,inputTokens:null,outputTokens:null}];return {};};
+      atlas.taskOpen=async id=>{executionCalls.push({tool:'open-task',id});};
+      await atlasPower.show('Task budgets');
+      if(executionCalls.some(r=>r.action==='save'||r.action==='run'))throw Error('Opening budget panel started work');
+      document.querySelector('[aria-label="ATLAS provider-call limit"]').value='4';
+      [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Save task budgets').click();await new Promise(r=>setTimeout(r,30));
+      if(!executionCalls.some(r=>r.tool==='budgets'&&r.action==='save'&&r.limits.providerCalls==='4'))throw Error('Budget save missing');
+      await atlasPower.show('Trial promotion');
+      [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Preview promotion').click();await new Promise(r=>setTimeout(r,30));
+      const choices=[...document.querySelectorAll('.power-body input[type=checkbox]')];
+      if(choices.length!==2||choices.some(c=>c.checked)||!choices[1].disabled)throw Error('Promotion choices must be explicit and conflicts disabled');
+      choices[0].checked=true;[...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Apply selected promotion…').click();await new Promise(r=>setTimeout(r,30));
+      if(!executionCalls.some(r=>r.action==='promotion-apply'&&r.paths.join(',')==='app.js'))throw Error('Promotion selection missing');
+      await atlasPower.show('Workflow benchmarks');
+      if(executionCalls.some(r=>r.tool==='benchmarks'&&r.action==='run'))throw Error('Benchmark opening started providers');
+      [...document.querySelectorAll('.power-body details')].find(d=>d.textContent.includes('Open benchmark task')).open=true;
+      [...document.querySelectorAll('#powerDialog button')].find(b=>b.textContent==='Open benchmark task').click();await new Promise(r=>setTimeout(r,30));
+      if(!executionCalls.some(r=>r.tool==='open-task'&&r.id==='fixture-task'))throw Error('Benchmark task link did not use recorded ID');
+    })()`);
+    for (const width of [1280, 640, 390]) {
+      win.setContentSize(width, width === 390 ? 844 : 800);
+      for (const name of ['Task budgets', 'Trial promotion', 'Workflow benchmarks']) {
+        await win.webContents.executeJavaScript(`atlasPower.show(${JSON.stringify(name)})`);
+        await new Promise((r) => setTimeout(r, 60));
+        await win.webContents.executeJavaScript(
+          `(()=>{const body=document.querySelector('.power-body');if(body.scrollWidth>body.clientWidth+2)throw Error('Execution tools overflow');for(const field of body.querySelectorAll('input,select,textarea'))if(field.getBoundingClientRect().right>body.getBoundingClientRect().right+1)throw Error('Execution field overflow');})()`,
+        );
+        fs.writeFileSync(
+          path.join(shots, name.toLowerCase().replaceAll(' ', '-') + '-' + width + '.png'),
+          (await offscreenFrame(win)).toPNG(),
+        );
       }
     }
     clearTimeout(timeout);

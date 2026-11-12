@@ -27,6 +27,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
     lastRun = null,
     baseline = null,
     profileBaseline = null;
+  const baselineStore = require('./visual-baselines').createVisualBaselines(directory);
   const key = '__atlasPick' + randomUUID().replaceAll('-', '');
   const state = () => ({
     open: Boolean(win && !win.isDestroyed()),
@@ -188,6 +189,20 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
     return { ...state(), url: recipe.url };
   }
   async function action(request) {
+    if (['saved-baselines', 'load-baseline', 'delete-baseline'].includes(request.action)) {
+      const saved = baselineStore;
+      if (request.action === 'saved-baselines') return saved.action({ ...request, action: 'list' });
+      if (request.action === 'delete-baseline') return saved.action({ ...request, action: 'remove' });
+      const cwd = await guard.assertProject(request.cwd);
+      if (!win || win.isDestroyed() || cwd !== root)
+        throw Error('Open this project preview before loading a baseline.');
+      const row = await saved.action({ ...request, action: 'load' });
+      if (row.url !== win.webContents.getURL()) throw Error('Open the saved baseline URL before loading it.');
+      const image = electron.nativeImage.createFromBuffer(row.bytes);
+      if (image.isEmpty()) throw Error('Saved baseline image is unavailable.');
+      baseline = { image, url: row.url, at: row.at };
+      return { loaded: true, image: image.toDataURL(), name: row.name, size: row.size };
+    }
     if (['browser-recipes', 'save-browser-recipe', 'delete-browser-recipe'].includes(request.action)) {
       const cwd = await guard.assertProject(request.cwd),
         file = path.join(directory, 'browser-check-recipes.json');
@@ -261,10 +276,13 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
               await Promise.race([
                 win.webContents.executeJavaScript(stepScript(step)),
                 new Promise((_, reject) => {
-                  timer = setTimeout(() => {
-                    if (win && !win.isDestroyed()) win.destroy();
-                    reject(Error('Preview became unresponsive and was closed.'));
-                  }, 5000);
+                  timer = setTimeout(
+                    () => {
+                      if (win && !win.isDestroyed()) win.destroy();
+                      reject(Error('Preview became unresponsive and was closed.'));
+                    },
+                    Math.min(11000, (step.timeoutMs || 4000) + 1000),
+                  );
                 }),
               ]);
             } finally {
@@ -300,6 +318,17 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       if (actualWidth !== request.width || actualHeight !== 720)
         win.setContentSize(2 * request.width - actualWidth, 2 * 720 - actualHeight);
       return { width: win.getContentSize()[0], height: win.getContentSize()[1] };
+    }
+    if (request.action === 'save-baseline') {
+      if (!baseline) throw Error('Capture or load a baseline first.');
+      return baselineStore.action({
+        action: 'save',
+        cwd: root,
+        name: request.name,
+        url: baseline.url,
+        size: baseline.image.getSize(),
+        bytes: baseline.image.toPNG(),
+      });
     }
     if (['visual-baseline', 'visual-compare'].includes(request.action)) {
       const image = await capturePreview(),

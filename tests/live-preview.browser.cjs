@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session } = require('electron'),
+const { app, BrowserWindow, session, nativeImage } = require('electron'),
   fs = require('node:fs/promises'),
   os = require('node:os'),
   path = require('node:path'),
@@ -42,6 +42,7 @@ app.whenReady().then(async () => {
     service = createLivePreview({
       electron: {
         session,
+        nativeImage,
         app,
         BrowserWindow: class extends BrowserWindow {
           constructor(options) {
@@ -109,13 +110,43 @@ app.whenReady().then(async () => {
       await windowRef.webContents.executeJavaScript('document.querySelector("#name").value'),
       'Browser fixture',
     );
+    await windowRef.webContents.executeJavaScript(
+      `setTimeout(()=>{const p=document.createElement('p');p.id='delayed';p.textContent='Ready now';document.body.append(p);},200);void 0;`,
+    );
+    const waited = await service.action({
+      action: 'browser-checks',
+      cwd,
+      steps: [
+        { action: 'wait-visible', selector: '#delayed', timeoutMs: 2000 },
+        { action: 'wait-text', selector: '#delayed', value: 'Ready now', timeoutMs: 1000 },
+      ],
+    });
+    assert.equal(waited.status, 'passed');
+    const expired = await service.action({
+      action: 'browser-checks',
+      cwd,
+      steps: [
+        { action: 'wait-visible', selector: '#never', timeoutMs: 100 },
+        { action: 'click', selector: '#apply' },
+      ],
+    });
+    assert.equal(expired.status, 'failed');
+    assert.equal(expired.skipped, 1);
     const baseline = await service.action({ action: 'visual-baseline', cwd });
     assert(baseline.image.startsWith('data:image/png'));
+    const savedBaseline = await service.action({ action: 'save-baseline', cwd, name: 'Before fixture change' });
+    assert.equal((await service.action({ action: 'saved-baselines', cwd })).length, 1);
     await windowRef.webContents.executeJavaScript('document.body.style.background="rgb(30,50,70)"');
     await new Promise((r) => setTimeout(r, 100));
     const comparison = await service.action({ action: 'visual-compare', cwd });
     assert(comparison.changedPercent > 10);
     assert(comparison.bounds.width > 100);
+    await service.action({ action: 'close' });
+    await service.action({ action: 'open', cwd, url });
+    const loaded = await service.action({ action: 'load-baseline', cwd, id: savedBaseline.id });
+    assert(loaded.image.startsWith('data:image/png'));
+    await service.action({ action: 'delete-baseline', cwd, id: savedBaseline.id });
+    assert.equal((await service.action({ action: 'saved-baselines', cwd })).length, 0);
     const profile = await service.action({ action: 'profile', cwd, baseline: true });
     assert(profile.domNodes > 5);
     assert(profile.rendererWorkingSetMB > 0);

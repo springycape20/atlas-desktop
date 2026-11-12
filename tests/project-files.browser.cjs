@@ -55,7 +55,7 @@ app.whenReady().then(async () => {
       if (file === '__mock.js')
         return new Response(
           mock +
-            `window.atlas.projectWorkbench=async request=>request.action==='health'?{name:'Demo project',types:['Node.js'],checks:['npm test'],results:[{name:'Node.js',status:'available',detail:'Fixture tool'}],note:'No scripts executed.'}:request.action==='list'?[]:{id:'checkpoint'};window.atlas.livePreview=async request=>request.action==='browser-recipes'?[]:request.action==='capture'?{attachments:[{id:'visual-screenshot',name:'preview.png',type:'image',size:100}],selected:{selector:'button#target',text:'Change this'},cwd:${JSON.stringify(project)}}:{open:true,running:false,output:'src/app.ts:12:3 example compile error'};`,
+            `window.atlas.projectWorkbench=async request=>request.action==='health'?{name:'Demo project',types:['Node.js'],checks:['npm test'],results:[{name:'Node.js',status:'available',detail:'Fixture tool'}],note:'No scripts executed.'}:request.action==='list'?[]:{id:'checkpoint'};window.atlas.livePreview=async request=>['browser-recipes','saved-baselines'].includes(request.action)?[]:request.action==='capture'?{attachments:[{id:'visual-screenshot',name:'preview.png',type:'image',size:100}],selected:{selector:'button#target',text:'Change this'},cwd:${JSON.stringify(project)}}:{open:true,running:false,output:'src/app.ts:12:3 example compile error'};`,
           { headers: { 'Content-Type': 'application/javascript' } },
         );
       if (file === '__file') {
@@ -113,7 +113,14 @@ app.whenReady().then(async () => {
         if (await run(source)) return;
         await new Promise((r) => setTimeout(r, 20));
       }
-      throw Error('UI did not reach: ' + source);
+      throw Error(
+        'UI did not reach: ' +
+          source +
+          ' · ' +
+          (await run(
+            `document.querySelector('.power-status')?.textContent || document.querySelector('#powerDialog')?.textContent.slice(-300) || ''`,
+          )),
+      );
     };
     await run(
       `(async()=>{await atlasAssistant.ready;await atlasColab.ready;await atlasAssistant.open('assistant-preview');})()`,
@@ -194,6 +201,7 @@ app.whenReady().then(async () => {
     for (const [width, height] of [
       [768, 800],
       [640, 700],
+      [390, 800],
     ]) {
       win.setContentSize(width, height);
       await new Promise((r) => setTimeout(r, 80));
@@ -207,12 +215,33 @@ app.whenReady().then(async () => {
     await run(`atlasProjectEditor.open({cwd:${JSON.stringify(project)}},'README.md')`);
     await wait(`document.querySelector('.project-editor-panel:not([hidden])')`);
     await run(
+      `(()=>{const tools=document.querySelector('.project-editor-actions'),visible=[...tools.querySelectorAll('button')].filter(button=>button.getClientRects().length);if(visible.length!==5)throw Error('Editor actions are not compact');const code=visible.find(button=>button.textContent==='Code ▾');code.click();})()`,
+    );
+    await wait(`document.querySelector('.project-editor-panel .action-menu-panel:popover-open')`);
+    await run(
+      `(()=>{const menu=document.querySelector('.project-editor-panel .action-menu-panel:popover-open');if(![...menu.querySelectorAll('button')].some(button=>button.textContent==='Definitions'))throw Error('Code actions missing');menu.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));if(document.activeElement.textContent!=='Code ▾')throw Error('Menu focus not restored');})()`,
+    );
+    await run(
       `(()=>{const input=document.querySelector('.project-editor-panel textarea');input.value+='\\nEdited locally';input.dispatchEvent(new Event('input'));[...document.querySelectorAll('.project-editor-panel button')].find(item=>item.textContent==='Save').click()})()`,
     );
     await wait(`document.querySelector('.project-editor-panel [role=status]').textContent.includes('Saved README.md')`);
     assert(fs.readFileSync(path.join(project, 'README.md'), 'utf8').includes('Edited locally'));
     await run(`atlasProjectEditor.open({cwd:${JSON.stringify(project)}},'style.css')`);
     assert.equal(await run(`document.querySelectorAll('.project-editor-panel [role=tab]').length`), 2);
+    await run(
+      `(()=>{atlas.languageServer=async request=>{window.editorLanguageRequest=request;return request.action==='hover'?{text:'Fixture hover for draft'}:{rows:[{label:'suggestedColor',text:'suggestedColor'}]};};const area=document.querySelector('.project-editor-panel textarea');area.value='sugg';area.dispatchEvent(new Event('input'));area.setSelectionRange(4,4);[...document.querySelectorAll('.project-editor-panel button')].find(b=>b.textContent==='Complete').click();})()`,
+    );
+    await wait(`document.querySelector('.editor-intelligence button')?.textContent==='suggestedColor'`);
+    await run(`document.querySelector('.editor-intelligence button').click()`);
+    assert.equal(await run(`document.querySelector('.project-editor-panel textarea').value`), 'suggestedColor');
+    assert.equal(await run(`editorLanguageRequest.text`), 'sugg');
+    await run(
+      `[...document.querySelectorAll('.project-editor-panel button')].find(b=>b.textContent==='Hover info').click()`,
+    );
+    await wait(`document.querySelector('.editor-intelligence').textContent.includes('Fixture hover')`);
+    await run(
+      `document.querySelector('.project-editor-panel textarea').value='body {color: red}';document.querySelector('.project-editor-panel textarea').dispatchEvent(new Event('input'))`,
+    );
     await run(
       `[...document.querySelectorAll('.project-editor-panel button')].find(item=>item.textContent==='Syntax preview').click()`,
     );
@@ -221,6 +250,7 @@ app.whenReady().then(async () => {
       [1280, 900],
       [768, 800],
       [640, 700],
+      [390, 800],
     ]) {
       win.setContentSize(width, height);
       await new Promise((r) => setTimeout(r, 80));

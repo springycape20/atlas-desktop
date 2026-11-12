@@ -462,6 +462,7 @@ function hydrateSettings(value) {
   $('#speakResponses').checked = settings.speakResponses !== false;
   $('#showReasoning').checked = settings.showReasoning === true;
   $('#launchAtStartup').checked = settings.launchAtStartup === true;
+  if ($('#autoDownloadUpdates')) $('#autoDownloadUpdates').checked = settings.autoDownloadUpdates === true;
   $('#trayEnabled').checked = settings.trayEnabled === true;
   $('#globalHotkey').value = settings.globalHotkey || '';
   $('#codexSandbox').value = settings.codexSandbox || 'workspace-write';
@@ -728,6 +729,7 @@ $('#settingsSave').addEventListener('click', async () => {
     speakResponses: $('#speakResponses').checked,
     showReasoning: $('#showReasoning').checked,
     launchAtStartup: $('#launchAtStartup').checked,
+    autoDownloadUpdates: $('#autoDownloadUpdates')?.checked === true,
     trayEnabled: $('#trayEnabled').checked,
     globalHotkey: $('#globalHotkey').value,
     voiceEngine: $('#voiceEngine').value,

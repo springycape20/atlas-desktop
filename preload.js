@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('atlas', {
   contextPreview: (request) => ipcRenderer.invoke('atlas:context-preview', request),
   milestoneHandovers: (request) => ipcRenderer.invoke('atlas:milestone-handovers', request),
   workSession: (request) => ipcRenderer.invoke('atlas:work-session', request),
+  taskBudgets: (request) => ipcRenderer.invoke('atlas:task-budgets', request),
+  workflowBenchmarks: (request) => ipcRenderer.invoke('atlas:workflow-benchmarks', request),
   checkLog: (request) => ipcRenderer.invoke('atlas:check-log', request),
   workflows: (request) => ipcRenderer.invoke('atlas:workflows', request),
   localModel: (request) => ipcRenderer.invoke('atlas:local-model', request),

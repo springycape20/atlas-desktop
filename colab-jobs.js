@@ -31,6 +31,7 @@ function createColabJobs({
   recordResumeCheckpoint,
   canStart = () => true,
   readSettings,
+  budgetLimits = async () => ({}),
   runProvider,
   reportsFolder,
   quitting,
@@ -153,6 +154,13 @@ function createColabJobs({
     )
       throw Error('This Colab chat is already working.');
     const usedMs = previous?.budget?.usedMs || 0;
+    const limits = previous?.budget?.limits || (await budgetLimits(folder));
+    if (
+      [...jobs.values()].some(
+        (job) => job.collaboration && job.colabChatId === request.chatId && job.status === 'running',
+      )
+    )
+      throw Error('This Colab chat is already working.');
     const id = randomUUID(),
       job = {
         id,
@@ -176,6 +184,7 @@ function createColabJobs({
         preparedProposals: structuredClone(previous?.preparedProposals || {}),
         workspaceId: previous?.workspaceId || preparedWorkspace?.id || reusable?.id || '',
         budget: {
+          ...previous?.budget,
           maxRuntimeSeconds: request.maxRuntimeSeconds,
           maxRounds: request.maxRounds,
           usedMs,
@@ -194,6 +203,7 @@ function createColabJobs({
       const controller = new AbortController();
       job.signal = controller.signal;
       job.interrupt = () => controller.abort();
+      job.budgetController = require('./task-budgets').attach(job, limits, () => controller.abort());
 
       const heartbeat = setInterval(() => {
         persist();
@@ -420,7 +430,7 @@ function createColabJobs({
         return job.result;
       } catch (error) {
         job.status = job.stopped || 'failed';
-        job.error = error.message;
+        job.error = job.budget?.stopReason || error.message;
         job.statusText = job.stopped === 'paused' ? 'Paused' : job.stopped === 'cancelled' ? 'Stopped' : job.error;
         if (!event.sender.isDestroyed())
           event.sender.send('atlas:collab-status', {
@@ -432,6 +442,8 @@ function createColabJobs({
           });
         throw error;
       } finally {
+        job.budgetController?.dispose();
+        delete job.budgetController;
         publishGraph(job, require('./colab-graph').terminal(job.graph, job.status, job.verification), event);
         await finishTask(job);
         clearInterval(heartbeat);

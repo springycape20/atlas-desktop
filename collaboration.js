@@ -774,6 +774,7 @@ function createCollaboration({
       const passSettings = readOnly
         ? { ...passChosen, readOnly: true, permissionBypass: false, codexSandbox: 'read-only' }
         : { ...passChosen };
+      passSettings.atlasBudgetPhase = target;
       // Reasoning summaries this pass's provider exposed (only with the setting on). They go into this
       // pass's report and graph node and are never put into any prompt.
       const reasoning = [],

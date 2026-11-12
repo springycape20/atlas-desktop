@@ -279,7 +279,7 @@ async function main() {
     );
     await sleep(200);
     const row = await run(
-      `(()=>{const list=atlasUi.hub.querySelector('[role=tablist]');return list.hidden?[${JSON.stringify(group)}]:[...list.children].map(b=>b.textContent)})()`,
+      `(()=>{const list=atlasUi.hub.querySelector('.shell-hub-rail [role=tablist]');return list.hidden?[${JSON.stringify(group)}]:[...list.children].map(b=>b.textContent)})()`,
     );
     names.push(...row.map((name) => ['tasks', name]));
   }
@@ -287,7 +287,9 @@ async function main() {
     await closeAll();
     await run(`atlasUi.open('${route}')`);
     await sleep(200);
-    const row = await run(`[...atlasUi.hub.querySelectorAll('[role=tablist] button')].map(b=>b.textContent)`);
+    const row = await run(
+      `[...atlasUi.hub.querySelectorAll('.shell-hub-rail [role=tablist] button')].map(b=>b.textContent)`,
+    );
     names.push(...row.map((name) => [route, name]));
   }
   await closeAll();

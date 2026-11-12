@@ -20,6 +20,25 @@
 .project-editor-panel[hidden] {
   display: none;
 }
+.editor-intelligence {
+  max-height: 180px;
+  overflow: auto;
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
+}
+.editor-intelligence:empty {
+  display: none;
+}
+.editor-intelligence button {
+  display: block;
+  max-width: 100%;
+  text-align: left;
+  margin: 4px 0;
+  white-space: normal;
+}
+.editor-intelligence pre {
+  white-space: pre-wrap;
+}
 .project-editor-surface {
   display: flex;
   flex: 1;

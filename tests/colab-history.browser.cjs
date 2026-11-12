@@ -216,6 +216,13 @@ app.whenReady().then(async () => {
       'PASS: IndexedDB migration/reload, 14 chats and 73 turns, project selection, old-message search, comparison, live-update scroll preservation and three viewport sizes.',
     );
     console.log('Preview: ' + path.join(temp, 'colab-history.png'));
+    await win.webContents.executeJavaScript(`(()=>{
+      const chat=atlasColab.current(),turns=atlasColab.history().find(row=>row.id===chat.id).turns;turns.splice(0,turns.length,...Array.from({length:5000},(_,i)=>({id:'large-'+i,role:i%2?'assistant':'user',content:i===3?'Ancient unique needle':'Message '+i})));atlasColab.selectChat(chat.id);
+      const count=()=>document.querySelectorAll('#colabTranscript .colab-message').length;
+      if(count()!==150)throw Error('Colab history was not bounded');
+      [...document.querySelectorAll('#colabTranscript button')].find(b=>b.textContent==='Older messages').click();if(count()!==150||!document.querySelector('#colabTranscript').textContent.includes('Message 4700'))throw Error('Colab older page missing');
+      const find=document.querySelector('#colabFind');find.value='Ancient unique needle';find.dispatchEvent(new Event('input'));if(count()!==1)throw Error('Colab search lost unmounted history');
+    })()`);
   } catch (error) {
     console.error(error);
     process.exitCode = 1;

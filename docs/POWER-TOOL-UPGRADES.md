@@ -1,5 +1,11 @@
 # Power tools (0.10.2)
 
+The 0.11.0 [execution controls](EXECUTION-CONTROLS.md) add task-level budgets, reviewed trial promotion and fixed-case workflow benchmarks. They are separate tools under Tasks and require explicit actions before running work or applying files.
+
+The 0.11.0 [background backups and saved visual references](BACKUPS-AND-VISUAL-BASELINES.md) add named persistent image baselines; unsaved references retain the session-only behavior described below.
+
+The 0.11.0 [workflow improvements](WORKFLOW-PERFORMANCE.md) add editor-integrated language-server controls, reviewed text renaming, explicit completion and a browser-step builder with conditional waits. These additions are included in 0.11.0.
+
 Open **Tasks > Power tools** for the twelve capabilities below. This update fills the language-server, browser-testing, visual-comparison and preview-profiling gaps and connects the existing workflow tools. These additions are not in the older 0.10.1 installer.
 
 | Capability | Where to use it | Behavior and limits |
@@ -23,7 +29,7 @@ Choose the project conversation first. Enter the absolute path of an installed s
 
 Save the configuration, then enter a project-relative filename and line/column, starting at 1. Choose **Go to definition**, **Find references** or **Refresh diagnostics**. Starting the process asks for approval. Click a returned location to open the existing project-file preview. Up to 200 allowed project locations are shown; external/private/denied locations are omitted. Files are bounded to 256 KB and valid UTF-8. One server/project is active at a time, with up to ten open document snapshots and a two-minute idle shutdown.
 
-The client uses the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/) over stdio with UTF-16 positions, full document open notifications, definition/reference requests and push or supported pull diagnostics. It does not implement completion, rename, code actions, incremental edits or server-driven file changes. No diagnostic report yet is shown distinctly from a received empty report; allow the server time to analyze, then refresh.
+The client uses the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/) over stdio with UTF-16 positions, full document open notifications, definition/reference requests and push or supported pull diagnostics. Version 0.11.0 adds draft-aware hover, plain-text completion and reviewed text renaming in the editor; see [workflow improvements](WORKFLOW-PERFORMANCE.md) for supported formats and limits. Code actions, incremental edits and unsolicited server-driven file changes remain unsupported. No diagnostic report yet is shown distinctly from a received empty report; allow the server time to analyze, then refresh.
 
 An approved language server is an ordinary local program with your account permissions. ATLAS path filtering controls what its UI sends and displays; it does not sandbox that program's independent file/network access. Configuration is local in `language-servers.json` and saving it runs nothing.
 
@@ -60,4 +66,4 @@ Profile baseline/current comparisons require the same full URL and viewport. DOM
 
 No new dependency, publisher telemetry, server or model request is added by these controls. Language-server configuration and browser recipes join managed local backups and are removed by the existing local-data reset; exported backups remain separate. Screenshots, browser errors and profile baselines stay in preview memory unless explicitly attached/copied. Third-party servers and approved project programs have their own behavior.
 
-This is a local development change, not a published release or an installer update. See the existing [project tools](PROJECT-TOOLS.md), [work sessions](WORK-SESSIONS.md) and [token efficiency](TOKEN-EFFICIENCY.md) guides for the previously available capabilities.
+The twelve original capabilities shipped in 0.10.2; the linked extensions ship in 0.11.0. See the existing [project tools](PROJECT-TOOLS.md), [work sessions](WORK-SESSIONS.md) and [token efficiency](TOKEN-EFFICIENCY.md) guides for the previously available capabilities.

@@ -1,13 +1,18 @@
 function cleanSteps(value) {
   if (!Array.isArray(value) || !value.length || value.length > 30) throw Error('Enter 1–30 browser steps.');
   return value.map((row) => {
-    if (!row || !['click', 'fill', 'assert-text', 'assert-visible', 'assert-path', 'wait'].includes(row.action))
+    if (
+      !row ||
+      !['click', 'fill', 'assert-text', 'assert-visible', 'assert-path', 'wait', 'wait-visible', 'wait-text'].includes(
+        row.action,
+      )
+    )
       throw Error('Unknown browser step.');
     if (row.action === 'wait') {
       if (!Number.isInteger(row.ms) || row.ms < 0 || row.ms > 5000) throw Error('Wait must be 0–5000 ms.');
       return { action: 'wait', ms: row.ms };
     }
-    if (typeof row.value !== 'string' && ['fill', 'assert-text', 'assert-path'].includes(row.action))
+    if (typeof row.value !== 'string' && ['fill', 'assert-text', 'assert-path', 'wait-text'].includes(row.action))
       throw Error('This step requires a text value.');
     if (row.value?.length > 4000) throw Error('Step text is too long.');
     if (
@@ -18,11 +23,20 @@ function cleanSteps(value) {
     return {
       action: row.action,
       ...(row.action === 'assert-path' ? {} : { selector: row.selector }),
-      ...(['fill', 'assert-text', 'assert-path'].includes(row.action) ? { value: row.value } : {}),
+      ...(['fill', 'assert-text', 'assert-path', 'wait-text'].includes(row.action) ? { value: row.value } : {}),
+      ...(['wait-visible', 'wait-text'].includes(row.action)
+        ? {
+            timeoutMs:
+              Number.isInteger(row.timeoutMs) && row.timeoutMs >= 100 && row.timeoutMs <= 10000 ? row.timeoutMs : 5000,
+          }
+        : {}),
     };
   });
 }
 function stepScript(step) {
+  if (step.action === 'wait-visible' || step.action === 'wait-text') {
+    return `(async()=>{const step=${JSON.stringify(step)},start=Date.now();while(true){const el=document.querySelector(step.selector);if(el){const r=el.getBoundingClientRect(),s=getComputedStyle(el);if(step.action==='wait-text'?(el.textContent||'').includes(step.value):r.width&&r.height&&s.display!=='none'&&s.visibility!=='hidden'&&s.opacity!=='0')return true;}if(Date.now()-start>=step.timeoutMs)throw Error('Timed out waiting for '+step.selector);await new Promise(r=>setTimeout(r,50));}})()`;
+  }
   return `(() => {
     const step=${JSON.stringify(step)};
     if(step.action==='assert-path') { if(location.pathname+location.search!==step.value)throw Error('Page path did not match');return true; }

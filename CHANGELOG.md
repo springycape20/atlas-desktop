@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.11.0 — 13 November 2026
+
+- Expands Ctrl+K navigation to every page, tool, setting and saved chat, including legacy dialogs.
+
+- Add opt-in automatic update downloads in Settings and a launch announcement for available releases, with Later, progress and explicit Restart and install. Preserve running-work/recovery guards and coalesce duplicate install requests.
+
+- Add project task budgets for duration, ATLAS invocations, repair passes and estimated outgoing text, with saved counters and optional stronger-model confirmation.
+- Add selective trial promotion with three-way conflict checks, native approval, stale-file protection and durable undo that preserves newer edits.
+- Add fixed-case workflow benchmarks using pinned models and fresh checkpoint copies, with approved batches, cancellation, measured check/usage results and local JSON export.
+
+- Builds local-record backups in a cancellable worker with progress, owned custom automatic-backup destinations and a Back up now action.
+- Adds project-scoped named visual baselines that persist across app restarts, with integrity checks and delete controls.
+
+- Simplifies the editor into Save plus File/Edit/Code/View menus, adds searchable tool navigation with narrow-window dropdowns, and divides Live preview into focused views.
+- Groups secondary actions into accessible menus across project tools and the terminal, and improves shared tool typography and spacing.
+
+- Pages long Assistant and Colab conversations in batches of 150, with search across unmounted message text and full retained history.
+- Connects editor drafts and cursor positions to language-server definitions, references, diagnostics, hover and explicit plain-text completion.
+- Adds reviewed, conflict-protected text renaming through supported language servers, with existing editor undo.
+- Adds a browser-step builder and conditional wait-visible/wait-text steps with timeout and stop-on-failure behavior.
+
+See [workflow performance](docs/WORKFLOW-PERFORMANCE.md) for behavior and limits.
+
 ## 0.10.5 — 2 November 2026
 
 - Adds chat folders and an archive to Assistant and Colab, with filtering and search that include them.

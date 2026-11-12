@@ -136,7 +136,8 @@
   }
   find.oninput = () => {
     match = 0;
-    refreshMatches();
+    turnPage = 0;
+    renderTurns(currentTurns);
     showMatch();
   };
   previous.onclick = () => {
@@ -148,6 +149,9 @@
     showMatch();
   };
   latest.onclick = () => {
+    turnPage = 0;
+    find.value = '';
+    renderTurns(currentTurns);
     follow = true;
     response.scrollTop = response.scrollHeight;
     latest.hidden = true;
@@ -164,6 +168,25 @@
   }).observe(output, { subtree: true, childList: true, characterData: true });
   const turnNodes = new Map();
   let renderedTurnsChat = '';
+  let turnPage = 0,
+    currentTurns = [];
+  const paging = node('div', undefined, 'assistant-chat-find'),
+    older = node('button', 'Older messages', 'quiet-button'),
+    newer = node('button', 'Newer messages', 'quiet-button'),
+    pageInfo = node('span');
+  older.type = newer.type = 'button';
+  paging.append(older, pageInfo, newer);
+  tools.after(paging);
+  older.onclick = () => {
+    turnPage++;
+    renderTurns(currentTurns);
+    response.scrollTop = 0;
+  };
+  newer.onclick = () => {
+    turnPage--;
+    renderTurns(currentTurns);
+    response.scrollTop = 0;
+  };
   const { memo, reconcile: reconcileNodes, chatVisible, fillFolderFilter } = window.atlasChatRender;
   // Editing also branches, so the original chat and its answers are never overwritten.
   async function branchFrom(index, turn, edit) {
@@ -190,12 +213,29 @@
     actions.append(button);
   };
   function renderTurns(turns) {
+    currentTurns = turns;
     if (renderedTurnsChat !== selected) {
       turnNodes.clear();
+      turnPage = 0;
       renderedTurnsChat = selected;
     }
     const ordered = [];
-    for (const [index, turn] of turns.entries()) {
+    const page = window.atlasChatRender.messagePage(turns, find.value, turnPage);
+    turnPage = page.page;
+    older.disabled = page.page >= page.pages - 1;
+    newer.disabled = page.page === 0;
+    paging.hidden = page.total <= 150;
+    paging.style.display = paging.hidden ? 'none' : 'flex';
+    paging.style.flexWrap = 'wrap';
+    pageInfo.textContent =
+      page.total +
+      (find.value.trim() ? ' matching messages' : ' messages') +
+      ' · page ' +
+      (page.pages - page.page) +
+      ' of ' +
+      page.pages;
+    for (const index of page.indices) {
+      const turn = turns[index];
       const cached = memo(
         turnNodes,
         index,
@@ -226,7 +266,8 @@
       ordered.push(cached);
     }
     reconcileNodes(past, ordered);
-    for (const key of turnNodes.keys()) if (key >= turns.length) turnNodes.delete(key);
+    const visible = new Set(page.indices);
+    for (const key of turnNodes.keys()) if (!visible.has(key)) turnNodes.delete(key);
     refreshMatches();
   }
   function renderList() {
@@ -383,6 +424,7 @@
   importButton.onclick = () => void window.atlasWorkspace.importChats().catch((error) => toast(error.message));
   search.oninput = projects.onchange = folderPicker.onchange = renderList;
   sendMessage = async function (prompt, options = {}) {
+    turnPage = 0;
     if (/^(?:tell me more|read (?:the )?(?:full answer|full reply|details))[.!? ]*$/i.test(prompt) && lastSpokenAnswer)
       return originalSend(prompt, options);
     const id = options.conversationId || conversationId || crypto.randomUUID(),

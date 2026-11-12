@@ -226,6 +226,7 @@
     pane.dataset.expanded = String(maximized);
   });
   button('Hide', hide);
+  window.atlasUi.compactActions(header, 2, 'Session');
   const commandTools = node('div');
   commandTools.className = 'terminal-command-tools';
   button('Run command', send, commandTools);

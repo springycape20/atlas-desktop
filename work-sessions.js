@@ -21,6 +21,7 @@ function createWorkSessions({
   const guard = require('./project-root').createProjectRootGuard(),
     previews = new Map();
   let serial = Promise.resolve();
+  const promotion = require('./trial-promotion').createTrialPromotion({ directory, files, busy, approve });
   const read = async () =>
     JSON.parse(
       await fs.readFile(storeFile, 'utf8').catch((e) => {
@@ -115,6 +116,22 @@ function createWorkSessions({
   }
   async function perform(request = {}) {
     const state = await read();
+    if (request.action === 'promotion-preview') {
+      const row = state.branches.find((row) => row.id === request.id),
+        checkpoint = row && state.snapshots.find((item) => item.id === row.checkpointId);
+      if (!row || !checkpoint) throw Error('Choose a retained trial checkpoint.');
+      const base = JSON.parse(
+        await fs.readFile(
+          path.join(await managed(['task-evidence', 'trial-snapshots']), checkpoint.id + '.json'),
+          'utf8',
+        ),
+      );
+      if (hash(JSON.stringify(base)) !== checkpoint.digest) throw Error('Checkpoint integrity check failed.');
+      await guard.assertProject(row.source);
+      return promotion.preview({ source: row.source, base, trial: { ...(await scan(row.cwd)), cwd: row.cwd } });
+    }
+    if (request.action?.startsWith('promotion-'))
+      return promotion.action({ ...request, action: request.action.slice(10) });
     if (request.action === 'list')
       return {
         snapshots: state.snapshots,

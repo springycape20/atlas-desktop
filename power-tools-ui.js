@@ -80,6 +80,26 @@
     if (!dialog.open && !embedded) dialog.showModal();
     try {
       await views.get(name)?.({ body, status, node, button, current: () => id === sequence });
+      if (id === sequence) {
+        for (const parent of [body, ...body.querySelectorAll('section')]) {
+          let run = [];
+          const finish = () => {
+            if (run.length > 3) {
+              const actions = node('div');
+              actions.className = 'power-actions';
+              run[0].before(actions);
+              for (const button of run) actions.append(button);
+            }
+            run = [];
+          };
+          for (const child of [...parent.children]) {
+            if (child.tagName === 'BUTTON') run.push(child);
+            else finish();
+          }
+          finish();
+        }
+        for (const actions of body.querySelectorAll('.power-actions')) window.atlasUi.compactActions(actions);
+      }
     } catch (error) {
       if (id === sequence) status.textContent = error.message;
     }

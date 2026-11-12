@@ -112,6 +112,79 @@ test('new denied paths block copying old checkpoint contents and unsafe roots fa
   await assert.rejects(f.service.action({ action: 'fork', id: checkpoint.id }), /denied/);
   await assert.rejects(f.service.action({ action: 'capture', cwd: os.tmpdir() }), /dedicated project/);
 });
+test('trial promotion previews selective additions, edits and deletions, then supports durable undo', async (t) => {
+  const f = await fixture(t),
+    checkpoint = await f.service.action({ action: 'capture', cwd: f.cwd }),
+    trial = await f.service.action({ action: 'fork', id: checkpoint.id });
+  await fs.writeFile(path.join(trial.cwd, 'app.js'), 'reviewed trial\n');
+  await fs.mkdir(path.join(trial.cwd, 'src'));
+  await fs.writeFile(path.join(trial.cwd, 'src', 'added.js'), 'new\n');
+  await fs.unlink(path.join(trial.cwd, 'package.json'));
+  const preview = await f.service.action({ action: 'promotion-preview', id: trial.id });
+  assert.equal(preview.files.length, 3);
+  assert.ok(preview.files.every((row) => !row.conflict));
+  assert.match(preview.files.find((row) => row.path === 'app.js').patch, /reviewed trial/);
+  assert.match(await fs.readFile(path.join(f.cwd, 'app.js'), 'utf8'), /return 1/);
+  const result = await f.service.action({
+    action: 'promotion-apply',
+    id: preview.id,
+    paths: ['app.js', 'src/added.js', 'package.json'],
+  });
+  assert.equal(result.applied.length, 3);
+  assert.equal(result.error, undefined);
+  assert.equal(await fs.readFile(path.join(f.cwd, 'app.js'), 'utf8'), 'reviewed trial\n');
+  await assert.rejects(fs.stat(path.join(f.cwd, 'package.json')), /ENOENT/);
+  const records = await f.service.action({ action: 'promotion-list' });
+  assert.equal(records[0].files, 3);
+  await f.service.action({ action: 'promotion-undo', id: result.undoId });
+  assert.match(await fs.readFile(path.join(f.cwd, 'app.js'), 'utf8'), /return 1/);
+  await assert.rejects(fs.stat(path.join(f.cwd, 'src', 'added.js')), /ENOENT/);
+  assert.ok(await fs.stat(path.join(f.cwd, 'package.json')));
+  assert.equal((await f.service.action({ action: 'promotion-list' })).length, 0);
+});
+test('promotion blocks conflicts, stale trial/source changes, denied files and cancelled approval', async (t) => {
+  const f = await fixture(t),
+    checkpoint = await f.service.action({ action: 'capture', cwd: f.cwd }),
+    trial = await f.service.action({ action: 'fork', id: checkpoint.id });
+  await fs.writeFile(path.join(trial.cwd, 'app.js'), 'trial');
+  await fs.writeFile(path.join(f.cwd, 'app.js'), 'source changed');
+  let preview = await f.service.action({ action: 'promotion-preview', id: trial.id });
+  assert.equal(preview.files[0].conflict, true);
+  await assert.rejects(
+    f.service.action({ action: 'promotion-apply', id: preview.id, paths: ['app.js'] }),
+    /Conflicting/,
+  );
+  await fs.writeFile(path.join(f.cwd, 'app.js'), 'export function start(){ return 1; }\n');
+  preview = await f.service.action({ action: 'promotion-preview', id: trial.id });
+  await fs.writeFile(path.join(trial.cwd, 'app.js'), 'newer trial');
+  await assert.rejects(f.service.action({ action: 'promotion-apply', id: preview.id, paths: ['app.js'] }), /changed/);
+  preview = await f.service.action({ action: 'promotion-preview', id: trial.id });
+  f.setAllow(false);
+  assert.equal(
+    (await f.service.action({ action: 'promotion-apply', id: preview.id, paths: ['app.js'] })).cancelled,
+    true,
+  );
+  f.setAllow(true);
+  f.setDenied([path.join(f.cwd, 'app.js')]);
+  await assert.rejects(f.service.action({ action: 'promotion-apply', id: preview.id, paths: ['app.js'] }), /denied/);
+  assert.match(await fs.readFile(path.join(f.cwd, 'app.js'), 'utf8'), /return 1/);
+});
+test('promotion undo preserves newer edits and rejects unsupported binary/BOM changes', async (t) => {
+  const f = await fixture(t),
+    checkpoint = await f.service.action({ action: 'capture', cwd: f.cwd }),
+    trial = await f.service.action({ action: 'fork', id: checkpoint.id });
+  await fs.writeFile(path.join(trial.cwd, 'app.js'), 'trial');
+  await fs.writeFile(path.join(trial.cwd, 'bom.js'), Buffer.from([239, 187, 191, 65]));
+  await fs.writeFile(path.join(trial.cwd, 'asset.bin'), Buffer.from([0, 1, 2]));
+  const preview = await f.service.action({ action: 'promotion-preview', id: trial.id });
+  assert.equal(preview.files.filter((row) => row.unsupported).length, 2);
+  const result = await f.service.action({ action: 'promotion-apply', id: preview.id, paths: ['app.js'] });
+  await fs.writeFile(path.join(f.cwd, 'app.js'), 'newer user edit');
+  await assert.rejects(f.service.action({ action: 'promotion-undo', id: result.undoId }), /Newer edits/);
+  assert.equal(await fs.readFile(path.join(f.cwd, 'app.js'), 'utf8'), 'newer user edit');
+  await f.service.action({ action: 'promotion-forget', id: result.undoId });
+  assert.equal((await f.service.action({ action: 'promotion-list' })).length, 0);
+});
 test('context hashes flag additions, edits and deletions without storing source contents', async (t) => {
   const f = await fixture(t),
     receipt = await f.service.action({ action: 'remember-context', cwd: f.cwd });

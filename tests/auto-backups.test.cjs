@@ -22,6 +22,50 @@ async function fixture(t, options = {}) {
   };
 }
 const names = async (directory) => fs.readdir(path.join(directory, 'auto-backups')).catch(() => []);
+test('custom destinations are scoped to this data directory and preserve old copies when reset', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-backup-location-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const directory = path.join(root, 'data'),
+    outside = path.join(root, 'outside');
+  await fs.mkdir(directory);
+  await fs.mkdir(outside);
+  const service = createAutoBackups({ directory, make: async () => Buffer.from('fixture') });
+  const selected = await service.setFolder(outside);
+  assert.equal(selected.folder, path.join(outside, 'ATLAS automatic backups'));
+  await service.tick({ force: true });
+  assert.equal((await service.status()).copies, 1);
+  await service.setFolder();
+  assert.equal((await service.status()).folder, path.join(directory, 'auto-backups'));
+  assert.equal((await fs.readdir(selected.folder)).filter((name) => name.endsWith('.atlas-backup')).length, 1);
+  await assert.rejects(service.setFolder(directory), /outside ATLAS/);
+  const other = path.join(root, 'other');
+  await fs.mkdir(other);
+  await assert.rejects(
+    createAutoBackups({ directory: other, make: async () => Buffer.from('other') }).setFolder(outside),
+    /another/,
+  );
+});
+test('overlapping automatic runs share one operation and toggling off during a run is preserved', async (t) => {
+  let release,
+    calls = 0;
+  const gate = new Promise((resolve) => (release = resolve));
+  const { backups } = await fixture(t, {
+    make: async () => {
+      calls++;
+      await gate;
+      return Buffer.from('copy');
+    },
+  });
+  const a = backups.tick(),
+    b = backups.tick();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(calls, 1);
+  assert.equal((await backups.status()).running, true);
+  await backups.setEnabled(false);
+  release();
+  await Promise.all([a, b]);
+  assert.equal((await backups.status()).enabled, false);
+});
 test('automatic backups run once a day and keep only the newest copies', async (t) => {
   const { directory, clock, backups } = await fixture(t, { keep: 2 });
   assert.equal(await backups.tick(), true);

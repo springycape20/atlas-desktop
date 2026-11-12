@@ -285,6 +285,17 @@ app.whenReady().then(async () => {
       if(!document.body.classList.contains('chat-lists-hidden'))throw Error('Blocked reads prevented list toggling');
     })()`);
     console.log('PASS: Chat lists work when preference reads are blocked or writes exceed storage quota.');
+    await win.webContents.executeJavaScript(`(async()=>{
+      atlas.historyRead=async()=>({id:'large-fixture',cwd:'C:/Projects',turns:Array.from({length:5000},(_,i)=>({role:i%2?'assistant':'user',content:i===3?'Ancient unique needle':'Message '+i}))});
+      await atlasAssistant.open('large-fixture');
+      const count=()=>document.querySelectorAll('.assistant-past .assistant-turn').length;
+      if(count()!==150)throw Error('Large history was not bounded');
+      [...document.querySelectorAll('.assistant-chat-find button')].find(b=>b.textContent==='Older messages').click();
+      if(count()!==150||!document.querySelector('.assistant-past').textContent.includes('Message 4700'))throw Error('Older page missing');
+      const find=document.querySelector('[aria-label="Find Assistant messages"]');find.value='Ancient unique needle';find.dispatchEvent(new Event('input'));
+      if(count()!==1||!document.querySelector('.assistant-past').textContent.includes('Ancient unique needle'))throw Error('Search lost unmounted history');
+      find.value='';find.dispatchEvent(new Event('input'));if(count()!==150)throw Error('Search reset lost latest page');
+    })()`);
   } catch (error) {
     console.error(error);
     process.exitCode = 1;

@@ -17,10 +17,25 @@ const tooLarge = () =>
   Object.assign(Error('ATLAS records are over the backup limit of 256 MiB or 20,000 files.'), {
     code: 'ATLAS_BACKUP_LIMIT',
   });
-function collect(root) {
+function collect(root, { progress = () => {} } = {}) {
   assertDirectory(root);
   const rows = [];
   let total = 0;
+  const record = (name, file, stat) => {
+    const bytes = fs.readFileSync(file),
+      after = fs.lstatSync(file);
+    if (
+      after.isSymbolicLink() ||
+      stat.ino !== after.ino ||
+      stat.size !== after.size ||
+      stat.mtimeMs !== after.mtimeMs ||
+      bytes.length !== after.size
+    )
+      throw Error('Local records changed during backup. Try again after saves finish.');
+    rows.push({ path: name, size: bytes.length, sha256: digest(bytes), data: bytes.toString('base64') });
+    if (rows.length % 100 === 0) progress({ phase: 'collecting', files: rows.length, bytes: total });
+  };
+  progress({ phase: 'collecting', files: 0, bytes: 0 });
   function walk(folder, prefix) {
     for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
       const name = prefix + entry.name,
@@ -30,8 +45,7 @@ function collect(root) {
       if (entry.isDirectory()) walk(file, name + '/');
       else if (entry.isFile()) {
         if ((total += stat.size) > 256 * 1024 * 1024 || rows.length >= 20000) throw tooLarge();
-        const bytes = fs.readFileSync(file);
-        rows.push({ path: name, size: bytes.length, sha256: digest(bytes), data: bytes.toString('base64') });
+        record(name, file, stat);
       }
     }
   }
@@ -43,8 +57,7 @@ function collect(root) {
     if (stat.isDirectory()) walk(file, name + '/');
     else {
       if ((total += stat.size) > 256 * 1024 * 1024 || rows.length >= 20000) throw tooLarge();
-      const bytes = fs.readFileSync(file);
-      rows.push({ path: name, size: bytes.length, sha256: digest(bytes), data: bytes.toString('base64') });
+      record(name, file, stat);
     }
   }
   return rows;
@@ -65,8 +78,9 @@ function validate(bytes) {
   }
   return value;
 }
-function createBackup(root, version, renderer) {
-  const files = collect(root);
+function createBackup(root, version, renderer, { progress = () => {} } = {}) {
+  const files = collect(root, { progress });
+  progress({ phase: 'compressing', files: files.length, bytes: files.reduce((sum, row) => sum + row.size, 0) });
   return zlib.gzipSync(
     Buffer.from(JSON.stringify({ format: 'atlas-backup-v1', version, createdAt: Date.now(), files, renderer })),
   );
