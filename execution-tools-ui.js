@@ -220,39 +220,24 @@
         'Save a fixed case set and configurations, then explicitly approve a batch. Every run starts from the same checkpoint. No results are merged automatically. Provider accounts may incur usage; project checks can execute code. Inspect actual check evidence as well as the measurements.',
       ),
     );
-    const trials = await api.workSession({ action: 'list' }),
-      state = await api.workflowBenchmarks({ action: 'status' });
+    const [trials, state, preferences] = await Promise.all([
+      api.workSession({ action: 'list' }),
+      api.workflowBenchmarks({ action: 'status' }),
+      api.getSettings(),
+    ]);
     if (!current()) return;
     const create = node('details');
     create.append(node('summary', 'Create a benchmark suite'));
     body.append(create);
     const name = field(create, node, 'Suite name'),
       checkpoint = select(create, node, 'Benchmark checkpoint', trials.snapshots || []),
-      cases = field(
-        create,
+      builder = window.atlasBenchmarkBuilder({
+        body: create,
         node,
-        'Fixed cases (JSON)',
-        JSON.stringify(
-          [{ name: 'Case 1', task: 'Replace with a fixed task.', criteria: 'Define observable success.', checks: '' }],
-          null,
-          2,
-        ),
-        true,
-      ),
-      configs = field(
-        create,
-        node,
-        'Configurations (JSON)',
-        JSON.stringify(
-          [
-            { name: 'Codex default', provider: 'codex', model: '', effort: 'medium' },
-            { name: 'Claude default', provider: 'claude', model: '', effort: 'medium' },
-          ],
-          null,
-          2,
-        ),
-        true,
-      );
+        button,
+        settings: preferences,
+        catalog: window.atlasDiscoveredModels || {},
+      });
     create.append(
       node(
         'p',
@@ -266,8 +251,7 @@
           action: 'save',
           name: name.value,
           checkpointId: checkpoint.value,
-          cases: JSON.parse(cases.value),
-          configs: JSON.parse(configs.value),
+          ...builder.read(),
         });
         await power.show('Workflow benchmarks');
       },

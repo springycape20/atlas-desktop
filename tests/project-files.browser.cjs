@@ -228,6 +228,13 @@ app.whenReady().then(async () => {
     assert(fs.readFileSync(path.join(project, 'README.md'), 'utf8').includes('Edited locally'));
     await run(`atlasProjectEditor.open({cwd:${JSON.stringify(project)}},'style.css')`);
     assert.equal(await run(`document.querySelectorAll('.project-editor-panel [role=tab]').length`), 2);
+    await run(`(async()=>{
+      const context={cwd:${JSON.stringify(project)}},saved=atlasProjectEditor.snapshot(context.cwd);
+      if(saved.files.length!==2||saved.files.includes(undefined)||saved.draft)throw Error('Editor snapshot missing file paths');
+      [...document.querySelectorAll('.project-editor-panel button')].find(button=>button.textContent==='Close tab').click();
+      const failures=await atlasProjectEditor.restore(context,saved);
+      if(failures.length||document.querySelectorAll('.project-editor-panel [role=tab]').length!==2)throw Error('Editor restoration failed');
+    })()`);
     await run(
       `(()=>{atlas.languageServer=async request=>{window.editorLanguageRequest=request;return request.action==='hover'?{text:'Fixture hover for draft'}:{rows:[{label:'suggestedColor',text:'suggestedColor'}]};};const area=document.querySelector('.project-editor-panel textarea');area.value='sugg';area.dispatchEvent(new Event('input'));area.setSelectionRange(4,4);[...document.querySelectorAll('.project-editor-panel button')].find(b=>b.textContent==='Complete').click();})()`,
     );

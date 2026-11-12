@@ -72,7 +72,7 @@ test('editor draft hover and completion do not write the source file or return e
   });
   assert.deepEqual(
     completion.rows.map((row) => row.text),
-    ['console'],
+    ['console', 'snippet'],
   );
   assert.equal(await fs.readFile(file, 'utf8'), original);
 });
@@ -105,6 +105,28 @@ test('rename is previewed, conflict checked, applied and undoable through the ed
     editor.action(project, { action: 'editor-rename-preview', edit: value.edit }),
     /byte-order mark/,
   );
+});
+
+test('quick fixes resolve to reviewed workspace edits and organise imports requests stay edit-only', async (t) => {
+  const { project, service } = await fixture(t),
+    files = require('../project-files').createProjectFiles(),
+    editor = require('../project-editor').createProjectEditor({ files });
+  const actions = await service.action({ action: 'code-actions', cwd: project, path: 'main.js' });
+  assert.equal(actions.rows.length, 1);
+  assert.equal(actions.rows[0].title, 'Fix fixture');
+  const before = await fs.readFile(path.join(project, 'main.js'), 'utf8');
+  await fs.writeFile(path.join(project, 'main.js'), '// outside change\n' + before);
+  await assert.rejects(
+    editor.action(project, { action: 'editor-workspace-preview', edit: actions.rows[0].edit }),
+    /Document changed/,
+  );
+  await fs.writeFile(path.join(project, 'main.js'), before);
+  const plan = await editor.action(project, { action: 'editor-workspace-preview', edit: actions.rows[0].edit });
+  assert.equal(await fs.readFile(path.join(project, 'main.js'), 'utf8'), before);
+  await editor.action(project, { action: 'editor-workspace-apply', id: plan.id });
+  assert.equal(await fs.readFile(path.join(project, 'main.js'), 'utf8'), '// fixed\n' + before);
+  const imports = await service.action({ action: 'organize-imports', cwd: project, path: 'main.js' });
+  assert.equal(imports.rows[0].title, 'Organise fixture imports');
 });
 test('language server save executes nothing; denied start and private files never spawn', async (t) => {
   let spawns = 0;

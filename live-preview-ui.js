@@ -161,6 +161,19 @@
     );
     const stepsLabel = node('label', 'Browser steps (JSON array)'),
       steps = node('textarea');
+    button('Record interactions…', async () => {
+      const value = await call('record-start');
+      status.textContent = value.cancelled
+        ? 'Recording cancelled.'
+        : 'Recording clicks and changed fields. Use test data, then stop and review here.';
+    });
+    button('Stop recording and review', async () => {
+      const value = await call('record-stop');
+      steps.value = JSON.stringify(value.steps, null, 2);
+      status.textContent =
+        value.steps.length +
+        ' steps captured. Review all values before saving or running; private-field detection is heuristic.';
+    });
     steps.rows = 8;
     steps.setAttribute('aria-label', 'Browser steps (JSON array)');
     steps.value = JSON.stringify(
@@ -390,8 +403,22 @@
       figure.append(node('figcaption', label), img);
       images.append(figure);
     };
+    const maskBox = node('details'),
+      masks = node('textarea');
+    maskBox.append(node('summary', 'Ignore dynamic regions'));
+    masks.value = '[]';
+    masks.rows = 3;
+    masks.setAttribute('aria-label', 'Ignored screenshot rectangles');
+    maskBox.append(
+      node(
+        'p',
+        'Before capturing a baseline, enter up to 20 screenshot pixel rectangles: [{"x":0,"y":0,"width":100,"height":40}]. Masks are saved with the baseline. CSS animations, transitions and the caret are paused during capture; canvas and live data can still change.',
+      ),
+      masks,
+    );
+    body.append(maskBox);
     button('Capture visual baseline', async () => {
-      const value = await call('visual-baseline');
+      const value = await call('visual-baseline', { regions: JSON.parse(masks.value) });
       if (!current()) return;
       images.replaceChildren();
       addImage('Baseline', value.image);

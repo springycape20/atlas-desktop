@@ -325,6 +325,8 @@
       'Project editor',
       'Find and replace',
       'Terminal',
+      'Debugger',
+      'Saved workspace',
       'Git',
       'Services',
       'Environment preflight',

@@ -3,6 +3,7 @@ const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const version = (bytes, mode) => createHash('sha256').update(bytes).digest('hex') + ':' + (mode & 511);
 function createProjectEditor({ files, busy = () => false }) {
+  const workspaceEdits = require('./workspace-edits').createWorkspaceEdits({ files, busy });
   const plans = new Map(),
     history = new Map();
   let serial = Promise.resolve();
@@ -59,6 +60,8 @@ function createProjectEditor({ files, busy = () => false }) {
     }
   }
   async function action(root, request) {
+    if (request.action?.startsWith('editor-workspace-'))
+      return workspaceEdits.action(root, { ...request, action: request.action.slice('editor-workspace-'.length) });
     if (request.action === 'editor-read') return read(root, request.path);
     if (request.action === 'editor-rename-preview') {
       const edit = request.edit;

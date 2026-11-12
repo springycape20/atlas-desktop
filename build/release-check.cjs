@@ -69,6 +69,7 @@ function main() {
   ok = run('installer verification', 'node', ['build/verify-release.cjs']) && ok;
   ok = run('packaged PDF extraction', 'npm', ['run', 'test:pdf-package-ui']) && ok;
   ok = run('packaged backup worker', 'npm', ['run', 'test:backup-package-ui']) && ok;
+  ok = run('packaged Node debugger', 'npm', ['run', 'test:debugger-package-ui']) && ok;
   console.log(
     ok
       ? `\nReady for a PR. Still needed by hand, see docs/RELEASE-SECURITY.md:\n- Run the packaged update check and record it in the release review.\n- After CI passes and the owner confirms: merge, then tag v${version}.\n- Confirm the release build finished and published its three files.`

@@ -222,6 +222,11 @@ test('sensitive review masks findings and integration manifests do not claim enf
   const value = require('../sensitive-context').inspectSensitive('password=very-secret-value\nuser@example.com');
   assert.equal(value.findings.length, 2);
   assert(!JSON.stringify(value).includes('very-secret-value'));
+  for (const source of ['const password = "fixture-secret-value";', '{"api_key":"fixture-secret-value"}']) {
+    const quoted = require('../sensitive-context').inspectSensitive(JSON.stringify({ text: source }));
+    assert(quoted.findings.some((row) => row.kind === 'Credential assignment'));
+    assert(!JSON.stringify(quoted).includes('fixture-secret-value'));
+  }
   const manifest = require('../integration-manifest').manifest({ id: 'demo', name: 'Demo', command: 'demo', args: [] });
   assert.equal(manifest.enforced, false);
   assert.equal(manifest.declared.network, 'unspecified');

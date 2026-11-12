@@ -317,7 +317,7 @@ async function recordResumeCheckpoint(job, label) {
 const approvals = require('./approval-manager').createApprovalManager((value) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('atlas:approvals', value);
 });
-let productivity, startAssistant;
+let productivity, startAssistant, nodeDebugger;
 let integrationService, desktopIndicator;
 function controlIndicator() {
   return (desktopIndicator ||= require('./desktop-overlay').createDesktopOverlay({
@@ -501,7 +501,7 @@ const colabJobs = require('./colab-jobs').createColabJobs({
   beginChanges,
   finishTask,
   recordResumeCheckpoint,
-  canStart: () => !advancedWorkflowsService?.active(),
+  canStart: () => !advancedWorkflowsService?.active() && !nodeDebugger?.active(),
   readSettings: readAppSettings,
   budgetLimits: (cwd) => taskBudgets().action({ cwd }),
   runProvider,
@@ -928,16 +928,18 @@ function isUsageLimitError(error) {
 function atlasHistoryPath() {
   return path.join(app.getPath('userData'), 'conversations.json');
 }
-let atlasHistoryCache;
+let atlasHistoryStore;
+function chatHistory() {
+  return (atlasHistoryStore ||= require('./chunked-history').createChunkedHistory(app.getPath('userData'), {
+    legacy: async () => {
+      const saved = require('./atomic-store').readStored(atlasHistoryPath(), Array.isArray);
+      if (saved?.damaged) warnDamaged('your saved chats', saved.damaged);
+      return (saved?.value || []).filter((item) => item && typeof item.id === 'string' && Array.isArray(item.turns));
+    },
+  }));
+}
 async function readAtlasHistory() {
-  if (atlasHistoryCache) return structuredClone(atlasHistoryCache);
-  const saved = require('./atomic-store').readStored(atlasHistoryPath(), Array.isArray);
-  if (!saved) return [];
-  if (saved.damaged) warnDamaged('your saved chats', saved.damaged);
-  atlasHistoryCache = (saved.value || []).filter(
-    (item) => item && typeof item.id === 'string' && Array.isArray(item.turns),
-  );
-  return structuredClone(atlasHistoryCache);
+  return chatHistory().all();
 }
 let historyWriteQueue = Promise.resolve();
 function transactAtlasHistory(change) {
@@ -946,18 +948,12 @@ function transactAtlasHistory(change) {
   return operation;
 }
 function writeAtlasHistory(items) {
-  const operation = historyWriteQueue.then(async () => {
-    const all = await readAtlasHistory();
-    const merged = new Map(all.map((item) => [item.id, item]));
-    for (const item of items) merged.set(item.id, item);
-    return persistAtlasHistory([...merged.values()]);
-  });
+  const operation = historyWriteQueue.then(() => persistAtlasHistory(items, false));
   historyWriteQueue = operation.catch(() => {});
   return operation;
 }
-async function persistAtlasHistory(items) {
+async function persistAtlasHistory(items, replace = true) {
   await mkdir(app.getPath('userData'), { recursive: true });
-  // ponytail: every save rewrites one file holding all chats. Split it per chat if saving becomes slow.
   const trimmed = items.map((item) => ({
     id: String(item.id).slice(0, 80),
     title: String(item.title || 'Conversation').slice(0, 100),
@@ -993,11 +989,7 @@ async function persistAtlasHistory(items) {
       at: Number(turn.at) || Date.now(),
     })),
   }));
-  const file = atlasHistoryPath(),
-    temp = `${file}.${randomUUID()}.tmp`;
-  await writeFile(temp, JSON.stringify(trimmed), 'utf8');
-  await require('node:fs/promises').rename(temp, file);
-  atlasHistoryCache = trimmed;
+  await chatHistory()[replace ? 'replace' : 'upsert'](trimmed);
   return structuredClone(trimmed);
 }
 const providerHistory = new (require('./history-client').HistoryClient)();
@@ -1400,7 +1392,8 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
 }
 
 const taskJobsRunning = () => [...activeJobs.values()].some((job) => job.status === 'running');
-const jobsRunning = () => taskJobsRunning() || Boolean(advancedWorkflowsService?.active());
+const jobsRunning = () =>
+  taskJobsRunning() || Boolean(advancedWorkflowsService?.active()) || Boolean(nodeDebugger?.active());
 
 let jobsEmitTimer,
   sentJobs = new Map();
@@ -1613,6 +1606,28 @@ function setupIpc() {
     }
     return languageServer.action(request);
   });
+  ipcMain.handle('atlas:node-debugger', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (!nodeDebugger) {
+      nodeDebugger = require('./node-debugger').createNodeDebugger({
+        busy: jobsRunning,
+        files: require('./project-files').createProjectFiles({ denied: () => integrations().deniedFiles() }),
+        approve: async (message, detail) =>
+          (
+            await dialog.showMessageBox(mainWindow, {
+              type: 'question',
+              message,
+              detail,
+              buttons: ['Cancel', 'Start debugging'],
+              defaultId: 0,
+              cancelId: 0,
+            })
+          ).response === 1,
+      });
+      app.on('before-quit', () => nodeDebugger.dispose());
+    }
+    return nodeDebugger.action(request);
+  });
   let livePreview;
   ipcMain.handle('atlas:live-preview', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -1672,7 +1687,7 @@ function setupIpc() {
       if (request.chatId && job.colabChatId !== request.chatId) throw Error('This file belongs to another Colab chat.');
       root = job.cwd;
     } else if (request.conversationId) {
-      const chat = (await readAtlasHistory()).find((row) => row.id === request.conversationId);
+      const chat = await chatHistory().read(request.conversationId);
       if (!chat) throw Error('This conversation is no longer available.');
       root = chat.cwd;
     }
@@ -1827,7 +1842,7 @@ function setupIpc() {
     const history =
       request.scope === 'colab'
         ? (Array.isArray(request.history) ? request.history : []).slice(-12)
-        : (await readAtlasHistory()).find((row) => row.id === request.conversationId)?.turns?.slice(-12) || [];
+        : (await chatHistory().read(request.conversationId, { page: 0, size: 12 }))?.turns || [];
     const sections = [
       { id: 'instructions', label: 'Project instructions', text: profile?.instructions || '' },
       {
@@ -2069,7 +2084,7 @@ function setupIpc() {
       jobs: activeJobs,
       tracker: changes(),
       knowledge: knowledge(),
-      busy: taskJobsRunning,
+      busy: () => taskJobsRunning() || Boolean(nodeDebugger?.active()),
       denied: () => integrations().deniedFiles(),
       workspace: workspace(),
       persist: async () => {
@@ -2239,33 +2254,18 @@ function setupIpc() {
   });
   ipcMain.handle('atlas:latest-conversation', async (event) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
-    const items = await readAtlasHistory();
-    return items.filter((item) => item.turns?.length).sort((a, b) => b.updatedAt - a.updatedAt)[0] || null;
+    const item = (await chatHistory().list()).find((item) => item.turnCount);
+    return item ? chatHistory().read(item.id, { page: 0 }) : null;
   });
   ipcMain.handle('atlas:history-list', async (event, request) => {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
     const query = typeof request?.query === 'string' ? request.query.toLowerCase().slice(0, 200) : '';
-    const local = (await readAtlasHistory())
-      .filter(
-        (item) =>
-          !query || (item.title + ' ' + item.turns.map((turn) => turn.content).join(' ')).toLowerCase().includes(query),
-      )
-      .map(({ id, title, lastProvider, sessions, cwd, updatedAt, turns, importSource }) => ({
-        id,
-        title,
-        workspaceName: importSource?.workspaceName || '',
-        workspaceId: importSource?.workspaceId || '',
-        provider: 'atlas',
-        lastProvider: lastProvider || '',
-        sessions: sessions || {},
-        cwd,
-        updatedAt,
-        turnCount: turns.length,
-        searchText: turns
-          .map((turn) => turn.content)
-          .join(' ')
-          .slice(-2500),
-      }));
+    const local = (await chatHistory().list(query)).map(({ importSource, ...row }) => ({
+      ...row,
+      provider: 'atlas',
+      workspaceName: importSource?.workspaceName || '',
+      workspaceId: importSource?.workspaceId || '',
+    }));
     if (request?.provider === 'atlas') return local.sort((a, b) => b.updatedAt - a.updatedAt);
     const [codex, claude] = await Promise.all(
       ['codex', 'claude'].map((provider) => providerHistory.request('list', { provider, query })),
@@ -2276,7 +2276,10 @@ function setupIpc() {
     if (!isTrustedSender(event)) throw new Error('Untrusted app window.');
     const id = typeof request?.id === 'string' ? request.id : '';
     if (request?.provider === 'atlas') {
-      const item = (await readAtlasHistory()).find((row) => row.id === id);
+      const item = await chatHistory().read(
+        id,
+        request?.page === undefined ? {} : { page: request.page, query: request.query },
+      );
       if (!item) throw new Error('Saved conversation not found.');
       return item;
     }
@@ -2517,6 +2520,7 @@ function setupIpc() {
   });
   startAssistant = async (event, data) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (nodeDebugger?.active()) throw Error('Stop the debugger before starting another task.');
     if (advancedWorkflowsService?.active() && !repairRequests.has(data))
       throw Error('Stop the terminal or repair loop before starting another task.');
     const id = typeof data?.requestId === 'string' ? data.requestId : randomUUID();
@@ -2770,8 +2774,7 @@ async function handleChat(event, data, benchmark) {
     typeof data?.conversationId === 'string' && /^[A-Za-z0-9-]{20,80}$/.test(data.conversationId)
       ? data.conversationId
       : randomUUID();
-  const history = await readAtlasHistory();
-  let conversation = history.find((item) => item.id === conversationId);
+  let conversation = await chatHistory().read(conversationId);
   if (!conversation) {
     conversation = {
       id: conversationId,
@@ -2782,7 +2785,6 @@ async function handleChat(event, data, benchmark) {
       updatedAt: Date.now(),
       turns: [],
     };
-    history.push(conversation);
   }
   conversation.cwd = cwd;
   conversation.updatedAt = Date.now();
@@ -3083,6 +3085,8 @@ async function createWindow() {
         '/work-sessions-ui.js',
         '/power-upgrades-ui.js',
         '/execution-tools-ui.js',
+        '/benchmark-builder-ui.js',
+        '/language-edits.js',
         '/hardware-ui.js',
         '/planning-ui.js',
         '/environment-ui.js',
@@ -3094,6 +3098,8 @@ async function createWindow() {
         '/workflow-tools-ui.js',
         '/advanced-workflows-ui.js',
         '/terminal-dock-ui.js',
+        '/workspace-layout-ui.js',
+        '/debugger-ui.js',
         '/terminal-dock.css',
         '/selected-tools-ui.js',
         '/task-dependency-graph.js',

@@ -1,39 +1,30 @@
 {
   "status": "technical-review-complete",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "reviewedBy": "Codex automated technical dependency review; not legal counsel",
   "reviewedAt": "2026-11-13",
-  "packageLockSha256": "32a314f8277e7c7ce08c67397961f104e3c6beb7889e52f03bdb78c5770a827d",
-  "evidence": "docs/RELEASE-0.11.0-REVIEW.md",
+  "packageLockSha256": "81870e80ebf1cc570bf982b810502acdaf35b1ae886a90573fdcd1c45db4c4df",
+  "evidence": "docs/RELEASE-0.11.1-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner requested release of all accumulated workflow, UI and updater changes. The previously authorized unsigned-release policy remains in effect. No signing or legal approval is claimed.",
+  "ownerDecision": "Owner requested a new patch containing the eight approved project-tool improvements. Existing owner-authorized unsigned policy remains in effect. Publication requires the documented post-CI confirmation. No signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 603,
+    "unitTests": 617,
     "electronSuites": [
       "assistant",
       "colab",
-      "graph",
-      "approvals",
-      "dispute",
-      "settings",
       "power",
       "navigation",
       "files",
       "preview",
-      "release",
-      "pty",
-      "pty-render",
-      "restore",
-      "pdf-package",
-      "recovery",
-      "data",
       "menu-audit",
-      "backup-package"
+      "pdf-package",
+      "backup-package",
+      "debugger-package"
     ],
     "productionAudit": "2026-11-13: npm audit --omit=dev reports zero production vulnerabilities.",
-    "package": "Fresh unsigned Windows x64 installer built and verified: version, ASAR, fuses, private-path exclusions, notices/inventory, pinned speech resources, updater manifest and installer hashes. Packaged PDF and backup worker checks passed.",
-    "recovery": "Recovery fixture copied the real built app.asar. Portable app reached Window loaded with isolated app data and inert provider executables. Installed live-feed upgrade to this unpublished version remains untested.",
-    "menuAudit": "131 surfaces, 145 clicks, zero problems; blocked providers/network and refused approvals."
+    "package": "Fresh unsigned 0.11.1 Windows x64 installer verified: version, ASAR, fuses, private-path exclusions, notices/inventory, pinned speech resources and updater hashes. Packaged PDF, backup worker and installed-Node debugger checks passed. Committed release gate repeats validation.",
+    "recovery": "A copied packaged 0.11.1 app relaunched against throwaway data, restored records before app load and preserved newer fixture records. Inert provider executables; no user installation replaced. Installed live-feed upgrade remains untested before publication.",
+    "menuAudit": "135 surfaces, 155 clicks, zero problems; providers/network blocked, approvals refused."
   }
 }

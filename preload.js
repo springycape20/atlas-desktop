@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('atlas', {
   advancedWorkflows: (request) => ipcRenderer.invoke('atlas:advanced-workflows', request),
   projectWorkbench: (request) => ipcRenderer.invoke('atlas:project-workbench', request),
   livePreview: (request) => ipcRenderer.invoke('atlas:live-preview', request),
+  nodeDebugger: (request) => ipcRenderer.invoke('atlas:node-debugger', request),
   languageServer: (request) => ipcRenderer.invoke('atlas:language-server', request),
   diagnostics: () => ipcRenderer.invoke('atlas:diagnostics'),
   showLog: () => ipcRenderer.invoke('atlas:show-log'),

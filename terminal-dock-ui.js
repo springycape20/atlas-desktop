@@ -280,7 +280,22 @@
     if (!rows.length) status.textContent = 'Select + to approve and open a persistent shell.';
   }
   power.register('Terminal', async () => open());
-  window.atlasTerminal = { open, hide };
+  window.atlasTerminal = {
+    open,
+    hide,
+    snapshot(cwd) {
+      return { width, kind: kind.value, count: rows.filter((row) => row.cwd === cwd && row.shell).length };
+    },
+    async restore(value, expectedCwd) {
+      const now = power.request(),
+        actualCwd = now.scope === 'colab' ? window.atlasColab.current().cwd : now.cwd;
+      if (actualCwd !== expectedCwd) throw Error('Return to the saved workspace project first.');
+      await open();
+      resize(Number(value?.width) || 520);
+      kind.value = value?.kind === 'pty' && window.Terminal ? 'pty' : 'text';
+      for (let index = 0; index < Math.min(6, Number(value?.count) || 0); index++) await create();
+    },
+  };
   for (const parent of document.querySelectorAll('.composer,.colab-composer')) {
     const toolbar = parent.querySelector('.shell-composer-tools'),
       trigger = button('Terminal', open, toolbar || parent);

@@ -2,7 +2,7 @@ const fs = require('node:fs'),
   path = require('node:path'),
   zlib = require('node:zlib'),
   { createHash, randomUUID } = require('node:crypto');
-const folders = new Set(['attachments', 'changes', 'task-evidence', 'colab-reports']);
+const folders = new Set(['attachments', 'changes', 'task-evidence', 'colab-reports', 'chat-chunks']);
 const managed = (name) => folders.has(name) || (/^[\w.-]+\.(json|enc)$/.test(name) && !name.startsWith('.'));
 const safe = (name) =>
   typeof name === 'string' &&

@@ -137,6 +137,10 @@
   find.oninput = () => {
     match = 0;
     turnPage = 0;
+    if (remotePage)
+      return void loadTurnPage(0)
+        .then(showMatch)
+        .catch((error) => toast(error.message));
     renderTurns(currentTurns);
     showMatch();
   };
@@ -151,6 +155,12 @@
   latest.onclick = () => {
     turnPage = 0;
     find.value = '';
+    if (remotePage)
+      return void loadTurnPage(0)
+        .then(() => {
+          response.scrollTop = response.scrollHeight;
+        })
+        .catch((error) => toast(error.message));
     renderTurns(currentTurns);
     follow = true;
     response.scrollTop = response.scrollHeight;
@@ -169,7 +179,19 @@
   const turnNodes = new Map();
   let renderedTurnsChat = '';
   let turnPage = 0,
-    currentTurns = [];
+    currentTurns = [],
+    remotePage = null,
+    pageGeneration = 0;
+  async function loadTurnPage(page = 0) {
+    const id = selected,
+      generation = ++pageGeneration;
+    const chat = await api.historyRead({ provider: 'atlas', id, page, query: find.value });
+    if (generation !== pageGeneration || selected !== id) return;
+    remotePage = chat.historyPage || null;
+    turnPage = page;
+    renderTurns(chat.turns || []);
+    response.scrollTop = 0;
+  }
   const paging = node('div', undefined, 'assistant-chat-find'),
     older = node('button', 'Older messages', 'quiet-button'),
     newer = node('button', 'Newer messages', 'quiet-button'),
@@ -178,11 +200,13 @@
   paging.append(older, pageInfo, newer);
   tools.after(paging);
   older.onclick = () => {
+    if (remotePage) return void loadTurnPage(turnPage + 1).catch((error) => toast(error.message));
     turnPage++;
     renderTurns(currentTurns);
     response.scrollTop = 0;
   };
   newer.onclick = () => {
+    if (remotePage) return void loadTurnPage(turnPage - 1).catch((error) => toast(error.message));
     turnPage--;
     renderTurns(currentTurns);
     response.scrollTop = 0;
@@ -220,7 +244,11 @@
       renderedTurnsChat = selected;
     }
     const ordered = [];
-    const page = window.atlasChatRender.messagePage(turns, find.value, turnPage);
+    const page = remotePage
+      ? { ...remotePage, indices: turns.map((_, index) => index) }
+      : window.atlasChatRender.messagePage(turns, find.value, turnPage);
+    past.classList.toggle('atlas-large-history', page.total > 300);
+    past.dataset.finding = String(Boolean(find.value.trim()));
     turnPage = page.page;
     older.disabled = page.page >= page.pages - 1;
     newer.disabled = page.page === 0;
@@ -256,9 +284,9 @@
             turnAction(actions, 'Copy result', () => navigator.clipboard.writeText(turn.content));
           } else {
             body.textContent = turn.content;
-            turnAction(actions, 'Edit and resend', () => branchFrom(index, turn, true));
+            turnAction(actions, 'Edit and resend', () => branchFrom(remotePage?.indices[index] ?? index, turn, true));
           }
-          turnAction(actions, 'Branch from here', () => branchFrom(index, turn, false));
+          turnAction(actions, 'Branch from here', () => branchFrom(remotePage?.indices[index] ?? index, turn, false));
           window.atlasWorkspace?.messageAttachments(article, turn.attachments);
           return article;
         },
@@ -361,7 +389,7 @@
     }
     let chat;
     try {
-      chat = await api.historyRead({ provider: 'atlas', id });
+      chat = await api.historyRead({ provider: 'atlas', id, page: 0 });
     } catch (error) {
       if (!job) throw error;
       chat = { id, title: job.prompt, cwd: job.cwd, turns: [] };
@@ -370,6 +398,7 @@
     displayed = id;
     if (chat.cwd) setPath(chat.cwd);
     find.value = '';
+    remotePage = chat.historyPage || null;
     renderTurns(chat.turns || []);
     userTurn.hidden = true;
     output.hidden = true;
@@ -408,6 +437,8 @@
     sequence++;
     if (displayed && !host.hidden) positions.set(displayed, scrollState());
     selected = displayed = '';
+    remotePage = null;
+    pageGeneration++;
     past.replaceChildren();
     userTurn.hidden = true;
     output.hidden = false;
@@ -435,7 +466,9 @@
     window.atlasColab.selectAssistant();
     let turns = [];
     try {
-      turns = (await api.historyRead({ provider: 'atlas', id })).turns || [];
+      const chat = await api.historyRead({ provider: 'atlas', id, page: 0 });
+      remotePage = chat.historyPage || null;
+      turns = chat.turns || [];
     } catch {}
     if (token !== sequence) return;
     renderTurns(turns);

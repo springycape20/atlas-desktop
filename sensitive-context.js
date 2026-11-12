@@ -5,6 +5,10 @@ function inspectSensitive(text) {
     ['Private key', /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/g],
     ['API key', /\b(?:sk-[A-Za-z0-9_-]{16,}|AKIA[A-Z0-9]{16}|gh[pousr]_[A-Za-z0-9]{20,})\b/g],
     ['Credential assignment', /\b(?:password|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*["']?[^\s"']{8,}/gi],
+    [
+      'Credential assignment',
+      /\b(?:password|api[_-]?key|access[_-]?token|secret)(?:\\["'])?\s*[:=]\s*\\["'][^\s"'\\]{8,}/gi,
+    ],
     ['Email address', /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi],
   ];
   for (const [kind, regex] of patterns)

@@ -790,6 +790,8 @@
       el('colabFind').value,
       messagePages.get(chat.id) || 0,
     );
+    transcript.classList.toggle('atlas-large-history', chat.messages.length > 300);
+    transcript.dataset.finding = String(Boolean(el('colabFind').value.trim()));
     messagePages.set(chat.id, messagePage.page);
     if (messagePage.pages > 1) {
       const controls = document.createElement('div');
