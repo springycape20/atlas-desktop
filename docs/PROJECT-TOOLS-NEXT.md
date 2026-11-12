@@ -34,6 +34,8 @@ The sandboxed recorder captures trusted button/link clicks and changed text/sear
 
 Context selection splits common identifier words and uses bounded lexical function/class boundaries. It is not embedding search or a complete parser. Recent-change hints compare two in-memory index revisions; they are not a Git diff or a complete change history. Existing exclusions and context budgets still apply. The context preview reports selected character counts and reasons. No token-saving percentage or quality improvement is claimed without provider benchmarks.
 
+Source excerpts and relationship hints are JSON-quoted as untrusted reference data. This framing does not guarantee resistance to prompt injection; provider tool permissions still determine access.
+
 Visual captures wait for fonts with a timeout, reset Web Animations to time zero for capture, pause CSS animation/transition effects and hide the caret. Animation states and temporary styles are restored afterwards. Canvas/video content, timers, live data and asynchronous font loading can still differ. Comparisons require matching URL, viewport, pixel scale, scroll position and image size. Up to 20 pixel rectangles can be ignored; masks are saved with named baselines. Overlapping masks count once, and masking the entire screenshot is rejected. Changed-pixel percentages use only unmasked pixels.
 
 ## History storage and migration

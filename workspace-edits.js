@@ -174,6 +174,7 @@ function createWorkspaceEdits({ files, busy = () => false }) {
     return { files: applied };
   }
   async function perform(root, request) {
+    root = (await files.resolve(root, '.')).actual;
     prune(plans);
     prune(history);
     if (request.action === 'preview') return preview(root, request.edit);

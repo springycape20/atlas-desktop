@@ -14,6 +14,7 @@ async function fixture(t) {
     editor = require('../project-editor').createProjectEditor({ files, busy: () => busy });
   return {
     root,
+    editor,
     call: (r) => editor.action(root, r),
     uri: (name) => pathToFileURL(path.join(root, name)).href,
     busy: (v) => (busy = v),
@@ -137,6 +138,37 @@ test('workspace undo refuses newer edits after an approved change', async (t) =>
   await assert.rejects(f.call({ action: 'editor-workspace-undo', id: result.undoId }), /Newer disk/);
   assert.equal(await fs.readFile(path.join(f.root, 'new.js'), 'utf8'), 'user edits');
 });
+
+test(
+  'workspace edits accept long file URIs when the project uses a Windows short-path alias',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const f = await fixture(t);
+    const alias = require('node:child_process')
+      .execFileSync('cmd.exe', ['/d', '/c', `for %I in ("${f.root}") do @echo %~sI`], {
+        encoding: 'utf8',
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+      })
+      .trim();
+    if (alias.toLowerCase() === f.root.toLowerCase()) {
+      t.skip('8.3 aliases disabled on this volume');
+      return;
+    }
+    const plan = await f.editor.action(alias, {
+      action: 'editor-workspace-preview',
+      edit: {
+        changes: {
+          [f.uri('main.js')]: [
+            { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, newText: '// alias\n' },
+          ],
+        },
+      },
+    });
+    await f.editor.action(alias, { action: 'editor-workspace-apply', id: plan.id });
+    assert.match(await fs.readFile(path.join(f.root, 'main.js'), 'utf8'), /^\/\/ alias\n/);
+  },
+);
 test('completion combines snippet defaults and additional edits without executing commands', () => {
   const { completionChange, snippet } = require('../language-edits');
   const change = completionChange('con\n', 3, {

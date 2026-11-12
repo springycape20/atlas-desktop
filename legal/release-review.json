@@ -9,7 +9,7 @@
   "ownerDecision": "Owner requested a new patch containing the eight approved project-tool improvements. Existing owner-authorized unsigned policy remains in effect. Publication requires the documented post-CI confirmation. No signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 615,
+    "unitTests": 617,
     "electronSuites": [
       "assistant",
       "colab",

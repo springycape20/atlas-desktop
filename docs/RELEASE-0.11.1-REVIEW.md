@@ -14,11 +14,13 @@ No dependencies were added or updated; only the root application version changed
 
 ## Validation evidence
 
-Source validation includes 615 unit/integration tests and the affected Assistant, Colab, editor, preview, power and navigation UI suites. The full menu audit passed 135 surfaces and 155 clicks with zero problems. Tests use local fixtures, block provider accounts where applicable and leave actual user installations unchanged.
+Source validation includes 617 unit/integration tests and the affected Assistant, Colab, editor, preview, power and navigation UI suites. The full menu audit passed 135 surfaces and 155 clicks with zero problems. Tests use local fixtures, block provider accounts where applicable and leave actual user installations unchanged.
 
 Release packaging exposed the initial debugger attempting to use Electron Node mode, which the packaged binary disables. The debugger now resolves an installed Node.js executable (or an explicit absolute Node path), displays that path in the native approval, and preserves all existing fuses. A packaged-ASAR regression first reproduced the wrong executable and now passes; the release workflow and local gate include it.
 
 The full data-safety suite also exposed assertions still reading the retained legacy chat file after migration. Its independent disk reader now verifies chunk hashes and checks the current index. The legacy migration callback preserves the existing damaged-file warning before starting a new index, while keeping the damaged original. Damaged chunks/indexes continue to fail without overwriting records.
+
+GitHub CI exposed a short-path/long-URI mismatch in workspace-edit roots. The adapter now resolves the guarded project root before computing relative paths, with a real Windows 8.3 alias regression. Automated review also prompted structured JSON quoting of source excerpts and relationship hints as untrusted data. This improves framing and prevents structural delimiter breakout; it does not make model-readable instructions inert or replace tool permissions.
 
 New integration checks cover 5,000-message disk paging/search and integrity errors, existing IndexedDB v1 migration with 5,001 preserved messages and a 5,002-message reload after append, reviewed workspace edits/undo/conflicts/file aliases, LSP action resolution, trusted recorder input/private-value exclusion, guided benchmark submission, saved tabs/preview metadata, and actual installed Node inspector stepping and local-variable inspection.
 
