@@ -1028,6 +1028,11 @@ function findReferencedProviderHistory(prompt) {
 async function runProvider(provider, prompt, cwd, settings, previousSessionId = '', onText = () => {}) {
   const job = jobContext.getStore(),
     listener = settings?.onActivity;
+  if (job?.vaultVersion !== undefined)
+    settings = {
+      ...settings,
+      systemPrompt: [settings.systemPrompt, require('./vault-notes').referencePolicy].filter(Boolean).join('\n\n'),
+    };
   // ATLAS gateway actions reach the running pass through its job rather than the provider stream.
   // Compare proposals run two passes at once, so the job keeps a set of listeners.
   if (job && listener) (job.passListeners ||= new Set()).add(listener);
