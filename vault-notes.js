@@ -27,7 +27,13 @@ async function assertRoot(folder) {
     /^[\\/]{2}/.test(folder)
   )
     throw Error('Choose a local dedicated Markdown folder.');
-  const root = path.resolve(folder);
+  const requested = path.resolve(folder);
+  // Check links before resolving aliases; realpath alone would hide a selected junction.
+  for (let item = requested; ; item = path.dirname(item)) {
+    if ((await fs.lstat(item)).isSymbolicLink()) throw Error('Linked vault paths are not supported.');
+    if (path.dirname(item) === item) break;
+  }
+  const root = await fs.realpath(requested);
   if (
     !allowed(root.slice(path.parse(root).root.length).replace(/\\/g, '/')) ||
     !fileAllowed(root.slice(path.parse(root).root.length)) ||
@@ -37,10 +43,6 @@ async function assertRoot(folder) {
       .some((part) => part.startsWith('.'))
   )
     throw Error('Private vault folder refused.');
-  for (let item = root; ; item = path.dirname(item)) {
-    if ((await fs.lstat(item)).isSymbolicLink()) throw Error('Linked vault paths are not supported.');
-    if (path.dirname(item) === item) break;
-  }
   await require('./project-root').createProjectRootGuard().assertProject(root);
   return root;
 }

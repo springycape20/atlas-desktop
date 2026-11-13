@@ -79,7 +79,7 @@ test('Chat stays unchanged without a vault or with it disabled; reviewed opt-in 
   const originalPreview = await h.preview({});
   assert(!Object.hasOwn(originalPreview, 'vaultIndexed'));
   await h.call('vault-source', { action: 'choose', folder: 'ignored renderer path' });
-  assert.equal((await h.call('vault-source', {})).folder, h.folder);
+  assert.equal((await h.call('vault-source', {})).folder, await fs.realpath(h.folder));
   assert.equal((await h.call('vault-source', {})).enabled, false);
   await h.chat({ vault: true });
   assert.equal(h.calls.at(-1).prompt, original);

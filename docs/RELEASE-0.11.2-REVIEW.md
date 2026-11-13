@@ -31,6 +31,8 @@ The dedicated vault Electron suite passed at 1440, 768 and 390 pixels with sampl
 
 Automated review flagged prompt-injection risk. Its proposed metadata-only prompt would remove the requested model-readable notes, so that suggestion was not applied. Instead, vault-enabled provider calls add a static untrusted-reference policy through Codex developer instructions and Claude's appended system prompt, separate from note-controlled data. The local-model adapter already declares reference excerpts untrusted in its system role and exposes no tools. Tests verify those instruction channels. This strengthens hierarchy but is not deterministic protection against model misbehavior; review and existing tool approvals remain essential.
 
+GitHub CI exposed a Windows 8.3 temporary-path alias mismatch that rejected safe notes as linked paths. Selected-root validation now rejects actual symlinks/junctions first, then canonicalizes short aliases before sensitive-path validation and scanning. A real Windows alias regression covers search and persisted-root behavior; the existing junction cases remain enforced.
+
 ## Material limitations
 
 - Only ordinary `.md` text is searched; links/embeds are not followed and no Obsidian graph, plugin or metadata functionality is added. Hidden/private/linked paths and UNC roots are unsupported. Bounds can omit relevant notes; incomplete scans are visible.

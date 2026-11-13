@@ -6,7 +6,7 @@ const path = require('node:path');
 const { searchVault, assertRoot, validate, safeName, limits, formatVault } = require('../vault-notes');
 const { createVaultSource } = require('../vault-source');
 async function fixture(t) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-vault-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-vault-')));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const vault = path.join(root, 'notes');
   await fs.mkdir(vault);
@@ -256,3 +256,27 @@ test('only the most recent 32 review receipts remain valid', async (t) => {
   await assert.rejects(source.context('quasar', { vault: true, vaultPreview: first.token }), /preview/);
   assert.equal((await source.context('quasar', { vault: true, vaultPreview: last.token })).text, last.text);
 });
+test(
+  'Windows short-path vault aliases resolve without permitting junctions',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const { root, vault, write } = await fixture(t);
+    await write('note.md', 'quasar ALIAS_NOTE');
+    const alias = require('node:child_process')
+      .execFileSync('cmd.exe', ['/d', '/c', `for %I in ("${vault}") do @echo %~sI`], {
+        encoding: 'utf8',
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+      })
+      .trim();
+    if (alias.toLowerCase() === vault.toLowerCase()) {
+      t.skip('8.3 aliases disabled on this volume');
+      return;
+    }
+    assert.equal(await assertRoot(alias), vault);
+    assert.match((await searchVault(alias, 'quasar')).results[0].excerpt, /ALIAS_NOTE/);
+    const source = createVaultSource(path.join(root, 'data'), { search: searchVault });
+    await source.configure('choose', alias);
+    assert.equal((await source.settings()).folder, vault);
+  },
+);
