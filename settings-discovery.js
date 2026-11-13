@@ -246,7 +246,8 @@
       'source-available': 'ATLAS' + version + ' is available. Source checkouts update through Git or the installer.',
       error: value.error,
     };
-    updateText.textContent = messages[value.status] || value.status;
+    updateText.textContent =
+      (value.status === 'downloaded' && value.error) || messages[value.status] || 'Update status unavailable.';
     if (!['checking', 'downloading', 'installing'].includes(value.status)) actionButton('Check for updates', 'check');
     if (value.status === 'available') actionButton('Download update', 'download');
     if (value.status === 'downloaded') actionButton('Restart and install', 'install');

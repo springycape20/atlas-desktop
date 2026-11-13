@@ -144,6 +144,12 @@ app.whenReady().then(async () => {
       if(!updateSaved.autoDownloadUpdates)throw Error('Automatic download preference missing from Save');
     })()`);
     // Drive the registered startup listener with an asynchronous release notification.
+    await win.webContents.executeJavaScript(`(()=>{
+      pushUpdate({status:'downloaded',version:'1.2.0',currentVersion:'1.0.0',error:'Update not installed. Could not back up browser records: History access was denied. The downloaded update is still available.'});
+      const settings=document.querySelector('#settingsDialog');
+      if(!settings.textContent.includes('History access was denied')||settings.textContent.includes('[object Object]'))throw Error('Recovery error is not readable');
+      if(![...settings.querySelectorAll('button')].some(b=>b.textContent==='Restart and install'))throw Error('Recovery failure lost the retry action');
+    })()`);
     await win.webContents.executeJavaScript(`(async()=>{
       window.updateVersion='1.2.0';
       atlas.updates=async request=>{updateRequests.push(request.action);if(request.action==='download')return {status:'downloaded',version:updateVersion,currentVersion:'1.0.0'};if(request.action==='install'){if(updateBusy)throw Error('Finish or stop running tasks before installing the update.');return {status:'installing',version:updateVersion};}return {status:'available',version:updateVersion,currentVersion:'1.0.0'};};
