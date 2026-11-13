@@ -15,6 +15,14 @@ function createAppUpdates({
     state = { ...state, ...value };
     notify({ ...state });
   };
+  const installFailure = (error) => {
+    const message =
+      'Update not installed. ' +
+      errorMessage(error, 'The recovery backup could not be prepared.') +
+      ' ATLAS has not restarted. The downloaded update is still available; retry or open GitHub Releases.';
+    set({ status: 'downloaded', error: message });
+    return Error(message);
+  };
   if (!source) {
     updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
@@ -29,7 +37,9 @@ function createAppUpdates({
     updater.on('update-downloaded', (info) =>
       set({ status: 'downloaded', version: info.version, percent: 100, error: '' }),
     );
-    updater.on('error', (error) => set({ status: 'error', error: readable(error) }));
+    updater.on('error', (error) =>
+      state.status === 'installing' ? installFailure(error) : set({ status: 'error', error: readable(error) }),
+    );
   }
   async function action(request = {}) {
     if (!request.action || request.action === 'status') return { ...state };
@@ -46,8 +56,14 @@ function createAppUpdates({
         if (request.action === 'install') {
           await prepareRecovery();
           if (busy()) throw Error('Work started while recovery was being prepared. Stop it before installing.');
-          set({ status: 'installing' });
-          setImmediate(() => updater.quitAndInstall(false, true));
+          set({ status: 'installing', error: '' });
+          setImmediate(() => {
+            try {
+              updater.quitAndInstall(false, true);
+            } catch (error) {
+              installFailure(error);
+            }
+          });
         } else if (request.action === 'download') {
           set({ status: 'downloading', percent: 0, error: '' });
           await updater.downloadUpdate();
@@ -65,7 +81,7 @@ function createAppUpdates({
           await updater.downloadUpdate();
         }
       } catch (error) {
-        if (request.action === 'install') throw error;
+        if (request.action === 'install') throw installFailure(error);
         set({ status: 'error', error: readable(error) });
       } finally {
         pending = null;
@@ -79,9 +95,13 @@ function createAppUpdates({
 function readable(error) {
   return (
     'Update check/download failed. ' +
-    String(error.message || error).slice(0, 350) +
+    errorMessage(error, 'No error details were returned.') +
     ' Try again, or open GitHub Releases.'
   );
+}
+function errorMessage(error, fallback) {
+  const message = typeof error === 'string' ? error : typeof error?.message === 'string' ? error.message : '';
+  return message.trim() && message.trim() !== '[object Object]' ? message.slice(0, 500) : fallback;
 }
 function newer(tag, current) {
   const parse = (v) =>

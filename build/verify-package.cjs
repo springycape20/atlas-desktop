@@ -107,6 +107,7 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     'integration-manifest.js',
     'update-recovery.js',
     'activity-model.js',
+    'renderer-backup.js',
     'activity-ui.js',
     'activity.css',
     'work-overview.js',

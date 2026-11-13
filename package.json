@@ -1,6 +1,6 @@
 {
   "name": "atlas-local-desktop",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "private": true,
   "description": "Local desktop interface for Codex and Claude Code",
   "main": "main.js",
@@ -38,6 +38,7 @@
     "test:release-ui": "electron tests/release-screens.browser.cjs",
     "test:menu-ui": "electron tests/menu-audit.browser.cjs",
     "test:recovery-ui": "electron tests/update-recovery.browser.cjs",
+    "test:renderer-backup-ui": "electron tests/renderer-backup.browser.cjs",
     "test:data-ui": "electron tests/data-safety.browser.cjs",
     "release:check": "node build/release-check.cjs",
     "build:compliance": "node build/prepare-compliance.cjs"

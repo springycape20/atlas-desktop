@@ -1,18 +1,17 @@
 {
   "status": "technical-review-complete",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "reviewedBy": "Codex automated technical dependency review; not legal counsel",
   "reviewedAt": "2026-11-14",
-  "packageLockSha256": "b5814817724b7fd65ab13e3e67730297ee0bca8d7fdd4b4c34c93d703de32949",
-  "evidence": "docs/RELEASE-0.12.0-REVIEW.md",
+  "packageLockSha256": "ec49af3577c6d8756c7e82c57d6665261e449ce1487bd07f30ba264145d08786",
+  "evidence": "docs/RELEASE-0.12.1-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner explicitly requested pushing the completed local usability, Activity, provider usage and quality-of-life work to a release on 14 November 2026. This authorizes the release PR, merge and new version tag after passing checks. Existing owner-authorized unsigned distribution policy remains in effect; no signing or legal certification is claimed.",
+  "ownerDecision": "Owner requested publishing the local improvements, then reported the installed updater failure after approving recovery. This follow-up hotfix addresses readable recovery failures and explicit retry within that authorized release work. Existing unsigned distribution policy remains in effect; no signing or legal certification is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 663,
-    "sourceChecks": "The corrected local release gate passed 663 unit/integration tests, formatting, all 20 Electron UI suites and the menu audit (143 surfaces, 175 clicks, zero problems). Subsequent selected-reference hardening and explicit motion/small-desktop test settings passed their targeted Electron suites. Final PR CI must pass before merge and tagging.",
-    "productionAudit": "2026-11-14: zero high/critical findings; two moderate affected transitive packages with seven advisories assessed in the release review. Dependency versions are unchanged.",
-    "package": "Local installer and updater manifest verification passed, including fuses, ASAR integrity, resources, notices and all four packaged smoke suites. Installer: 381469618 bytes, SHA-256 141a3d88bf71938146a2acfb98f1a4a7d57f00b08e436cf9f17565146c8d85aa. Packaged preload and editor-reference source match current source. The public tag workflow independently rebuilds and verifies before publication.",
-    "recovery": "Isolated restore, update-recovery and data-safety suites passed in the complete gate. No real installation has been replaced or live updater transition claimed."
+    "sourceChecks": "Focused renderer backup, Settings, recovery and 21 setup/update tests passed. The complete release gate and installer checks run before tagging.",
+    "productionAudit": "Dependency versions unchanged; the 0.12.0 review records zero high/critical and two moderate affected packages with seven advisories. The full gate reruns the production audit.",
+    "package": "New renderer-backup.js is mandatory in packaged verification. Installer and packaged smoke checks run before publication.",
+    "recovery": "Real Electron fixture verifies backup failure blocks installer dispatch, preserves the download and succeeds on explicit retry. No live installed-app upgrade transition is claimed."
   }
 }

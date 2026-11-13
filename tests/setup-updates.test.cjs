@@ -182,6 +182,49 @@ test('updates require explicit download and block restart while tasks run', asyn
   await new Promise((r) => setImmediate(r));
   assert.equal(installs, 1);
 });
+test('opaque recovery failures remain readable and retain the downloaded update for retry', async () => {
+  const updater = new EventEmitter();
+  let attempts = 0,
+    installs = 0;
+  updater.checkForUpdates = async () => updater.emit('update-available', { version: '1.1.0' });
+  updater.downloadUpdate = async () => updater.emit('update-downloaded', { version: '1.1.0' });
+  updater.quitAndInstall = () => installs++;
+  const updates = createAppUpdates({
+    app: { isPackaged: true, getVersion: () => '1.0.0' },
+    updater,
+    prepareRecovery: async () => {
+      if (++attempts === 1) throw {};
+    },
+  });
+  await updates.action({ action: 'check' });
+  await updates.action({ action: 'download' });
+  await assert.rejects(updates.action({ action: 'install' }), /recovery backup could not be prepared/);
+  const failed = await updates.action();
+  assert.equal(failed.status, 'downloaded');
+  assert.equal(failed.version, '1.1.0');
+  assert.match(failed.error, /retry/);
+  assert.doesNotMatch(failed.error, /\[object Object\]/);
+  assert.equal(installs, 0);
+  await updates.action({ action: 'install' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(installs, 1);
+  assert.equal((await updates.action()).error, '');
+});
+test('installer dispatch errors restore the downloaded update instead of escaping asynchronously', async () => {
+  const updater = new EventEmitter();
+  updater.checkForUpdates = async () => updater.emit('update-available', { version: '1.1.0' });
+  updater.downloadUpdate = async () => updater.emit('update-downloaded', { version: '1.1.0' });
+  updater.quitAndInstall = () => {
+    throw Error('Installer could not start');
+  };
+  const updates = createAppUpdates({ app: { isPackaged: true, getVersion: () => '1.0.0' }, updater });
+  await updates.action({ action: 'check' });
+  await updates.action({ action: 'download' });
+  await updates.action({ action: 'install' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await updates.action()).status, 'downloaded');
+  assert.match((await updates.action()).error, /Installer could not start/);
+});
 test('source update checks never install and network failures remain recoverable', async () => {
   assert.equal(newer('v1.10.0', '1.9.0'), true);
   assert.equal(newer('v1.0.0-beta', '0.9.0'), false);

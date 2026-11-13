@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.1 — 14 November 2026
+
+- Preserve readable browser-history errors across Electron's backup boundary instead of displaying `[object Object]` during update recovery.
+- Keep a downloaded update ready for explicit retry if recovery or installer dispatch fails, and show that failure in App updates.
+- Verify pending-save flush, complete recovery backup/copy, failure and retry through a real Electron renderer; run this regression in CI and release checks.
+
 ## 0.12.0 — 14 November 2026
 
 - Open a dedicated ATLAS Activity page on launch, with live attention/working/recent task views, project filtering, provider usage/reset information and direct navigation into existing workspaces. Supported provider usage refreshes automatically while visible, including Claude Code structured usage reports.

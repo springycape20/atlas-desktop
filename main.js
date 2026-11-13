@@ -247,10 +247,7 @@ function getAppUpdates() {
 }
 async function rendererBackup() {
   await assistantService?.flush();
-  await mainWindow.webContents.executeJavaScript('window.atlasColabHistory?.flush()');
-  return mainWindow.webContents.executeJavaScript(
-    `(async()=>({localStorage:Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('atlas')).map(key=>[key,localStorage.getItem(key)])),colab:await window.atlasColabHistory.load({chats:[],selected:''})}))()`,
-  );
+  return require('./renderer-backup').captureRendererBackup(mainWindow.webContents);
 }
 function presence() {
   return (presenceService ||= require('./desktop-presence').createPresence({
