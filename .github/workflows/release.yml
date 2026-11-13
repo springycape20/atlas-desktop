@@ -69,6 +69,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:preview-ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:vault-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:release-ui
       - name: Download speech runtime and models
         shell: pwsh
@@ -141,6 +143,8 @@ jobs:
         run: npm run test:backup-package-ui
       - name: Verify packaged debugger uses installed Node with fuses preserved
         run: npm run test:debugger-package-ui
+      - name: Verify packaged read-only Markdown vault and index worker
+        run: npm run test:vault-package-ui
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           draft: ${{ github.ref_type != 'tag' }}

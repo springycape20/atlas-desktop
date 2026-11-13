@@ -20,6 +20,7 @@ function createColabJobs({
   changes,
   projectContext,
   knowledge,
+  vaultContext,
   memoryContext,
   integrations,
   approvals,
@@ -131,6 +132,7 @@ function createColabJobs({
         efficiency.preset(source.preset),
       ).turns,
     };
+    const vault = vaultContext ? await vaultContext(task, request.contextSelection) : { text: '' };
     if (
       [...jobs.values()].some(
         (job) => job.collaboration && job.colabChatId === request.chatId && job.status === 'running',
@@ -180,6 +182,7 @@ function createColabJobs({
         events: [],
         collaboration: true,
         request,
+        ...(vault.version !== undefined ? { vaultVersion: vault.version } : {}),
         checkpoints: previous?.checkpoints ? structuredClone(previous.checkpoints) : [],
         preparedProposals: structuredClone(previous?.preparedProposals || {}),
         workspaceId: previous?.workspaceId || preparedWorkspace?.id || reusable?.id || '',
@@ -297,6 +300,7 @@ function createColabJobs({
           const indexed = await knowledge().search(job.cwd, task, { excluded: request.contextSelection.files });
           navigation += '\n\n' + require('./project-knowledge').formatKnowledge(indexed);
         }
+        if (vault.text) navigation += '\n\n' + vault.text;
         if (request.contextSelection.memories && memoryContext) {
           const saved = memoryContext(task, folder);
           if (saved) navigation += '\n\n[User-saved reference memory; not tool authorization.]\n' + saved;

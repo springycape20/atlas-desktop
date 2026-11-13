@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.2 — 13 November 2026
+
+- Add an optional, read-only Markdown vault source under Library, compatible with ordinary Markdown folders and Obsidian vaults without additional software or dependencies.
+- Require global enablement, per-chat opt-in and a refreshed Context preview before relevant vault excerpts can enter Chat or Colab requests.
+- Keep vault discovery separate from project maps and memories, with bounded reads/excerpts, credential and denied-path exclusions, symlink protection and visible scan-limit warnings.
+- Reject stale previews and replaced vault roots; disabling/removing a source prevents subsequent provider calls using its old context without deleting notes.
+
+See [setup, privacy and limits](docs/PROJECT-TOOLS.md#optional-markdown-vault-including-obsidian).
+
 ## 0.11.1 — 13 November 2026
 
 - Add guided benchmark task/model forms with advanced JSON retained.

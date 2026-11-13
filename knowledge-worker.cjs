@@ -7,7 +7,12 @@ parentPort.on('message', ({ id, cwd, query, options, action }) => {
     try {
       parentPort.postMessage({
         id,
-        value: action === 'analyze' ? await index.analyze(cwd, options) : await index.search(cwd, query, options),
+        value:
+          action === 'vault'
+            ? await require('./vault-notes').searchVault(cwd, query, options)
+            : action === 'analyze'
+              ? await index.analyze(cwd, options)
+              : await index.search(cwd, query, options),
       });
     } catch (error) {
       parentPort.postMessage({ id, error: error.message });

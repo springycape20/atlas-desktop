@@ -1,6 +1,6 @@
 # ATLAS
 
-ATLAS 0.11.1 adds guided benchmarks, reviewed editor actions, saved workspaces, browser recording, focused project context, stable visual comparisons, chunked histories and a Node.js debugger. If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
+ATLAS 0.11.2 adds optional, read-only Markdown vault context, including Obsidian folders. Choose and enable a folder under **Library → Markdown vault**, then opt in and review excerpts in each chat's **Context** panel. See [setup, privacy and limits](docs/PROJECT-TOOLS.md#optional-markdown-vault-including-obsidian). If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
 
 Version 0.11.0 includes [clearer navigation](docs/UI-NAVIGATION.md), [editor and browser workflow improvements](docs/WORKFLOW-PERFORMANCE.md), [background backups and saved visual baselines](docs/BACKUPS-AND-VISUAL-BASELINES.md), and [task budgets, reviewed trial promotion and workflow benchmarks](docs/EXECUTION-CONTROLS.md). See the linked guides for controls and limits.
 
