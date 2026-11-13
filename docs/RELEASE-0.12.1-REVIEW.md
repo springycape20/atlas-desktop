@@ -10,7 +10,7 @@ A real Electron regression reproduced the message loss: a renderer-side DOMExcep
 
 The updater retains its downloaded state after failed recovery or installer dispatch and exposes the readable failure in Settings. Retrying still requires an explicit restart/install action and recovery approval. Work is checked again before dispatch. Source checkouts cannot install updates. No signing, tool permission or consent boundary changes.
 
-The original history-read failure's underlying cause was not established: copied IndexedDB, source-app backups, the installed backup worker and a fresh-profile fused packaged app all passed. The patch addresses the confirmed cross-process error transport and retry handling; it does not claim to repair arbitrary damaged histories. Older installed versions that remain blocked may need the published installer opened directly.
+The original history-read failure's underlying cause was not established: copied IndexedDB, source-app backups, the installed backup worker and a fresh-profile fused 0.12.0 packaged app all passed. The patch addresses the confirmed cross-process error transport and retry handling; it does not claim to repair arbitrary damaged histories. Older installed versions that remain blocked may need the published installer opened directly.
 
 ## Dependencies and signing
 
@@ -27,3 +27,5 @@ The complete local gate passed 665 unit/integration tests, formatting, the produ
 Local installer: 381,467,867 bytes; SHA-256 `6ab1265f5b6d223feef46eb6b31e3963819187fcca999012a84763a386180af1`; SHA-512 `dsDBGXa2NW7p1Kk/P0B/q2yHV42sQXhJQBj68F4FmEFm+jfVT0SJPS52HO6GHtvx0F9cu30v05hwYxm/WbPJ9w==`. Logs and local hashes are retained under ignored `dist/`. The public workflow independently rebuilds the merged commit; its published installer digest can differ and must match the public manifest.
 
 Disposable profiles use Windows temporary storage. Original user records and the user's running installed app are preserved. A real installed-app upgrade transition is not claimed by the isolated installer-dispatch fixture.
+
+An additional native launch of the local 0.12.1 executable from the Codex runtime was blocked by Windows Code Integrity event 3077, citing Enterprise signing-level requirements. This optional native automatic-backup check was therefore not completed. No security policy was changed or bypassed. The required Electron suites, package integrity checks and four packaged module/worker smoke suites passed; they do not substitute for this blocked native launch. The distribution remains unsigned under the existing owner policy, and restrictive Windows application-control policies can block it.
