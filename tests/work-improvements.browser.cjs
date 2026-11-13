@@ -202,6 +202,10 @@ app.whenReady().then(async () => {
     await run('atlasPower.close();document.getElementById("prompt").value="";atlasDock.activate("editor");');
     fs.writeFileSync(path.join(out, 'workbench.png'), (await offscreenFrame(win)).toPNG());
     await run('atlasDock.hide();');
+    win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+    });
     await run(`
       document.querySelector('[data-chat-workspace=assistant]').click();
       const output=document.getElementById('output');output.hidden=false;document.getElementById('response').classList.add('show');
@@ -227,6 +231,19 @@ app.whenReady().then(async () => {
       if(seen.size!==20)throw Error('Shuffle did not cover all twenty phrases');
       renderAnswer('Completed response');
     `);
+    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+    });
+    await run(`
+      if(!matchMedia('(prefers-reduced-motion: reduce)').matches)throw Error('Reduced motion was not applied');
+      const output=document.getElementById('output');atlasThinking.start(output);
+      const first=output.textContent,spinner=output.querySelector('.atlas-thinking-spinner'),letter=output.querySelector('.atlas-thinking-phrase > span');
+      if(getComputedStyle(spinner).animationName!=='none'||getComputedStyle(letter).animationName!=='none')throw Error('Reduced motion retained decorative animation');
+      await new Promise(r=>setTimeout(r,4200));
+      if(output.textContent!==first)throw Error('Reduced motion still cycled waiting phrases');
+      renderAnswer('Completed response');
+    `);
+    win.webContents.debugger.detach();
     await run(`
       const fence=String.fromCharCode(96).repeat(3),raw='First line'+String.fromCharCode(10)+String.fromCharCode(10)+'<literal tags> & quotes'+String.fromCharCode(10);
       const output=document.getElementById('output');renderAnswer('Intro'+fence+'text'+String.fromCharCode(10)+raw+fence+'After');

@@ -31,4 +31,6 @@ The completed source work passed 662 unit/integration tests and seven targeted E
 
 The first complete gate passed all 20 Electron suites and installer/package checks, but the menu audit caught eleven legitimate task-screen subscriptions exceeding Electron's default listener threshold. The preload now shares one IPC listener with independently removable subscribers. A focused regression test reproduced the warning before the fix and verifies delivery, unsubscribe and re-subscribe afterward. The full gate is repeated for the corrected commit before tagging.
 
+The first GitHub CI run also exposed an environment-dependent animation test: Windows runners prefer reduced motion, so the correct static state failed the animated-wave assertion. Explicit reduced-motion emulation reproduced the exact failure locally. The test now explicitly selects normal motion for wave/cycling assertions, then reduced motion to verify static letters/spinner and no phrase cycling. No app accessibility preference is overridden.
+
 The live installed-app transition to the new public updater feed cannot be exercised before publication. Isolated update/recovery fixtures and packaged worker checks do not replace that live test, and no user installation is replaced during validation.
