@@ -1,0 +1,224 @@
+body[data-main-page='activity'] :is(.assistant-workspace, .colab-workspace, .workspace-drawer, .connected-workbench) {
+  display: none !important;
+}
+body[data-main-page='activity'] .layout > .core {
+  display: none !important;
+}
+body[data-main-page='activity'] .layout {
+  margin-right: 0 !important;
+}
+.activity-page {
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 28px;
+  border: 1px solid var(--activity-line);
+  border-radius: 12px;
+  background: var(--activity-surface);
+  color: var(--activity-ink);
+  --activity-surface: #101719;
+  --activity-line: #344148;
+  --activity-ink: #e6eeee;
+  --activity-muted: #a8b8c1;
+  font:
+    calc(14px * var(--atlas-text-scale, 1))/1.5 'Segoe UI',
+    sans-serif;
+}
+body[data-main-page='activity'] .activity-page {
+  display: block;
+}
+:root[data-ui-theme='light'] .activity-page {
+  --activity-surface: #fff;
+  --activity-line: #d6dde1;
+  --activity-ink: #17232b;
+  --activity-muted: #485b66;
+}
+:root[data-ui-theme='contrast'] .activity-page {
+  --activity-surface: #000;
+  --activity-line: #fff;
+  --activity-ink: #fff;
+  --activity-muted: #e5e5e5;
+}
+.activity-page > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.activity-page h1 {
+  font-size: 24px;
+  margin: 0 0 4px;
+  line-height: 1.3;
+}
+.activity-page h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+.activity-page h3 {
+  font-size: 14px;
+  margin: 0 0 5px;
+  overflow-wrap: anywhere;
+}
+.activity-page p {
+  margin: 0 0 10px;
+  color: var(--activity-muted);
+  overflow-wrap: anywhere;
+}
+.activity-page small {
+  display: block;
+  font-size: 12px;
+  color: var(--activity-muted);
+  overflow-wrap: anywhere;
+}
+.activity-actions,
+.activity-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.activity-filters {
+  margin: 20px 0;
+}
+.activity-filters label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.activity-filters select {
+  max-width: 260px;
+  min-height: 34px;
+  background: var(--activity-surface);
+  color: inherit;
+  border: 1px solid var(--activity-line);
+  border-radius: 5px;
+  font: inherit;
+  padding: 5px 8px;
+}
+.activity-filters p {
+  margin: 0 0 0 auto;
+  font-size: 12px;
+}
+.activity-counts {
+  display: flex;
+  gap: 32px;
+  padding: 0 0 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--activity-line);
+  flex-wrap: wrap;
+}
+.activity-counts span {
+  display: block;
+  color: var(--activity-muted);
+  font-size: 13px;
+}
+.activity-counts strong {
+  display: block;
+  font-weight: 500;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+}
+/* Available canvas = two content columns (2fr + 1fr) and one 28px gutter. */
+.activity-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.activity-grid :is(.activity-work, .activity-side) {
+  min-width: 0;
+}
+.activity-work > section,
+.activity-side > section {
+  margin-bottom: 22px;
+}
+.activity-task {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--activity-line);
+}
+.activity-task > div:first-child {
+  min-width: 0;
+}
+.activity-task p {
+  font-size: 13px;
+  margin: 0 0 4px;
+}
+.activity-task .activity-actions {
+  flex-shrink: 0;
+}
+.activity-provider {
+  padding: 0 0 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--activity-line);
+}
+.activity-provider meter {
+  width: 100%;
+  height: 8px;
+  accent-color: #9cc7cc;
+  margin: 0 0 8px;
+}
+.activity-provider button {
+  margin-top: 10px;
+}
+.activity-page button {
+  font: inherit;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--activity-line);
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.activity-page button:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.activity-page button:focus-visible {
+  outline: 2px solid var(--atlas-focus);
+  outline-offset: 2px;
+}
+.activity-shortcuts button {
+  margin: 0 6px 8px 0;
+}
+.activity-side > section > p,
+.activity-note {
+  font-size: 12px;
+}
+@media (max-width: 1050px) {
+  .activity-grid {
+    grid-template-columns: 1fr;
+  }
+  .activity-side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+  }
+}
+@media (max-width: 680px) {
+  .activity-page {
+    padding: 16px;
+  }
+  .activity-side {
+    display: block;
+  }
+  .activity-counts {
+    gap: 18px;
+  }
+  .activity-task {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .activity-filters p {
+    margin-left: 0;
+  }
+  .activity-filters select {
+    max-width: 210px;
+  }
+}

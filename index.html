@@ -2973,8 +2973,9 @@
       }
     </style>
     <link rel="stylesheet" href="/ui-shell.css" />
+    <link rel="stylesheet" href="/activity.css" />
   </head>
-  <body>
+  <body data-main-page="activity">
     <div class="grid"></div>
     <main class="app">
       <header class="top">
@@ -3126,7 +3127,8 @@
               </select></label
             ><label class="toggle-row"
               ><span
-                ><strong>Speak replies aloud</strong><small>Use the selected local or online speech engine</small></span
+                ><strong>Speak replies aloud</strong
+                ><small>Off by default. Enable and save to hear replies using your selected speech engine.</small></span
               ><input id="speakResponses" type="checkbox"
             /></label>
           </section>
@@ -3386,6 +3388,7 @@
       </div>
     </dialog>
     <div class="toast" id="toast"></div>
+    <script src="/qol-model.js"></script>
     <script src="/app-ui.js"></script>
     <script src="/chat-render.js"></script>
     <script src="/output-files-ui.js"></script>
@@ -3404,6 +3407,7 @@
     <script src="/settings-nav.js"></script>
     <script src="/power-tools-ui.js"></script>
     <script src="/recovery-ui.js"></script>
+    <script src="/task-workflow.js"></script>
     <script src="/workflow-ui.js"></script>
     <script src="/parallel-ui.js"></script>
     <script src="/local-model-ui.js"></script>
@@ -3442,5 +3446,20 @@
     <script src="/power-upgrades-ui.js"></script>
     <script src="/benchmark-builder-ui.js"></script>
     <script src="/execution-tools-ui.js"></script>
+    <script src="/task-experience.js"></script>
+    <script src="/work-overview.js"></script>
+    <link rel="stylesheet" href="/work-overview.css" />
+    <script src="/project-home-ui.js"></script>
+    <script src="/composer-context-ui.js"></script>
+    <script src="/provider-recovery-ui.js"></script>
+    <script src="/task-outcomes-ui.js"></script>
+    <script src="/semantic-solutions-ui.js"></script>
+    <script src="/setup-assistant-ui.js"></script>
+    <script src="/connected-workbench-ui.js"></script>
+    <script src="/activity-model.js"></script>
+    <script src="/activity-ui.js"></script>
+    <script src="/task-start-ui.js"></script>
+    <script src="/thinking-ui.js"></script>
+    <script src="/qol-ui.js"></script>
   </body>
 </html>

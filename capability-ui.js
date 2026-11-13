@@ -51,6 +51,7 @@
     ]) {
       button(label, async () => {
         await api.vaultSource({ action });
+        power.invalidateVault?.();
         await render();
         status.textContent =
           'Vault settings saved locally. Folder changes start disabled. Refresh Context preview before sending. Removing a source leaves its files untouched.';

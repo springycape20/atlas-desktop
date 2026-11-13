@@ -1,5 +1,7 @@
 # ATLAS
 
+ATLAS 0.12.0: [usability and power improvements](docs/USABILITY-AND-POWER.md) add an Activity launch page, project home, task centre, connected workbench, direct context references, provider recovery, task results, workflow conversion, optional local semantic search and guided project setup. This release also adds automatic draft recovery, task cleanup, usage countdowns, copy controls and opt-in voice defaults.
+
 ATLAS 0.11.2 adds optional, read-only Markdown vault context, including Obsidian folders. Choose and enable a folder under **Library → Markdown vault**, then opt in and review excerpts in each chat's **Context** panel. See [setup, privacy and limits](docs/PROJECT-TOOLS.md#optional-markdown-vault-including-obsidian). If you are on 0.10.2 or older, download the installer from GitHub Releases, because **Restart and install** fails in those versions.
 
 Version 0.11.0 includes [clearer navigation](docs/UI-NAVIGATION.md), [editor and browser workflow improvements](docs/WORKFLOW-PERFORMANCE.md), [background backups and saved visual baselines](docs/BACKUPS-AND-VISUAL-BASELINES.md), and [task budgets, reviewed trial promotion and workflow benchmarks](docs/EXECUTION-CONTROLS.md). See the linked guides for controls and limits.

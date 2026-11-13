@@ -85,7 +85,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
   };
   async function capturePreview() {
     try {
-      return await win.webContents.capturePage();
+      return win.capturePage ? await win.capturePage() : await win.webContents.capturePage();
     } catch {
       throw Error('ATLAS could not capture the preview window. Make sure it is open and visible, then try again.');
     }
@@ -109,7 +109,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       await win.webContents.removeInsertedCSS(css).catch(() => {});
     }
   }
-  async function open(cwd, value) {
+  async function open(cwd, value, dock = false) {
     const url = previewUrl(value);
     cwd = await guard.assertProject(cwd);
     if (child && root !== cwd) throw Error('Stop the current project server before switching projects.');
@@ -139,7 +139,7 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       callback({ cancel: !allowed });
     });
     const bounds = parent()?.getBounds?.();
-    win = new BrowserWindow({
+    const options = {
       title: 'ATLAS · Live project preview',
       width: 850,
       height: 720,
@@ -153,7 +153,15 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
         devTools: false,
         preload: path.join(__dirname, 'preview-recorder-preload.cjs'),
       },
-    });
+    };
+    win = dock
+      ? require('./preview-dock').createPreviewDock({
+          WebContentsView: electron.WebContentsView,
+          nativeImage: electron.nativeImage,
+          parent,
+          webPreferences: options.webPreferences,
+        })
+      : new BrowserWindow(options);
     win.setMenu(null);
     win.webContents.on('did-finish-load', () => win.webContents.send('atlas:preview-recording', recording));
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -311,10 +319,11 @@ function createLivePreview({ electron, directory, parent, approve, importPaths, 
       return state();
     }
     if (request.action === 'start') return start(request.cwd, request);
-    if (request.action === 'open') return open(request.cwd, request.url);
+    if (request.action === 'open') return open(request.cwd, request.url, request.dock === true);
     if (!win || win.isDestroyed()) throw Error('Open a live preview first.');
     if ((await guard.assertProject(request.cwd)) !== root)
       throw Error('Switch back to the project used by this preview.');
+    if (request.action === 'dock-layout') return win.dockLayout ? win.dockLayout(request) : { docked: false };
     if (request.action === 'reload') {
       win.webContents.reload();
       return state();

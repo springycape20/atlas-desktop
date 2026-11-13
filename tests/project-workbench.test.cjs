@@ -6,6 +6,48 @@ const test = require('node:test'),
 const { createProjectFiles } = require('../project-files'),
   { createChangeTracker } = require('../change-tracker'),
   { createProjectWorkbench } = require('../project-workbench');
+
+test('Git checkpoints preserve HEAD, index, staged and unstaged files and survive reopening', async (t) => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-git-checkpoint-'));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const cwd = path.join(base, 'repo'),
+    directory = path.join(base, 'data');
+  await fs.mkdir(cwd);
+  await fs.mkdir(directory);
+  const command = require('../workspace-service').command,
+    git = (args) => command('git', args, cwd);
+  await git(['init']);
+  await git(['config', 'user.email', 'fixture@example.invalid']);
+  await git(['config', 'user.name', 'ATLAS fixture']);
+  await fs.writeFile(path.join(cwd, 'app.txt'), 'base');
+  await git(['add', 'app.txt']);
+  await git(['commit', '-m', 'Initial']);
+  await fs.writeFile(path.join(cwd, 'app.txt'), 'staged');
+  await git(['add', 'app.txt']);
+  await fs.writeFile(path.join(cwd, 'app.txt'), 'working');
+  await fs.writeFile(path.join(cwd, 'new.txt'), 'untracked');
+  const head = await git(['rev-parse', 'HEAD']),
+    index = await fs.readFile(path.join(cwd, '.git', 'index'));
+  const make = () =>
+    createProjectWorkbench({ directory, files: createProjectFiles(), tracker: createChangeTracker(directory) });
+  const service = make(),
+    row = await service.action({ cwd, action: 'capture-git', name: 'Before task' });
+  assert.match(row.gitRef, /^refs\/atlas\/checkpoints\/named-/);
+  assert.equal(await git(['rev-parse', 'HEAD']), head);
+  // Git may refresh stat metadata; the staged tree and exact staged contents must remain identical.
+  assert.equal(await git(['show', ':app.txt']), 'staged');
+  assert.equal(await fs.readFile(path.join(cwd, 'app.txt'), 'utf8'), 'working');
+  assert.equal(await fs.readFile(path.join(cwd, 'new.txt'), 'utf8'), 'untracked');
+  assert.equal(await git(['show', row.gitCommit + ':app.txt']), 'working');
+  assert.equal((await make().action({ cwd, action: 'list' }))[0].gitCommit, row.gitCommit);
+  assert.match((await service.action({ cwd, id: row.id, action: 'git-report' })).summary, /ATLAS/);
+  await fs.writeFile(path.join(cwd, 'app.txt'), 'task edit');
+  const preview = await service.action({ cwd, id: row.id, action: 'preview', files: ['app.txt'] });
+  await service.action({ cwd, id: row.id, action: 'restore', token: preview.token });
+  assert.equal(await fs.readFile(path.join(cwd, 'app.txt'), 'utf8'), 'working');
+  assert.equal(await git(['show', ':app.txt']), 'staged');
+  assert.equal(await git(['rev-parse', 'HEAD']), head);
+});
 test('named checkpoints restore only reviewed files, reject later edits, and retain undo snapshots', async (t) => {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), 'atlas-named-'));
   t.after(() => fs.rm(base, { recursive: true, force: true }));

@@ -58,6 +58,17 @@
         const box = node('details');
         box.append(node('summary', row.name + ' · ' + new Date(row.createdAt).toLocaleString()));
         list.append(box);
+        if (row.gitCommit) {
+          box.append(node('p', 'Git checkpoint ' + row.gitCommit.slice(0, 12) + ' · ' + row.gitRef));
+          button(
+            'Review Git checkpoint',
+            async () => {
+              const report = await api.projectWorkbench({ ...input, id: row.id, action: 'git-report' });
+              box.append(node('pre', report.summary));
+            },
+            box,
+          );
+        }
         button(
           'Delete this saved checkpoint',
           async () => {
@@ -153,6 +164,12 @@
       await api.projectWorkbench({ ...input, action: 'capture', name: name.value });
       name.value = '';
       status.textContent = 'Checkpoint saved locally.';
+      await refresh();
+    });
+    button('Create Git checkpoint', async () => {
+      await api.projectWorkbench({ ...input, action: 'capture-git', name: name.value || 'Before task' });
+      status.textContent =
+        'Git checkpoint saved without changing HEAD, the working tree or index. Git preserves tracked files; the bounded text snapshot also covers eligible untracked files. Review before restoring.';
       await refresh();
     });
     body.append(list);

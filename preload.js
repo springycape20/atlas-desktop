@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('atlas', {
   integrations: (request) => ipcRenderer.invoke('atlas:integrations', request),
   pluginConnect: (request) => ipcRenderer.invoke('atlas:plugin-connect', request),
   projectSetup: (request) => ipcRenderer.invoke('atlas:project-setup', request),
+  setupAssistant: (request) => ipcRenderer.invoke('atlas:setup-assistant', request),
   projectKnowledge: (request) => ipcRenderer.invoke('atlas:project-knowledge', request),
   performance: () => ipcRenderer.invoke('atlas:performance'),
   hardwareCheck: (request) => ipcRenderer.invoke('atlas:hardware-check', request),
@@ -26,6 +27,7 @@ contextBridge.exposeInMainWorld('atlas', {
   taskProgress: () => ipcRenderer.invoke('atlas:task-progress'),
   contextPreview: (request) => ipcRenderer.invoke('atlas:context-preview', request),
   vaultSource: (request) => ipcRenderer.invoke('atlas:vault-source', request),
+  vaultReferences: (request) => ipcRenderer.invoke('atlas:vault-references', request),
   milestoneHandovers: (request) => ipcRenderer.invoke('atlas:milestone-handovers', request),
   workSession: (request) => ipcRenderer.invoke('atlas:work-session', request),
   taskBudgets: (request) => ipcRenderer.invoke('atlas:task-budgets', request),
@@ -34,6 +36,7 @@ contextBridge.exposeInMainWorld('atlas', {
   workflows: (request) => ipcRenderer.invoke('atlas:workflows', request),
   localModel: (request) => ipcRenderer.invoke('atlas:local-model', request),
   searchWork: (request) => ipcRenderer.invoke('atlas:search-work', request),
+  semanticSolutions: (request) => ipcRenderer.invoke('atlas:semantic-solutions', request),
   taskOpen: (id) => ipcRenderer.invoke('atlas:task-open', { id }),
   onDesktopPermissions: (callback) => {
     const listener = (_event, value) => callback(value);
@@ -144,6 +147,28 @@ contextBridge.exposeInMainWorld('atlas', {
       resumeJobId: payload?.resumeJobId,
       profileId: payload?.profileId,
       attachments: payload?.attachments,
+      contextSelection:
+        payload?.contextSelection && typeof payload.contextSelection === 'object'
+          ? {
+              instructions: payload.contextSelection.instructions !== false,
+              memories: payload.contextSelection.memories !== false,
+              history: payload.contextSelection.history !== false,
+              attachments: payload.contextSelection.attachments !== false,
+              project: payload.contextSelection.project === true,
+              vault: payload.contextSelection.vault === true,
+              vaultPreview:
+                typeof payload.contextSelection.vaultPreview === 'string'
+                  ? payload.contextSelection.vaultPreview.slice(0, 80)
+                  : undefined,
+              files: Array.isArray(payload.contextSelection.files) ? payload.contextSelection.files.slice(0, 200) : [],
+              vaultFiles: Array.isArray(payload.contextSelection.vaultFiles)
+                ? payload.contextSelection.vaultFiles.slice(0, 200)
+                : [],
+              vaultPaths: Array.isArray(payload.contextSelection.vaultPaths)
+                ? payload.contextSelection.vaultPaths.slice(0, 8)
+                : [],
+            }
+          : undefined,
       effort: typeof payload?.effort === 'string' ? payload.effort : undefined,
       modelTier: payload?.modelTier,
       maxRuntimeSeconds: payload?.maxRuntimeSeconds,

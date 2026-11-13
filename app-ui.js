@@ -459,7 +459,7 @@ function hydrateSettings(value) {
   $('#speechDetail').value = settings.speechDetail || 'brief';
   $('#routeMode').value = settings.routeMode || 'auto';
   $('#requestTimeout').value = String(settings.timeoutSeconds ?? 0);
-  $('#speakResponses').checked = settings.speakResponses !== false;
+  $('#speakResponses').checked = settings.speakResponses === true;
   $('#showReasoning').checked = settings.showReasoning === true;
   $('#launchAtStartup').checked = settings.launchAtStartup === true;
   if ($('#autoDownloadUpdates')) $('#autoDownloadUpdates').checked = settings.autoDownloadUpdates === true;
@@ -470,7 +470,7 @@ function hydrateSettings(value) {
   $('#recognitionMode').value = settings.recognitionMode || 'enhanced';
   $('#endSilence').value = String(settings.endSilenceMs || 1000);
   $('#wakeWordEnabled').checked = settings.wakeWordEnabled === true;
-  $('#autoListenReplies').checked = settings.autoListenReplies !== false;
+  $('#autoListenReplies').checked = settings.autoListenReplies === true;
   $('#voiceEngine').value = settings.voiceEngine || 'windows';
   $('#elevenLabsControls').hidden = $('#voiceEngine').value !== 'elevenlabs';
   $('#elevenLabsEnabled').checked = settings.elevenLabsEnabled === true;
@@ -969,6 +969,7 @@ function setPath(p) {
   try {
     localStorage.setItem('atlas.cwd', p);
   } catch {}
+  window.atlasDraftRecovery?.activate();
 }
 $('#setFolder').onclick = async () => {
   try {
@@ -989,7 +990,8 @@ try {
 } catch {}
 
 let foregroundRequest = '',
-  jobList = [];
+  jobList = [],
+  taskPreparing = false;
 async function sendMessage(prompt, options = {}) {
   if (!prompt || !cwd) return;
   const selectedContext = window.atlasPower?.selection('assistant');
@@ -1021,12 +1023,14 @@ async function sendMessage(prompt, options = {}) {
   $('#prompt').value = '';
   sizeAssistantComposer();
   $('#sessionStatus').textContent = 'PROCESSING';
+  window.atlasDraftRecovery?.sent(options.draftKey);
   $('#greeting').textContent = 'On it.';
   sub.textContent = 'Working · you can keep talking';
   orb.classList.add('thinking');
   response.classList.add('show');
   response.classList.remove('error');
   output.textContent = 'Working…';
+  window.atlasThinking?.start(output);
   $('#followup').hidden = true;
   try {
     const d = await window.atlas.chat({
@@ -1062,10 +1066,19 @@ async function sendMessage(prompt, options = {}) {
     }
   } catch (error) {
     if (foregroundRequest === requestId) {
+      if (
+        /Task start cancelled before provider dispatch|Provider switch cancelled/.test(error.message) &&
+        !$('#prompt').value.trim()
+      ) {
+        $('#prompt').value = prompt;
+        $('#prompt').dispatchEvent(new Event('input', { bubbles: true }));
+        sizeAssistantComposer();
+      }
       clearFollowup();
       stopSpeaking();
       cancelStreamPaint();
-      output.textContent = error.message;
+      if (window.atlasResponseErrors) window.atlasResponseErrors.render(output, error);
+      else output.textContent = error.message;
       response.classList.add('error');
       $('#sessionStatus').textContent = 'ATTENTION';
     }
@@ -2075,8 +2088,72 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) scheduleWorkspaceSync();
 });
 syncWorkspace();
+function answerCodeBox(text, language = 'Text') {
+  const box = document.createElement('div'),
+    pre = document.createElement('pre'),
+    copy = document.createElement('button');
+  box.className = 'answer-code-box';
+  const scroll = document.createElement('div'),
+    header = document.createElement('div'),
+    label = document.createElement('span');
+  scroll.className = 'answer-code-scroll';
+  header.className = 'answer-code-header';
+  label.textContent = language.slice(0, 30) || 'Text';
+  header.append(label);
+  pre.className = 'answer-code';
+  pre.textContent = text;
+  copy.type = 'button';
+  copy.className = 'answer-code-copy';
+  const icon =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>';
+  copy.innerHTML = icon;
+  copy.title = 'Copy text';
+  copy.setAttribute('aria-label', 'Copy embedded text');
+  copy.onclick = async (event) => {
+    event.stopPropagation();
+    copy.disabled = true;
+    try {
+      await navigator.clipboard.writeText(text);
+      copy.dataset.copied = 'true';
+      copy.title = 'Copied';
+      copy.setAttribute('aria-label', 'Copied to clipboard');
+    } catch {
+      copy.title = 'Copy failed. Try again.';
+      toast('Could not copy text. Try again or select the text to copy it manually.');
+    } finally {
+      copy.disabled = false;
+      setTimeout(() => {
+        if (!copy.isConnected) return;
+        delete copy.dataset.copied;
+        copy.title = 'Copy text';
+        copy.setAttribute('aria-label', 'Copy embedded text');
+      }, 1800);
+    }
+  };
+  if (text.length > 900 || text.split('\n').length > 10) {
+    const expand = document.createElement('button');
+    expand.type = 'button';
+    expand.className = 'answer-code-expand';
+    expand.textContent = 'Expand';
+    expand.setAttribute('aria-expanded', 'false');
+    expand.onclick = () => {
+      const expanded = box.classList.toggle('expanded');
+      expand.textContent = expanded ? 'Collapse' : 'Expand';
+      expand.setAttribute('aria-expanded', String(expanded));
+    };
+    header.append(expand);
+  }
+  header.append(copy);
+  scroll.append(header, pre);
+  box.append(scroll);
+  return box;
+}
 function renderAnswer(text, target = output, fileContext) {
   if (target === output) cancelStreamPaint();
+  if (window.atlasResponseErrors && (fileContext?.error || /^Request failed:/i.test(String(text)))) {
+    window.atlasResponseErrors.render(target, text);
+    return;
+  }
   target.replaceChildren();
   const context = {
     scope: 'assistant',
@@ -2088,10 +2165,8 @@ function renderAnswer(text, target = output, fileContext) {
   const blocks = String(text || '').split(/(```[\s\S]*?```)/g);
   for (const block of blocks) {
     if (block.startsWith('```')) {
-      const pre = document.createElement('pre');
-      pre.className = 'answer-code';
-      pre.textContent = block.replace(/^```[^\n]*\n?/, '').replace(/```$/, '');
-      target.append(pre);
+      const language = block.match(/^```([^\n]*)/)?.[1]?.trim() || 'Text';
+      target.append(answerCodeBox(block.replace(/^```[^\n]*\n?/, '').replace(/```$/, ''), language));
       continue;
     }
     const parts = block.split(/(!?\[[^\]]*\]\((?:<[^>]+>|[^)\n]+)\)|\*\*[^*]+\*\*|`[^`]+`)/g);

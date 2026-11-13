@@ -19,6 +19,12 @@ test('real Assistant gateway enforces invocation budgets before usage-limit fall
     }
   }
   const h = await mainHarness(t, {
+    dialog: {
+      showMessageBox: async (_window, request) => {
+        assert.equal(request.title, 'Provider usage limit');
+        return { response: 1 };
+      },
+    },
     modules: {
       './codex-connection': { CodexConnection: FakeCodex },
       './claude-connection': { ClaudeConnectionPool: FakeClaude },

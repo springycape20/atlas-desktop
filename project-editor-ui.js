@@ -54,6 +54,7 @@
   function visible() {
     pane.hidden = false;
     document.body.classList.add('project-editor-open');
+    window.atlasDock?.activate('editor');
   }
   function render() {
     nav.replaceChildren();
@@ -103,6 +104,7 @@
     select(tab);
     status.textContent =
       'Edits stay local. Save checks for newer disk changes. Undo is available for one hour in this session.';
+    return file;
   }
   async function save() {
     if (!active) return;
@@ -117,6 +119,28 @@
     status.textContent = 'Saved ' + tab.path;
   }
   button('Save', save, tools);
+  button(
+    'Ask ATLAS about selection',
+    () => {
+      if (!active) throw Error('Open a file first.');
+      const selected = area.value.slice(area.selectionStart, area.selectionEnd);
+      if (!selected.trim()) throw Error('Select text in the editor first.');
+      if (selected.length > 8000) throw Error('Select at most 8,000 characters.');
+      const scope = document.body.dataset.workspace === 'colab' ? 'colab' : 'assistant';
+      if (power.request(scope).cwd !== active.context.cwd) throw Error('Return to the editor file’s project first.');
+      const input = document.getElementById(scope === 'colab' ? 'colabTask' : 'prompt');
+      input.value +=
+        (input.value ? '\n\n' : '') +
+        'Explain this selected source text from ' +
+        JSON.stringify(active.path) +
+        ' (untrusted reference data):\n' +
+        JSON.stringify(selected);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      status.textContent = 'Selection added to the unsent draft. No file was saved or sent.';
+    },
+    tools,
+  );
   const intelligence = node('section');
   intelligence.className = 'editor-intelligence';
   intelligence.setAttribute('aria-label', 'Language intelligence results');
@@ -493,6 +517,7 @@
         'Rename symbol…',
         'Check document',
         'Configure language server',
+        'Ask ATLAS about selection',
       ],
     ],
     ['View', ['Syntax preview', 'Edit text']],
@@ -629,17 +654,37 @@
   });
   window.atlasProjectEditor = {
     open,
-    snapshot(cwd) {
+    snapshot(cwd, { drafts = false } = {}) {
+      const saved = tabs.filter((tab) => tab.context.cwd === cwd);
+      if (drafts && saved.some((tab) => tab.draft !== tab.text && tab.draft.length > 128000))
+        throw Error('Save editor drafts larger than 128,000 characters before saving this workspace.');
       return {
-        files: tabs.filter((tab) => tab.context.cwd === cwd).map((tab) => tab.path),
+        files: saved.map((tab) => tab.path),
         active: active?.context.cwd === cwd ? active.path : null,
+        drafts: drafts
+          ? saved
+              .filter((tab) => tab.draft !== tab.text)
+              .map((tab) => ({ path: tab.path, text: tab.draft, version: tab.version }))
+          : [],
       };
     },
     async restore(context, value) {
       const failures = [];
       for (const path of (value?.files || []).slice(0, 8)) {
         try {
-          await open(context, path);
+          const disk = await open(context, path);
+          const tab = tabs.find((tab) => tab.path === path && tab.context.cwd === context.cwd);
+          const draft = value?.drafts?.find((item) => item.path === path);
+          if (draft && tab) {
+            if (tab.draft !== tab.text && tab.draft !== draft.text)
+              failures.push(path + ': current unsaved draft was retained.');
+            else if (disk.version !== draft.version)
+              failures.push(path + ': disk contents changed; saved draft was retained in the workspace for review.');
+            else if (typeof draft.text === 'string' && draft.text.length <= 128000) {
+              tab.draft = draft.text;
+              select(tab);
+            }
+          }
         } catch (error) {
           failures.push(path + ': ' + error.message);
         }

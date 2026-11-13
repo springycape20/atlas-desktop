@@ -54,11 +54,13 @@ function createVaultSource(directory, { search, denied = async () => [] } = {}) 
     if (!selection.vault || !state.enabled || !state.folder) return { text: '', indexed: null };
     const version = revision;
     const excluded = selection.vaultFiles || [];
-    const key = JSON.stringify([state.folder, String(query).trim(), excluded, scope]);
+    const included = selection.vaultPaths || [];
+    const key = JSON.stringify([state.folder, String(query).trim(), excluded, included, scope]);
     const receipt = previews.get(selection.vaultPreview);
     if (!preview && (!receipt || receipt.key !== key)) throw Error('Refresh the vault Context preview before sending.');
     const scan = await search(state.folder, String(query).trim(), {
       excluded,
+      included,
       identity: config.identity,
       denied: await denied(),
     });

@@ -65,3 +65,9 @@ jobs:
           npm run test:preview-ui
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:vault-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:work-improvements-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:workbench-preview-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:activity-ui

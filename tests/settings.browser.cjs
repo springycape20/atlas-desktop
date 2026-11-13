@@ -11,7 +11,7 @@ app.setPath('userData', path.join(temp, 'data'));
 protocol.registerSchemesAsPrivileged([
   { scheme: 'atlas', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
-const mock = `window.atlas=new Proxy({getSettings:async()=>({wakeWordEnabled:false,speakResponses:false,voiceEngine:'windows',autoListenReplies:false}),home:async()=>'C:/Projects',latestConversation:async()=>null,jobs:async()=>[],providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'current',currentVersion:'test'}),onUpdateStatus:fn=>{window.pushUpdate=fn;return()=>{};},chatMetadata:async()=>({}),saveSettings:async(next)=>next},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
+const mock = `window.__voiceStarts=0;if(navigator.mediaDevices)navigator.mediaDevices.getUserMedia=async()=>{__voiceStarts++;throw Error("Microphone must remain off on first launch");};if(window.speechSynthesis)speechSynthesis.speak=()=>{__voiceStarts++;};window.atlas=new Proxy({getSettings:async()=>({}),home:async()=>'C:/Projects',latestConversation:async()=>null,jobs:async()=>[],providerAuthStatus:async()=>({codex:{installed:true,loggedIn:true},claude:{installed:true,loggedIn:true}}),discoverModels:async()=>({codex:{models:[]},claude:{models:[]}}),updates:async()=>({status:'current',currentVersion:'test'}),onUpdateStatus:fn=>{window.pushUpdate=fn;return()=>{};},chatMetadata:async()=>({}),saveSettings:async(next)=>next},{get:(target,key)=>target[key]||(String(key).startsWith('on')?()=>()=>{}:async()=>[])});`;
 const timeout = setTimeout(() => {
   console.error('Settings browser test timed out');
   app.exit(1);
@@ -47,6 +47,9 @@ app.whenReady().then(async () => {
       if (event.level === 'error') console.error(event.message);
     });
     await win.loadURL('atlas://app/');
+    await win.webContents.executeJavaScript(
+      `(async()=>{await new Promise(r=>setTimeout(r,100));for(const id of ['speakResponses','wakeWordEnabled','autoListenReplies'])if(document.getElementById(id).checked)throw Error('First-launch voice setting enabled: '+id);if(__voiceStarts)throw Error('First launch activated voice');})()`,
+    );
     const scriptErrors = await win.webContents.executeJavaScript('window.__uiErrors');
     if (scriptErrors.length) throw Error(scriptErrors.join('\n'));
     await win.webContents.executeJavaScript(`(async()=>{

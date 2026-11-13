@@ -83,11 +83,93 @@ function normalizeClaude(data, plan) {
       );
   return summary('claude', rows, plan);
 }
-async function readClaudeUsage() {
+function normalizeClaudeReport(report) {
+  const limits = report?.rate_limits?.limits;
+  if (!Array.isArray(limits))
+    return {
+      ...summary('claude', []),
+      message: "Claude Code did not provide subscription limits. Open Claude's usage page to check your allowance.",
+    };
+  const rows = limits.slice(0, 20).map((row, i) => {
+    const kind = String(row?.kind || 'Usage').slice(0, 80);
+    const label =
+      kind === 'session'
+        ? 'Session limit'
+        : kind === 'weekly_all'
+          ? 'Weekly · all models'
+          : kind === 'weekly_scoped'
+            ? 'Weekly'
+            : kind.replace(/_/g, ' ');
+    const scope = [row?.scope?.model?.display_name, row?.scope?.surface?.display_name]
+      .filter((value) => typeof value === 'string')
+      .map((value) => value.slice(0, 80));
+    return windowRow(
+      'report:' + i,
+      [label, ...scope].join(' · '),
+      row?.percent,
+      row?.resets_at,
+      kind === 'session' || kind === 'weekly_all',
+    );
+  });
   return {
-    ...summary('claude', []),
-    message: "Open Claude's usage page to see your allowance. ATLAS does not read Claude sign-in tokens.",
+    ...summary('claude', rows),
+    ...(rows.length ? {} : { message: 'Claude Code reported no usage meters for this account.' }),
   };
+}
+async function readClaudeUsage({ executable, execute, cwd } = {}) {
+  if (!executable || !execute)
+    return {
+      ...summary('claude', []),
+      message: "Install and sign in to Claude Code, or open Claude's usage page to check your allowance.",
+    };
+  const version = String(await execute(executable, ['--version'], cwd)).match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (
+    !version ||
+    Number(version[1]) < 2 ||
+    (Number(version[1]) === 2 && Number(version[2]) === 0) ||
+    (Number(version[1]) === 2 && Number(version[2]) === 1 && Number(version[3]) < 273)
+  )
+    return { ...summary('claude', []), message: 'Update Claude Code to 2.1.273 or later for supported usage reports.' };
+  // Run only the built-in report through the unmodified CLI. No project/user hooks,
+  // skills or MCP servers, no saved chat, no credential access by ATLAS.
+  const output = await execute(
+    executable,
+    [
+      '--print',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--no-session-persistence',
+      '--setting-sources',
+      '',
+      '--settings',
+      JSON.stringify({ disableAllHooks: true }),
+      '--strict-mcp-config',
+      '--mcp-config',
+      JSON.stringify({ mcpServers: {} }),
+      '--tools',
+      '',
+      '--max-budget-usd',
+      '0.000001',
+      '/usage',
+    ],
+    cwd,
+    { timeout: 20000, maxBuffer: 1024 * 1024 },
+  );
+  let report;
+  for (const line of String(output).split('\n')) {
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (row.type === 'assistant' && row.usage_report) report = row.usage_report;
+    if (row.type === 'result' && (row.is_error || (row.subtype && row.subtype !== 'success')))
+      throw Error('Claude usage report is unavailable. Open the usage page or retry later.');
+  }
+  if (!report) throw Error('Claude usage report is unavailable. Update Claude Code or open the usage page.');
+  return normalizeClaudeReport(report);
 }
 function createProviderUsage({ codex, claude = readClaudeUsage, now = Date.now, notify = () => {} }) {
   const cache = new Map(),
@@ -114,7 +196,9 @@ function createProviderUsage({ codex, claude = readClaudeUsage, now = Date.now, 
           error:
             provider === 'claude' && /^Sign in|^Subscription limits|^Claude (usage|returned)/.test(error.message)
               ? error.message
-              : 'Codex usage is unavailable. Check that Codex is installed and signed in.',
+              : provider === 'claude'
+                ? 'Claude usage is unavailable. Check Claude Code sign-in or open its usage page.'
+                : 'Codex usage is unavailable. Check that Codex is installed and signed in.',
         };
         cache.set(provider, value);
         notify(value);
@@ -127,11 +211,31 @@ function createProviderUsage({ codex, claude = readClaudeUsage, now = Date.now, 
     return promise;
   }
   return {
-    read: async ({ refresh = false } = {}) =>
+    read: async ({ refresh = false, cachedOnly = false } = {}) =>
       Object.fromEntries(
-        await Promise.all(['claude', 'codex'].map(async (provider) => [provider, await get(provider, refresh)])),
+        await Promise.all(
+          ['claude', 'codex'].map(async (provider) => [
+            provider,
+            cachedOnly
+              ? cache.get(provider) || {
+                  ...summary(provider, []),
+                  message:
+                    provider === 'claude'
+                      ? "Open Claude's usage page to see your allowance."
+                      : 'No cached usage. Refresh to check supported provider limits.',
+                }
+              : await get(provider, refresh),
+          ]),
+        ),
       ),
     updateCodex: (data) => update('codex', normalizeCodex(data)),
   };
 }
-module.exports = { USAGE_URLS, normalizeCodex, normalizeClaude, readClaudeUsage, createProviderUsage };
+module.exports = {
+  USAGE_URLS,
+  normalizeCodex,
+  normalizeClaude,
+  normalizeClaudeReport,
+  readClaudeUsage,
+  createProviderUsage,
+};
