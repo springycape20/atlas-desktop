@@ -135,6 +135,7 @@
       ['history', 'Earlier conversation'],
       ['attachments', 'Selected attachments'],
       ['project', 'Relevant project excerpts'],
+      ['vault', 'Relevant Markdown vault excerpts (refresh preview before sending)'],
     ]) {
       const row = node('label');
       row.className = 'power-toggle';
@@ -145,6 +146,7 @@
       if (which === 'colab' && id === 'memories') box.disabled = true;
       box.onchange = () => {
         selected[id] = box.checked;
+        delete selected.vaultPreview;
         saveSelection(which, selected);
         status.textContent = 'Context selection saved for the next request.';
       };
@@ -154,6 +156,7 @@
     const actions = node('div');
     actions.className = 'power-actions';
     body.append(actions);
+    button('Configure Markdown vault', () => show('Markdown vault'), actions);
     const preview = node('div');
     body.append(preview);
     button(
@@ -173,8 +176,11 @@
       'Refresh preview',
       async () => {
         status.textContent = 'Reading selected context locally…';
-        const result = await api.contextPreview({ ...input, selection: selected });
+        const result = await api.contextPreview({ ...request(which), selection: selected });
         if (!current()) return;
+        if (result.vaultPreview) selected.vaultPreview = result.vaultPreview;
+        else delete selected.vaultPreview;
+        saveSelection(which, selected);
         preview.replaceChildren();
         if (result.budget) {
           preview.append(
@@ -233,29 +239,53 @@
           );
           preview.append(details);
         }
-        if (result.indexed) {
+        for (const [source, files, field] of [
+          ['Project', result.indexed, 'files'],
+          ['Vault', result.vaultIndexed, 'vaultFiles'],
+        ]) {
+          if (!files) continue;
           preview.append(
             node(
               'h3',
-              `${result.indexed.indexed} source files indexed${result.indexed.truncated ? ' · scan limited' : ''}`,
+              source === 'Project'
+                ? `${files.indexed} source files indexed${files.truncated ? ' · scan limited' : ''}`
+                : `Vault: ${files.indexed} files scanned${files.truncated ? ' · scan limited' : ''}`,
             ),
           );
-          for (const file of result.indexed.results) {
+          if (files.warnings?.length) preview.append(node('p', files.warnings.join(' · ')));
+          if (source === 'Vault' && files.contextSelection?.omitted?.length)
+            preview.append(node('p', files.contextSelection.omitted.length + ' excerpts omitted by context budget.'));
+          for (const file of files.results) {
             const details = node('details');
             details.append(node('summary', file.path + ':' + file.line), node('pre', file.excerpt));
             button(
               'Exclude this file',
               () => {
-                selected.files = [...new Set([...selected.files, file.path])];
+                selected[field] = [...new Set([...(selected[field] || []), file.path])];
+                delete selected.vaultPreview;
                 saveSelection(which, selected);
                 details.remove();
-                status.textContent = 'Excluded ' + file.path + ' from ATLAS project context.';
+                status.textContent =
+                  source === 'Project'
+                    ? 'Excluded ' + file.path + ' from ATLAS project context.'
+                    : 'Excluded ' + file.path + ' from ATLAS vault context. Refresh preview.';
               },
               details,
             );
             preview.append(details);
           }
         }
+        if (selected.vaultFiles?.length)
+          button(
+            'Clear vault exclusions (' + selected.vaultFiles.length + ')',
+            () => {
+              selected.vaultFiles = [];
+              delete selected.vaultPreview;
+              saveSelection(which, selected);
+              status.textContent = 'Vault exclusions cleared. Refresh preview.';
+            },
+            preview,
+          );
         if (selected.files.length)
           button(
             'Clear file exclusions (' + selected.files.length + ')',
@@ -266,7 +296,11 @@
             },
             preview,
           );
-        status.textContent = result.note;
+        status.textContent =
+          result.note +
+          (selected.vault && !result.vaultIndexed
+            ? ' Vault source is unconfigured or disabled; no vault notes included. Use Configure Markdown vault to enable it.'
+            : '');
       },
       actions,
     );

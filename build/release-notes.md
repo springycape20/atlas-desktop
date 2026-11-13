@@ -1,16 +1,15 @@
-ATLAS 0.11.1 adds eight improvements for working on local projects beside chat.
+ATLAS 0.11.2 adds an optional, local Markdown notes source, including Obsidian vaults.
 
-- **Guided benchmarks:** create fixed tasks and pinned model configurations with forms; advanced JSON remains available. Running a benchmark still asks for approval and uses provider allowance.
-- **Editor actions:** review quick fixes, refactors, import organisation and file moves before applying. Completion supports text edits, additional edits and simple snippet placeholders. An approved installed language server is required for language actions.
-- **Saved workspaces:** restore file tabs, the active file, preview locations and terminal layout. Snapshots exclude drafts, terminal output and commands. New shells require approval.
-- **Browser recording:** record local preview clicks and form changes into a recipe draft, then review every selector and value. Likely private fields are excluded heuristically; use test data. Saving or running remains explicit.
-- **Focused context:** select bounded function/class slices and recent changed lines with existing exclusions and budgets. No measured token-saving percentage is claimed.
-- **Visual comparisons:** stabilise animation/font/caret capture conditions and save ignored pixel regions with baselines. Comparisons require matching URL, viewport, scale and scroll position.
-- **Long histories:** Assistant uses an atomic metadata index and integrity-checked disk chunks; Colab upgrades to chunked IndexedDB storage. Both timelines mount visible messages with a buffer. Full history remains available; Colab still keeps complete message arrays in memory.
-- **Node.js debugger:** approve a JavaScript entry point, add breakpoints, step through code, inspect call stacks and bounded local scopes, and open source files. The initial debugger uses an installed Node.js runtime; it does not evaluate expressions or invoke getters.
+- **Choose your notes:** open Library → Markdown vault, select a dedicated local folder and enable the source. No Obsidian installation, plugin, server or new dependency is required.
+- **Review before sending:** opt in separately in each Chat or Colab chat's Context panel and refresh the preview. Only bounded, relevant Markdown excerpts are included when you send the prompt. Changed excerpts require a fresh preview.
+- **Read-only and separate:** ATLAS never modifies vault files, follows note links or treats note text/frontmatter as permission. Vault discovery does not change project maps, project memory or provider filesystem permissions.
+- **Visible limits:** scans cap directory entries, note count, note size, bytes read, depth and excerpt size. Private/hidden paths, denied paths and symlinks are excluded; incomplete scans are disclosed.
+- **Disable or remove:** stop future scans/inclusion without deleting notes. Source changes block subsequent provider calls in tasks using the previous source. Calls already in progress may finish; previously shared context cannot be erased.
 
-**History migration:** retain your pre-update record backup. Older ATLAS versions do not understand the migrated Colab database or the new Assistant index. Use recovery with its saved backup when downgrading. The legacy Assistant file and unreferenced chunks are retained for recovery; they can use additional disk space.
+The source defaults off. Existing unconfigured/disabled context behavior is preserved. Notes are scanned locally without a retained note cache; sending selected context shares it with your chosen providers under their existing policies. See the repository's project tools and privacy documentation for setup and limits.
 
-No dependency additions, publisher telemetry or automatic uploads. Debugged project code runs with your account permissions after approval. The installer remains unsigned under the existing owner-authorized policy; Windows may show a warning.
+No dependency versions changed and no publisher telemetry was added. The production audit has two moderate transitive-package findings; their affected routing, rendering and upgrade configurations are not used by ATLAS's authenticated loopback MCP endpoint. The release review records the assessment and limitations.
 
-**Updating:** use Settings > App updates or install the download over your current version. Users on 0.10.2 or older must download the installer because those versions' in-app installation fails. Windows x64; close older ATLAS instances before installing. No legal or security certification is claimed.
+**Updating:** use Settings → App updates or install the download over your current version. Users on 0.10.2 or older must download the installer because those versions' in-app installation fails. Windows x64; close older ATLAS instances before installing. Retain a pre-update backup: earlier versions do not understand the history storage introduced in 0.11.1.
+
+The installer remains unsigned under the existing owner-authorized policy; Windows may show a warning. No legal or security certification is claimed.

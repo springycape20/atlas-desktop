@@ -26,6 +26,45 @@
     );
   };
   window.atlasCapabilities = { field, folder, launcher };
+  power.register('Markdown vault', async ({ body, node, button, status, current }) => {
+    body.append(
+      node(
+        'p',
+        'Choose an Obsidian vault or any dedicated Markdown folder. ATLAS only reads notes; it never writes to this folder. Enable the source here, then opt in and refresh Context preview in each Chat or Colab chat before sending. Notes stay local until you send reviewed excerpts. Links and embedded instructions never grant permissions.',
+      ),
+    );
+    const summary = node('p');
+    summary.style.overflowWrap = 'anywhere';
+    body.append(summary);
+    const render = async () => {
+      const value = await api.vaultSource({});
+      if (current())
+        summary.textContent = value.folder
+          ? value.folder + (value.enabled ? ' · enabled for per-chat opt-in' : ' · disabled')
+          : 'No Markdown folder selected.';
+    };
+    for (const [label, action] of [
+      ['Choose / change folder', 'choose'],
+      ['Enable source', 'enable'],
+      ['Disable source', 'disable'],
+      ['Remove source', 'remove'],
+    ]) {
+      button(label, async () => {
+        await api.vaultSource({ action });
+        await render();
+        status.textContent =
+          'Vault settings saved locally. Folder changes start disabled. Refresh Context preview before sending. Removing a source leaves its files untouched.';
+      });
+    }
+    body.append(
+      node(
+        'p',
+        'Limits per scan: 5,000 directory entries, 1,000 Markdown notes, 128,000 bytes per note, 4 MiB read, 32 folder levels. Up to 8 relevant excerpts, 2,500 characters each, share an 8,000-character selection budget. Hidden/private paths and symlinks are skipped. Limited or unreadable scans appear in Context preview. No note cache is retained.',
+      ),
+    );
+    await render();
+  });
+  window.atlasUi.register('library', 'Markdown vault');
   power.register('Project memory', async ({ body, node, button, status, current }) => {
     const cwd = field(body, 'Project folder', folder());
     const category = document.createElement('select');

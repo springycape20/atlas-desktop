@@ -6,7 +6,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file));
 const SUITES =
-  'navigation power preview settings assistant colab graph dispute approvals files pty pty-render restore recovery data release';
+  'navigation power preview settings assistant colab graph dispute approvals files pty pty-render restore recovery data release vault';
 
 // Problems in the release record that no test would otherwise report before tagging.
 function recordProblems({ version, lock, lockBytes, review, changelog, notes, reviewDocExists, tags = [] }) {
@@ -70,6 +70,7 @@ function main() {
   ok = run('packaged PDF extraction', 'npm', ['run', 'test:pdf-package-ui']) && ok;
   ok = run('packaged backup worker', 'npm', ['run', 'test:backup-package-ui']) && ok;
   ok = run('packaged Node debugger', 'npm', ['run', 'test:debugger-package-ui']) && ok;
+  ok = run('packaged Markdown vault', 'npm', ['run', 'test:vault-package-ui']) && ok;
   console.log(
     ok
       ? `\nReady for a PR. Still needed by hand, see docs/RELEASE-SECURITY.md:\n- Run the packaged update check and record it in the release review.\n- After CI passes and the owner confirms: merge, then tag v${version}.\n- Confirm the release build finished and published its three files.`

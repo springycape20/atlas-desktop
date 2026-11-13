@@ -1,30 +1,18 @@
 {
   "status": "technical-review-complete",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "reviewedBy": "Codex automated technical dependency review; not legal counsel",
   "reviewedAt": "2026-11-13",
-  "packageLockSha256": "81870e80ebf1cc570bf982b810502acdaf35b1ae886a90573fdcd1c45db4c4df",
-  "evidence": "docs/RELEASE-0.11.1-REVIEW.md",
+  "packageLockSha256": "a45f4778c97ac42fa263c1c6021cf438adc8237f146dfabe756fce0bc4209b78",
+  "evidence": "docs/RELEASE-0.11.2-REVIEW.md",
   "signing": "unsigned-owner-authorized",
-  "ownerDecision": "Owner requested a new patch containing the eight approved project-tool improvements. Existing owner-authorized unsigned policy remains in effect. Publication requires the documented post-CI confirmation. No signing or legal approval is claimed.",
+  "ownerDecision": "Owner explicitly requested publication of the Markdown vault patch after reviewing the implementation and screenshots. Publish only after passing CI and verified artifacts. Existing unsigned-release authorization remains in effect; no signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 617,
-    "electronSuites": [
-      "assistant",
-      "colab",
-      "power",
-      "navigation",
-      "files",
-      "preview",
-      "menu-audit",
-      "pdf-package",
-      "backup-package",
-      "debugger-package"
-    ],
-    "productionAudit": "2026-11-13: npm audit --omit=dev reports zero production vulnerabilities.",
-    "package": "Fresh unsigned 0.11.1 Windows x64 installer verified: version, ASAR, fuses, private-path exclusions, notices/inventory, pinned speech resources and updater hashes. Packaged PDF, backup worker and installed-Node debugger checks passed. Committed release gate repeats validation.",
-    "recovery": "A copied packaged 0.11.1 app relaunched against throwaway data, restored records before app load and preserved newer fixture records. Inert provider executables; no user installation replaced. Installed live-feed upgrade remains untested before publication.",
-    "menuAudit": "135 surfaces, 155 clicks, zero problems; providers/network blocked, approvals refused."
+    "unitTests": 630,
+    "electronSuites": ["vault", "vault-package"],
+    "productionAudit": "2026-11-13: zero high/critical findings; two moderate transitive package findings (five advisories), triaged against ATLAS usage in the release review. No dependency versions changed.",
+    "package": "Fresh unsigned 0.11.2 Windows x64 installer verified: version, ASAR, private-path exclusions, binary fuses, notices/inventory, pinned speech resources and exact updater hashes. The packaged vault worker passed read-only source, review receipt, stale-note rejection and disable/remove checks. Full release gate also runs the inherited package/UI suites.",
+    "recovery": "Existing isolated restore/recovery fixture suites will run in the release gate. Live installed-app upgrade is not testable against the 0.11.2 feed before publication."
   }
 }

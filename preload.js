@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('atlas', {
   taskPlans: (request) => ipcRenderer.invoke('atlas:task-plans', request),
   taskProgress: () => ipcRenderer.invoke('atlas:task-progress'),
   contextPreview: (request) => ipcRenderer.invoke('atlas:context-preview', request),
+  vaultSource: (request) => ipcRenderer.invoke('atlas:vault-source', request),
   milestoneHandovers: (request) => ipcRenderer.invoke('atlas:milestone-handovers', request),
   workSession: (request) => ipcRenderer.invoke('atlas:work-session', request),
   taskBudgets: (request) => ipcRenderer.invoke('atlas:task-budgets', request),
