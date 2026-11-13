@@ -22,4 +22,8 @@ The focused renderer regression failed before the fix with an opaque `{}` and pa
 
 The full release gate and new installer checks run before tagging. Final evidence is recorded after those checks. CI independently verifies the final PR commit; the public tag workflow rebuilds and verifies the merged commit and public assets.
 
+The complete local gate passed 665 unit/integration tests, formatting, the production audit, all 21 Electron UI suites and the menu audit (143 surfaces, 175 clicks, zero problems). Installer build and verification passed, including binary fuses, ASAR integrity, mandatory runtime files, speech resources, notices and updater digest/size. All four packaged smoke suites passed: PDF extraction, backup worker, installed-Node debugger and Markdown vault. Packaged renderer backup, updater and main-process source match the current source after normalizing line endings.
+
+Local installer: 381,467,867 bytes; SHA-256 `6ab1265f5b6d223feef46eb6b31e3963819187fcca999012a84763a386180af1`; SHA-512 `dsDBGXa2NW7p1Kk/P0B/q2yHV42sQXhJQBj68F4FmEFm+jfVT0SJPS52HO6GHtvx0F9cu30v05hwYxm/WbPJ9w==`. Logs and local hashes are retained under ignored `dist/`. The public workflow independently rebuilds the merged commit; its published installer digest can differ and must match the public manifest.
+
 Disposable profiles use Windows temporary storage. Original user records and the user's running installed app are preserved. A real installed-app upgrade transition is not claimed by the isolated installer-dispatch fixture.

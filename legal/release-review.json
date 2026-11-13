@@ -9,9 +9,10 @@
   "ownerDecision": "Owner requested publishing the local improvements, then reported the installed updater failure after approving recovery. This follow-up hotfix addresses readable recovery failures and explicit retry within that authorized release work. Existing unsigned distribution policy remains in effect; no signing or legal certification is claimed.",
   "openItems": [],
   "verification": {
-    "sourceChecks": "Focused renderer backup, Settings, recovery and 21 setup/update tests passed. The complete release gate and installer checks run before tagging.",
-    "productionAudit": "Dependency versions unchanged; the 0.12.0 review records zero high/critical and two moderate affected packages with seven advisories. The full gate reruns the production audit.",
-    "package": "New renderer-backup.js is mandatory in packaged verification. Installer and packaged smoke checks run before publication.",
-    "recovery": "Real Electron fixture verifies backup failure blocks installer dispatch, preserves the download and succeeds on explicit retry. No live installed-app upgrade transition is claimed."
+    "sourceChecks": "Complete local gate passed 665 unit/integration tests, formatting, production audit, all 21 Electron suites and the menu audit (143 surfaces, 175 clicks, zero problems). Final PR CI must pass before merge/tagging.",
+    "productionAudit": "Zero high/critical production findings. Two moderate affected transitive packages and seven advisories remain assessed as in 0.12.0; no dependency versions changed.",
+    "package": "Installer build, fuses, ASAR integrity, resources, notices, updater digest/size and all four packaged smoke suites passed. Local installer: 381467867 bytes; SHA-256 6ab1265f5b6d223feef46eb6b31e3963819187fcca999012a84763a386180af1. Packaged renderer backup/updater/main source match current source. Public tag workflow independently rebuilds and verifies before publication.",
+    "recovery": "Real Electron fixture verifies backup failure blocks installer dispatch, preserves the download and succeeds on explicit retry. No live installed-app upgrade transition is claimed.",
+    "unitTests": 665
   }
 }
