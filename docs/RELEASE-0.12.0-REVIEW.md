@@ -29,4 +29,6 @@ These are usage-based applicability assessments, not claims that dependencies ar
 
 The completed source work passed 662 unit/integration tests and seven targeted Electron suites, including automatic recovery across reload/navigation, exact copy behavior, selected-task bulk cleanup/Undo, reset countdowns, live badges and native preview isolation. The complete release gate runs against the committed version before tagging; final installer hashes and packaged smoke results are recorded after that run. The package verifier explicitly requires all new runtime modules.
 
+The first complete gate passed all 20 Electron suites and installer/package checks, but the menu audit caught eleven legitimate task-screen subscriptions exceeding Electron's default listener threshold. The preload now shares one IPC listener with independently removable subscribers. A focused regression test reproduced the warning before the fix and verifies delivery, unsubscribe and re-subscribe afterward. The full gate is repeated for the corrected commit before tagging.
+
 The live installed-app transition to the new public updater feed cannot be exercised before publication. Isolated update/recovery fixtures and packaged worker checks do not replace that live test, and no user installation is replaced during validation.

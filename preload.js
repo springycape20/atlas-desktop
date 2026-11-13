@@ -1,4 +1,18 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
+// Task screens share a single transport subscription, even as more screens are added.
+const jobSubscribers = new Set();
+const dispatchJobs = (_event, value) => {
+  for (const callback of [...jobSubscribers]) callback(value);
+};
+function subscribeJobs(callback) {
+  const subscriber = (value) => callback(value);
+  if (!jobSubscribers.size) ipcRenderer.on('atlas:jobs-changed', dispatchJobs);
+  jobSubscribers.add(subscriber);
+  return () => {
+    jobSubscribers.delete(subscriber);
+    if (!jobSubscribers.size) ipcRenderer.removeListener('atlas:jobs-changed', dispatchJobs);
+  };
+}
 // Electron prefixes every handler error with internal text; screens should show only the message.
 const invokeRaw = ipcRenderer.invoke.bind(ipcRenderer);
 ipcRenderer.invoke = (...args) =>
@@ -105,11 +119,7 @@ contextBridge.exposeInMainWorld('atlas', {
     ipcRenderer.on('atlas:task-open', listener);
     return () => ipcRenderer.removeListener('atlas:task-open', listener);
   },
-  onJobs: (callback) => {
-    const listener = (_event, value) => callback(value);
-    ipcRenderer.on('atlas:jobs-changed', listener);
-    return () => ipcRenderer.removeListener('atlas:jobs-changed', listener);
-  },
+  onJobs: subscribeJobs,
   memory: (request) => ipcRenderer.invoke('atlas:memory', request),
   reminders: (request) => ipcRenderer.invoke('atlas:reminders', request),
   onReminder: (callback) => {
