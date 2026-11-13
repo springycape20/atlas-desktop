@@ -170,6 +170,10 @@ Your conversations, memories, reminders and settings stay in `%LOCALAPPDATA%\ATL
 
 ATLAS source is released under the [MIT License](LICENSE). Bundled components retain their own licences. Generated notices and the dependency inventory ship in `resources/compliance`; Electron's licence and Chromium notices also ship with the application. The [patch review](docs/PATCH-RELEASE-REVIEW.md) records the removal of Kokoro, eSpeak, sharp/libvips and ONNX dependencies from 0.8.3. This is a technical review, not legal certification. Historical source questions must be resolved before those components are reintroduced.
 
+The [branding and attribution policy](BRANDING.md) identifies official releases without adding restrictions to MIT. Required copyright and licence notices must remain with copies or substantial portions; a visible interface credit is not required. No registered trademark is claimed.
+
+Production packaging minifies first-party JavaScript and CSS in an ignored staging directory and omits source maps. It preserves the editable source, the existing Prism bundle, licence notices, binary fuses and ASAR integrity. Minification discourages casual copying; it does not encrypt code, prevent extraction or revoke MIT permissions. See [the production-build notes](docs/MIT-PRODUCTION-HARDENING.md) for the verification and limits.
+
 ## Credits
 
 ATLAS uses Electron and [whisper.cpp](https://github.com/ggml-org/whisper.cpp), and offers optional Windows-MCP integration, each under its own license. The Colab workflow graph is inspired by [Graphify](https://github.com/Graphify-Labs/graphify). ATLAS is an independent project, not affiliated with OpenAI or Anthropic.

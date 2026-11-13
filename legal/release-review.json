@@ -3,7 +3,14 @@
   "version": "0.12.1",
   "reviewedBy": "Codex automated technical dependency review; not legal counsel",
   "reviewedAt": "2026-11-14",
-  "packageLockSha256": "ec49af3577c6d8756c7e82c57d6665261e449ce1487bd07f30ba264145d08786",
+  "packageLockSha256": "75b6446a573b60c0f71931c1714c747ac5d0815c053f5e0daf1dbef72ff45897",
+  "publishedReleasePackageLockSha256": "ec49af3577c6d8756c7e82c57d6665261e449ce1487bd07f30ba264145d08786",
+  "localBuildHardening": {
+    "state": "unreleased-local-build",
+    "evidence": "docs/MIT-PRODUCTION-HARDENING.md",
+    "dependencyReview": "Nine added build-only packages are MIT or BSD-2-Clause. The 135 production-lock entries are byte-for-byte identical as parsed objects to the original release lock. Root MIT licence and existing generated Prism bundle are unchanged.",
+    "publication": "Desktop hardening remains unreleased: do not replace the existing release or tag. The owner separately requested pushing the verified changes to GitHub and reopening the updated website. Existing published desktop release evidence below is historical."
+  },
   "evidence": "docs/RELEASE-0.12.1-REVIEW.md",
   "signing": "unsigned-owner-authorized",
   "ownerDecision": "Owner requested publishing the local improvements, then reported the installed updater failure after approving recovery. This follow-up hotfix addresses readable recovery failures and explicit retry within that authorized release work. Existing unsigned distribution policy remains in effect; no signing or legal certification is claimed.",

@@ -41,12 +41,16 @@
     "test:renderer-backup-ui": "electron tests/renderer-backup.browser.cjs",
     "test:data-ui": "electron tests/data-safety.browser.cjs",
     "release:check": "node build/release-check.cjs",
-    "build:compliance": "node build/prepare-compliance.cjs"
+    "build:compliance": "node build/prepare-compliance.cjs",
+    "build:production": "node build/production-code.cjs",
+    "test:release-package-ui": "electron tests/release-screens.browser.cjs --packaged"
   },
   "devDependencies": {
+    "clean-css": "5.3.3",
     "electron": "^45.0.0",
     "electron-builder": "26.18.0",
-    "prettier": "3.9.10"
+    "prettier": "3.9.10",
+    "terser": "5.51.2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
@@ -62,6 +66,7 @@
   "build": {
     "appId": "com.springycape.atlas",
     "productName": "ATLAS",
+    "copyright": "Copyright (c) 2026 springycape20",
     "npmRebuild": false,
     "directories": {
       "output": "dist"
@@ -94,7 +99,20 @@
       "!node_modules/@napi-rs/**",
       "!node_modules/node-pty/build/**",
       "!node_modules/pdfjs-dist/standard_fonts/Liberation*.ttf",
-      "!node_modules/pdfjs-dist/standard_fonts/LICENSE_LIBERATION"
+      "!node_modules/pdfjs-dist/standard_fonts/LICENSE_LIBERATION",
+      "!*.js",
+      "!*.cjs",
+      "!*.css",
+      "!**/*.map",
+      {
+        "from": "dist/production-code",
+        "to": ".",
+        "filter": [
+          "*.js",
+          "*.cjs",
+          "*.css"
+        ]
+      }
     ],
     "extraResources": [
       {
@@ -161,7 +179,7 @@
       "enableEmbeddedAsarIntegrityValidation": true,
       "onlyLoadAppFromAsar": true
     },
-    "beforePack": "build/prepare-compliance.cjs"
+    "beforePack": "build/prepare-production.cjs"
   },
   "license": "MIT",
   "author": "springycape20"

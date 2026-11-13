@@ -1,0 +1,13 @@
+ATLAS
+Copyright (c) 2026 springycape20
+
+ATLAS application code is provided under the MIT License in LICENSE.
+Copies or substantial portions must retain the required copyright and licence notices.
+This does not require a visible interface credit, payment, or publication of modifications.
+
+Third-party components retain their own licences and copyright notices.
+See resources/compliance/THIRD-PARTY-NOTICES.txt and the Electron/Chromium notices
+in distributed desktop builds. See BRANDING.md for identification of official releases.
+
+Production minification makes code less immediately readable. It does not encrypt
+the source, prevent extraction, or change the permissions granted by MIT.

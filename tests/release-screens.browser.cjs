@@ -7,7 +7,9 @@ const fs = require('node:fs'),
   os = require('node:os'),
   assert = require('node:assert/strict');
 require('./temp-cleanup.cjs').removeStaleTempFolders('atlas-release-screens-');
-const root = path.join(__dirname, '..'),
+const root = process.argv.includes('--packaged')
+    ? path.join(__dirname, '../dist/win-unpacked/resources/app.asar')
+    : path.join(__dirname, '..'),
   temp = fs.mkdtempSync(path.join(os.tmpdir(), 'atlas-release-screens-'));
 app.disableHardwareAcceleration();
 app.setPath('userData', path.join(temp, 'data'));
