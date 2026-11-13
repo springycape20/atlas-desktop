@@ -1,15 +1,19 @@
-ATLAS 0.11.2 adds an optional, local Markdown notes source, including Obsidian vaults.
+ATLAS 0.12.0 brings your work together in a new Activity launch page and connected project workspace.
 
-- **Choose your notes:** open Library → Markdown vault, select a dedicated local folder and enable the source. No Obsidian installation, plugin, server or new dependency is required.
-- **Review before sending:** opt in separately in each Chat or Colab chat's Context panel and refresh the preview. Only bounded, relevant Markdown excerpts are included when you send the prompt. Changed excerpts require a fresh preview.
-- **Read-only and separate:** ATLAS never modifies vault files, follows note links or treats note text/frontmatter as permission. Vault discovery does not change project maps, project memory or provider filesystem permissions.
-- **Visible limits:** scans cap directory entries, note count, note size, bytes read, depth and excerpt size. Private/hidden paths, denied paths and symlinks are excluded; incomplete scans are disclosed.
-- **Disable or remove:** stop future scans/inclusion without deleting notes. Source changes block subsequent provider calls in tasks using the previous source. Calls already in progress may finish; previously shared context cannot be erased.
+- **Start from Activity:** see working tasks, decisions needing attention, recent results, provider allowance and reset countdowns. Archive or dismiss stopped tasks individually or in a batch, with Undo.
+- **Continue a project:** Project home and Task centre organise retained work, conversations, checks and review actions. Search projects, workflows, chats and task results together.
+- **Keep your place:** automatic local Assistant draft recovery and saved workspaces preserve unsent work, file tabs and workbench layout. Conflicting editor drafts and later disk changes are protected. Restoring does not run commands or send messages.
+- **Work in one dock:** combine the editor, approved terminal sessions, a sandboxed local preview and task changes. Add selected file/note references or editor text to an unsent draft.
+- **Review outcomes:** task handoffs distinguish model reports from executed checks. Errors show concise explanations with expandable technical details. Text/code boxes have language labels, expand/collapse and sticky copy controls.
+- **Use provider allowance deliberately:** supported Codex and Claude Code usage reports refresh while Activity is visible. Low allowance and provider handoffs require explicit choices. Missing limits remain unavailable; ATLAS does not read Claude login tokens or scrape account pages.
+- **Reuse useful work:** turn completed tasks into reviewed workflows with parameters, use optional reviewed local semantic solution search, or start with the passive project setup assistant.
+- **Protect changes:** optionally create a Git checkpoint before a task. Git preserves tracked contents; a separate bounded text snapshot covers eligible untracked text. Restore selected files only after reviewing the preview.
+- **Voice is optional:** spoken replies, wake-word listening and automatic follow-up listening default off for new installations. Existing saved preferences are preserved. Waiting responses have shuffled phrases, a blue wave and spinner, with reduced-motion support.
 
-The source defaults off. Existing unconfigured/disabled context behavior is preserved. Notes are scanned locally without a retained note cache; sending selected context shares it with your chosen providers under their existing policies. See the repository's project tools and privacy documentation for setup and limits.
+No dependency versions changed and no publisher telemetry was added. Drafts and read markers stay in local app storage; normal sending shares selected context with the chosen provider. Optional local embedding servers have their own routing and retention configuration. Markdown vault consent, preview receipts, read-only discovery and tool-permission boundaries remain in force.
 
-No dependency versions changed and no publisher telemetry was added. The production audit has two moderate transitive-package findings; their affected routing, rendering and upgrade configurations are not used by ATLAS's authenticated loopback MCP endpoint. The release review records the assessment and limitations.
+The production audit reports two moderate affected transitive packages; the release review records all seven advisories and their assessed applicability. No high or critical finding was reported by that check. This is not a claim that the affected packages are patched.
 
-**Updating:** use Settings → App updates or install the download over your current version. Users on 0.10.2 or older must download the installer because those versions' in-app installation fails. Windows x64; close older ATLAS instances before installing. Retain a pre-update backup: earlier versions do not understand the history storage introduced in 0.11.1.
+**Updating:** use Settings → App updates or install the download over your current version. Users on 0.10.2 or older must download the installer because those versions' in-app installation fails. Windows x64; close older ATLAS instances before installing. Keep a pre-update backup, particularly when moving from versions before the 0.11.1 history format.
 
 The installer remains unsigned under the existing owner-authorized policy; Windows may show a warning. No legal or security certification is claimed.

@@ -7,6 +7,21 @@ function selection(input = {}) {
     attachments: input.attachments !== false,
     project: input.project === true,
     ...(input.vault === true ? { vault: true } : {}),
+    ...(Array.isArray(input.vaultPaths)
+      ? {
+          vaultPaths: [
+            ...new Set(
+              input.vaultPaths.filter(
+                (name) =>
+                  typeof name === 'string' &&
+                  name.length <= 1024 &&
+                  /\.md$/i.test(name) &&
+                  require('./vault-notes').safeName(name),
+              ),
+            ),
+          ].slice(0, 8),
+        }
+      : {}),
     ...(typeof input.vaultPreview === 'string' && input.vaultPreview.length <= 80
       ? { vaultPreview: input.vaultPreview }
       : {}),

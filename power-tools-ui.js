@@ -23,7 +23,11 @@
         files: [],
       },
     );
-  const saveSelection = (which, next) => selections.set(key(which), structuredClone(next));
+  const previewInfo = new Map();
+  const saveSelection = (which, next) => {
+    selections.set(key(which), structuredClone(next));
+    window.dispatchEvent(new CustomEvent('atlas-context-change', { detail: { scope: which } }));
+  };
   const style = node('style');
   style.textContent = `.power-dialog{width:min(980px,calc(100vw - 32px));max-height:90vh;padding:0;background:#151719;color:#eee;border:1px solid #444;border-radius:8px;font:14px/1.5 "Segoe UI",sans-serif}.power-dialog::backdrop{background:#000a}.power-dialog header,.power-dialog nav{display:flex;align-items:center;gap:16px;padding:16px 24px;flex-wrap:wrap}.power-dialog h1{font-size:22px;margin:0;flex:1}.power-dialog nav{padding-top:0;padding-bottom:12px;border-bottom:1px solid #333}.power-dialog button{font:inherit;color:inherit;background:#26282a;border:1px solid #555;border-radius:6px;padding:7px 12px;cursor:pointer;min-height:36px}.power-dialog nav button{background:transparent;border:0;color:#b4b4b4;padding:4px}.power-dialog nav button[aria-current=true]{color:#fff;text-decoration:underline;text-underline-offset:8px}.power-dialog button:focus-visible,.power-dialog input:focus-visible,.power-dialog textarea:focus-visible{outline:2px solid #fff;outline-offset:2px}.power-body{padding:20px 24px;max-height:65vh;overflow:auto}.power-body p{color:#b4b4b4;margin:0 0 16px}.power-body h2{font-size:17px;margin:0 0 12px}.power-body h3{font-size:15px;margin:16px 0 8px}.power-body input:not([type=checkbox]),.power-body textarea,.power-body select{width:100%;box-sizing:border-box;border:1px solid #555;border-radius:6px;padding:9px;background:#222426;color:#fff;font:inherit;margin:6px 0 12px}.power-body label{display:block}.power-body .power-toggle{display:flex;align-items:center;gap:12px;padding:10px 0}.power-body input[type=checkbox]{width:18px;height:18px;accent-color:#ddd}.power-body details{padding:12px 0;border-bottom:1px solid #333}.power-body summary{cursor:pointer;overflow-wrap:anywhere}.power-body pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 Consolas,monospace;background:#222426;padding:12px;max-height:220px;overflow:auto}.power-actions{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}.power-status{padding:12px 24px;border-top:1px solid #333;color:#b4b4b4;white-space:pre-wrap}.power-metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px}.power-metrics div{padding:12px;background:#222426}.power-metrics strong{display:block;font-size:24px;font-weight:400;font-variant-numeric:tabular-nums}.power-dialog .power-primary{background:#eee;color:#111;border-color:#eee}.power-empty{padding:20px;background:#222426}@media(max-width:640px){.power-dialog header,.power-dialog nav,.power-body{padding:16px}.power-dialog nav{gap:12px}.power-metrics{grid-template-columns:1fr}.power-dialog{width:calc(100vw - 16px)}}`;
   style.textContent +=
@@ -156,6 +160,26 @@
     const actions = node('div');
     actions.className = 'power-actions';
     body.append(actions);
+    if (selected.vaultPaths?.length) {
+      body.append(
+        node(
+          'p',
+          'Selected notes: ' +
+            selected.vaultPaths.join(', ') +
+            '. Only these notes are eligible; existing exclusions still apply.',
+        ),
+      );
+      button(
+        'Use relevant notes instead',
+        () => {
+          delete selected.vaultPaths;
+          delete selected.vaultPreview;
+          saveSelection(which, selected);
+          return show('Context');
+        },
+        actions,
+      );
+    }
     button('Configure Markdown vault', () => show('Markdown vault'), actions);
     const preview = node('div');
     body.append(preview);
@@ -176,10 +200,19 @@
       'Refresh preview',
       async () => {
         status.textContent = 'Reading selected context locally…';
-        const result = await api.contextPreview({ ...request(which), selection: selected });
+        const previewRequest = request(which);
+        const result = await api.contextPreview({ ...previewRequest, selection: selected });
         if (!current()) return;
+        if (request(which).prompt !== previewRequest.prompt)
+          throw Error('Draft changed during preview. Refresh again.');
         if (result.vaultPreview) selected.vaultPreview = result.vaultPreview;
         else delete selected.vaultPreview;
+        previewInfo.set(key(which), {
+          prompt: previewRequest.prompt,
+          projectCount: result.indexed?.results?.length || 0,
+          vaultCount: result.vaultIndexed?.results?.length || 0,
+          estimatedTokens: result.budget?.estimatedTokens,
+        });
         saveSelection(which, selected);
         preview.replaceChildren();
         if (result.budget) {
@@ -377,6 +410,14 @@
   icon.append(shape);
   tools.prepend(icon);
   window.atlasPower = {
+    invalidateVault() {
+      for (const [id, value] of selections) {
+        delete value.vaultPreview;
+        previewInfo.delete(id);
+      }
+      window.dispatchEvent(new Event('atlas-context-change'));
+    },
+    previewInfo: (which) => previewInfo.get(key(which)),
     selection,
     setSelection: saveSelection,
     show,

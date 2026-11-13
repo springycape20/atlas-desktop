@@ -366,6 +366,7 @@
   divider.setAttribute('aria-hidden', 'true');
   workspaceNav.prepend(assistantButton, colabButton, divider);
   function select(workspace) {
+    window.atlasActivity?.leave();
     if (workspace === 'colab') {
       selectWorkspaceView('');
       cancelRecording();
@@ -688,6 +689,7 @@
             item.cwd,
             selected,
             historyReady,
+            window.atlasChatBadges?.label('colab', item.id),
           ],
           () => {
             const button = document.createElement('button');
@@ -710,6 +712,13 @@
                 'No project');
             button.title = item.cwd || 'No project';
             button.append(title, detail);
+            const badge = window.atlasChatBadges?.label('colab', item.id);
+            if (badge) {
+              const tag = document.createElement('em');
+              tag.className = 'chat-work-badge';
+              tag.textContent = badge;
+              button.append(tag);
+            }
             button.disabled = !historyReady;
             button.onclick = () => {
               selected = item.id;
@@ -867,11 +876,13 @@
               chatId: chat.id,
               jobId: message.jobId || '',
             });
+          else if (message.error && window.atlasResponseErrors)
+            window.atlasResponseErrors.render(content, message.content);
           else content.textContent = message.content;
           if (message.at && Number.isFinite(new Date(message.at).getTime())) {
             const time = document.createElement('time');
             time.dateTime = new Date(message.at).toISOString();
-            time.textContent = new Date(message.at).toLocaleString();
+            time.textContent = window.atlasQol.exactTime(message.at);
             label.append(time);
           }
           // What ATLAS itself verified; reviewer acceptance alone shows as Unverified.
@@ -1138,6 +1149,16 @@
     const chat = current(),
       task = el('colabTask').value.trim();
     if (!historyReady || chat.busy || chat.preparing || !task) return;
+    chat.preparing = true;
+    try {
+      await window.atlasTaskStart?.prepare('colab', chat.cwd);
+    } catch (error) {
+      chat.status = 'Task not started: ' + error.message;
+      render();
+      return;
+    } finally {
+      chat.preparing = false;
+    }
     if (!chat.cwd) {
       chat.status = 'Choose a working folder before sending.';
       el('colabConfig').open = true;
@@ -1223,6 +1244,7 @@
       render();
     } catch (error) {
       chat.busy = false;
+      if (/Task start cancelled before provider dispatch/.test(error.message) && !chat.draft) chat.draft = task;
       chat.status = 'Task failed. You can retry or send a follow-up.';
       chat.messages.push({
         id: crypto.randomUUID(),
@@ -1360,6 +1382,7 @@
   }
   window.atlas.onCollaborationStatus(update);
   window.atlas.onJobs((patch) => reconcile(patch.upsert || []));
+  window.addEventListener('atlas-chat-badges', render);
   const ready = window.atlasColabHistory
     .load({ chats, selected })
     .then((saved) => {

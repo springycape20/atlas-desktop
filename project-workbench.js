@@ -18,7 +18,13 @@ async function findTool(name) {
   }
   throw Error('Tool not found on PATH.');
 }
-function createProjectWorkbench({ directory, tracker, files, probe = findTool }) {
+function createProjectWorkbench({
+  directory,
+  tracker,
+  files,
+  probe = findTool,
+  git = require('./workspace-service').command,
+}) {
   const guard = createProjectRootGuard(),
     manifest = path.join(directory, 'named-checkpoints.json');
   const previews = new Map();
@@ -62,7 +68,7 @@ function createProjectWorkbench({ directory, tracker, files, probe = findTool })
     }
     const rows = await read();
     if (request.action === 'list') return rows.filter((row) => row.cwd === cwd);
-    if (request.action === 'capture') {
+    if (request.action === 'capture' || request.action === 'capture-git') {
       if (rows.length >= 100) throw Error('Checkpoint storage limit reached (100). Remove an old checkpoint first.');
       const row = {
         id: 'named-' + randomUUID(),
@@ -72,7 +78,19 @@ function createProjectWorkbench({ directory, tracker, files, probe = findTool })
           .slice(0, 100),
         createdAt: Date.now(),
       };
+      if (request.action === 'capture-git') {
+        const root = await fs.realpath((await git('git', ['rev-parse', '--show-toplevel'], cwd)).trim());
+        if (root.toLowerCase() !== cwd.toLowerCase())
+          throw Error('Choose the Git repository root before creating a Git checkpoint.');
+        const head = (await git('git', ['rev-parse', '--verify', 'HEAD'], cwd)).trim();
+        const commit =
+          (await git('git', ['-c', 'core.hooksPath=', 'stash', 'create', 'ATLAS ' + row.id], cwd)).trim() || head;
+        if (!/^[a-f0-9]{40,64}$/.test(commit)) throw Error('Git did not return a checkpoint commit.');
+        row.gitCommit = commit;
+        row.gitRef = 'refs/atlas/checkpoints/' + row.id;
+      }
       await tracker.capture(row.id, cwd);
+      if (row.gitRef) await git('git', ['update-ref', row.gitRef, row.gitCommit], cwd);
       rows.push(row);
       await fs.mkdir(directory, { recursive: true });
       await fs.writeFile(manifest + '.tmp', JSON.stringify(rows));
@@ -83,6 +101,8 @@ function createProjectWorkbench({ directory, tracker, files, probe = findTool })
     if (!row) throw Error('Checkpoint not found for this project.');
     if (request.action === 'remove') {
       if (!/^(?:named-|undo-)[a-f0-9-]{36}$/.test(row.id)) throw Error('Invalid checkpoint identifier.');
+      if (row.gitRef === 'refs/atlas/checkpoints/' + row.id && /^[a-f0-9]{40,64}$/.test(row.gitCommit))
+        await git('git', ['update-ref', '-d', row.gitRef, row.gitCommit], cwd);
       await fs.unlink(path.join(directory, 'changes', row.id + '.json')).catch((error) => {
         if (error.code !== 'ENOENT') throw error;
       });
@@ -92,6 +112,14 @@ function createProjectWorkbench({ directory, tracker, files, probe = findTool })
       return { removed: true };
     }
     if (request.action === 'report') return tracker.report(row.id, true);
+    if (request.action === 'git-report') {
+      if (!/^[a-f0-9]{40,64}$/.test(row.gitCommit)) throw Error('This checkpoint has no Git commit.');
+      return {
+        commit: row.gitCommit,
+        ref: row.gitRef,
+        summary: await git('git', ['show', '--stat', '--format=short', '--no-ext-diff', row.gitCommit, '--'], cwd),
+      };
+    }
     if (request.action === 'file') {
       try {
         await files.resolve(cwd, request.path);
@@ -143,4 +171,4 @@ function createProjectWorkbench({ directory, tracker, files, probe = findTool })
     },
   };
 }
-module.exports = { createProjectWorkbench };
+module.exports = { createProjectWorkbench, findTool };

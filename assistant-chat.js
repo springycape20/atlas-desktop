@@ -273,7 +273,7 @@
             label = node('strong', turn.role === 'user' ? 'You' : (turn.provider || 'ATLAS').toUpperCase()),
             body = node('div', undefined, 'answer');
           if (turn.at && Number.isFinite(new Date(turn.at).getTime())) {
-            const time = node('time', new Date(turn.at).toLocaleString());
+            const time = node('time', window.atlasQol.exactTime(turn.at));
             time.dateTime = new Date(turn.at).toISOString();
             label.append(time);
           }
@@ -350,6 +350,8 @@
         ),
       );
       button.onclick = () => void open(row.id).catch((error) => toast(error.message));
+      const badge = window.atlasChatBadges?.label('assistant', row.id);
+      if (badge) button.append(node('em', badge, 'chat-work-badge'));
       list.append(button);
     }
     list.scrollTop = top;
@@ -417,6 +419,7 @@
       userTurn.hidden = false;
       output.hidden = liveLabel.hidden = false;
       output.textContent = active.statusText || 'Task running…';
+      if (!active.statusText || /^Working[….]*$/i.test(active.statusText)) window.atlasThinking?.start(output);
       foregroundRequest = active.id;
       streamRequestId = active.id;
       streamText = '';
@@ -455,6 +458,17 @@
   importButton.onclick = () => void window.atlasWorkspace.importChats().catch((error) => toast(error.message));
   search.oninput = projects.onchange = folderPicker.onchange = renderList;
   sendMessage = async function (prompt, options = {}) {
+    const draftKey = window.atlasDraftRecovery?.identity();
+    if (taskPreparing) return;
+    taskPreparing = true;
+    try {
+      await window.atlasTaskStart?.prepare('assistant', options.cwd || cwd);
+    } catch (error) {
+      toast('Task not started: ' + error.message);
+      return;
+    } finally {
+      taskPreparing = false;
+    }
     turnPage = 0;
     if (/^(?:tell me more|read (?:the )?(?:full answer|full reply|details))[.!? ]*$/i.test(prompt) && lastSpokenAnswer)
       return originalSend(prompt, options);
@@ -476,7 +490,7 @@
     output.hidden = liveLabel.hidden = false;
     find.value = '';
     refreshMatches();
-    const promise = originalSend(prompt, { ...options, conversationId: id }),
+    const promise = originalSend(prompt, { ...options, conversationId: id, draftKey }),
       request = foregroundRequest;
     ongoing.set(request, id);
     try {
@@ -523,4 +537,5 @@
       reset();
     })
     .catch(() => {});
+  window.addEventListener('atlas-chat-badges', renderList);
 })();

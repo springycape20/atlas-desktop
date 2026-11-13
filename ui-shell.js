@@ -283,7 +283,7 @@
   const workbench = (name) => () => window.atlasWorkbench.mount(name, content);
   const sections = {
     tasks: {
-      Running: panel(jobsPanel),
+      'Task centre': panel(jobsPanel),
       Queue: workbench('Queue'),
       Parallel: power('Parallel'),
       Recovery: power('Recovery'),
@@ -296,7 +296,7 @@
   // Registered task sections missing from this list appear under More.
   const taskGroups = {
     Work: [
-      'Running',
+      'Task centre',
       'Queue',
       'Plan a task',
       'Progress',
@@ -330,6 +330,7 @@
       'Git',
       'Services',
       'Environment preflight',
+      'Project setup assistant',
       'Permissions',
       'Named checkpoints',
       'Trial checkpoints',
@@ -411,6 +412,7 @@
     else cleanup = restore;
   }
   async function openHub(route, name) {
+    if (route === 'tasks' && name === 'Running') name = 'Task centre';
     if (route === 'settings') return settingsButton.click();
     if (!sections[route]) return;
     currentRoute = route;
@@ -657,8 +659,8 @@
     setListWidth,
     pages: () =>
       Object.keys(sections).flatMap((route) => Object.keys(sections[route]).map((name) => ({ route, name }))),
-    register: (route, name) => {
-      if (sections[route]) sections[route][name] = power(name);
+    register: (route, name, view = name) => {
+      if (sections[route]) sections[route][name] = power(view);
     },
   };
 })();

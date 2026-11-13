@@ -132,3 +132,69 @@ test('Codex rate-limit notifications update usage without requiring a conversati
   assert(USAGE_URLS.claude.startsWith('https://claude.ai/'));
   assert(USAGE_URLS.codex.startsWith('https://chatgpt.com/'));
 });
+
+test('Claude built-in usage report uses only the unmodified CLI with tools and hooks disabled', async () => {
+  const calls = [];
+  const result = await readClaudeUsage({
+    executable: 'claude.exe',
+    cwd: 'neutral-temp',
+    execute: async (executable, args, cwd, options) => {
+      calls.push({ executable, args, cwd, options });
+      if (args[0] === '--version') return '2.1.289 (Claude Code)';
+      return [
+        JSON.stringify({
+          type: 'assistant',
+          usage_report: {
+            rate_limits: {
+              limits: [
+                { kind: 'session', percent: 23, resets_at: '2026-11-13T12:00:00Z' },
+                { kind: 'weekly_all', percent: 38, resets_at: null },
+                { kind: 'weekly_scoped', percent: null, scope: { model: { display_name: 'Opus' } } },
+              ],
+            },
+          },
+        }),
+        JSON.stringify({ type: 'result', subtype: 'success' }),
+      ].join('\n');
+    },
+  });
+  assert.equal(result.windows[0].remainingPercent, 77);
+  assert.equal(result.windows[1].remainingPercent, 62);
+  assert.equal(result.windows[2].remainingPercent, null);
+  assert.match(result.windows[2].label, /Opus/);
+  assert.equal(result.windows[2].main, false);
+  assert.equal(result.remainingPercent, 62);
+  assert.equal(calls[1].args.at(-1), '/usage');
+  assert.equal(calls[1].args[calls[1].args.indexOf('--tools') + 1], '');
+  assert.equal(JSON.parse(calls[1].args[calls[1].args.indexOf('--settings') + 1]).disableAllHooks, true);
+  assert(calls[1].args.includes('--strict-mcp-config'));
+  assert(calls[1].args.includes('--no-session-persistence'));
+  assert.equal(calls[1].options.timeout, 20000);
+});
+
+test('Claude usage never substitutes model inference or invented percentages for unsupported or missing reports', async () => {
+  let calls = 0;
+  const old = await readClaudeUsage({
+    executable: 'claude',
+    execute: async () => {
+      calls++;
+      return '2.1.100 (Claude Code)';
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(old.remainingPercent, null);
+  assert.match(old.message, /Update/);
+  const run = (output) =>
+    readClaudeUsage({
+      executable: 'claude',
+      execute: async (_e, args) => (args[0] === '--version' ? '2.1.289' : output),
+    });
+  const unavailable = await run(JSON.stringify({ type: 'assistant', usage_report: { rate_limits: null } }));
+  assert.equal(unavailable.remainingPercent, null);
+  assert.match(unavailable.message, /did not provide/);
+  await assert.rejects(
+    run(JSON.stringify({ type: 'result', subtype: 'success', result: 'arbitrary prose 99%' })),
+    /unavailable/,
+  );
+  await assert.rejects(run(JSON.stringify({ type: 'result', is_error: true })), /unavailable/);
+});

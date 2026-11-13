@@ -13,3 +13,11 @@ Menus support keyboard opening, arrow-key navigation and Escape, which returns f
 These UI changes are included in ATLAS 0.11.0.
 
 New execution tools follow the same navigation: **Work → Task budgets**, **Project → Trial promotion** and **Review → Workflow benchmarks**. All three are also searchable through Ctrl+K. Advanced benchmark creation and individual promotion patches are collapsed until needed; see [Execution controls](EXECUTION-CONTROLS.md).
+
+## ATLAS 0.12.0
+
+Activity opens on launch and links to Chat, Colab, Projects, Task centre and local search. Task centre keeps Active, Needs attention, History and Archived visible. Activity can clean up selected stopped tasks with a bounded Undo receipt; it cannot hide active tasks or pending approvals.
+
+Search all work includes projects and workflows with type/project filters. Saved workspace supports draft-aware session recovery; Assistant drafts also recover automatically per chat/project. The connected workbench brings editor, terminals, sandboxed preview and task changes into one dock. Named checkpoints offers optional Git snapshots without changing staged or working content.
+
+Task results lead with executed evidence and next steps. Error responses use concise cards with expandable details. Long text boxes show their type and have sticky copy/expand controls. Chat lists show background-task badges. Usage windows show countdowns with exact Australian dates. Voice features default off on new installations. See [usage and limits](USABILITY-AND-POWER.md).

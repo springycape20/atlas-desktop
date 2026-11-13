@@ -1,5 +1,7 @@
 # Project tools (0.10.0)
 
+For the 0.12.0 project home, task centre, composer references, connected workbench, provider recovery, task results, semantic solution search and setup assistant, see [Usability and power improvements](USABILITY-AND-POWER.md).
+
 For the 0.11.0 interface improvements, see [readability and navigation](UI-NAVIGATION.md).
 
 ATLAS 0.10.2 adds [Power tools](POWER-TOOL-UPGRADES.md): installed language servers, saved browser checks, screenshot comparisons and preview profiling. The behavior below remains available.

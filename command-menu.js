@@ -55,6 +55,7 @@
     const pages = window.atlasUi.pages(),
       hubNames = new Set(pages.map((page) => page.name));
     return [
+      ['Activity', inWorkspace(() => window.atlasActivity.open())],
       ['Search all work', () => window.atlasUi.open('library', 'Search all work')],
       [
         'New chat',
@@ -72,7 +73,10 @@
       ],
       ['Chat', inWorkspace(showChat)],
       ['Colab', inWorkspace(showColab)],
-      ['Projects', () => window.atlasWorkspace.open.projects()],
+      [
+        'Projects',
+        () => (window.atlasProjectHome ? window.atlasProjectHome.open() : window.atlasWorkspace.open.projects()),
+      ],
       ['Conversation history', () => window.atlasWorkspace.open.history()],
       // Recent chats come early in the full list; found chats come after pages of the same rank.
       ...(query ? [] : chats(query)),

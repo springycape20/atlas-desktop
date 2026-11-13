@@ -154,6 +154,12 @@ let advancedWorkflowsService;
 const repairRequests = new WeakMap();
 function providerUsage() {
   return (providerUsageService ||= require('./provider-usage').createProviderUsage({
+    claude: () =>
+      require('./provider-usage').readClaudeUsage({
+        executable: findClaudeExecutable(),
+        execute: require('./claude-runtime').command,
+        cwd: require('node:os').tmpdir(),
+      }),
     codex: async () => {
       const executable = findCodexExecutable();
       if (!executable) throw Error('Codex is not installed.');
@@ -191,6 +197,39 @@ function models() {
     },
   }));
 }
+async function reviewProviderAllowance(providers, { allowSwitch = false } = {}) {
+  return require('./task-experience').reviewAllowance(await providerUsage().read({ cachedOnly: true }), providers, {
+    allowSwitch,
+    available: (provider) => providerHealth.available(provider),
+    ask: async ({ warnings, alternative }) => {
+      const buttons = ['Cancel', 'Continue with selected provider' + (providers.length > 1 ? 's' : '')];
+      if (alternative) buttons.push('Use ' + alternative + ' for this task');
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Provider allowance is low',
+        message: 'This task may reach a provider usage limit.',
+        detail:
+          warnings
+            .map(
+              (row) =>
+                row.provider +
+                ': ' +
+                Math.round(row.remainingPercent) +
+                '% remaining · ' +
+                row.label +
+                (row.resetsAt ? ' · resets ' + new Date(row.resetsAt).toLocaleString() : ''),
+            )
+            .join('\n') +
+          '\n\nAllowance is the last reported account value, not a task cost prediction. You can cancel and choose another provider or a smaller task.',
+        buttons,
+        defaultId: 0,
+        cancelId: 0,
+      });
+      return result.response === 1 ? 'continue' : result.response === 2 ? alternative : 'cancel';
+    },
+  });
+}
+
 function getAppUpdates() {
   return (updateService ||= require('./app-updates').createAppUpdates({
     app,
@@ -537,7 +576,7 @@ function defaultSettings() {
     claudeModels: [],
     voiceDeviceId: '',
     speechDetail: 'brief',
-    speakResponses: true,
+    speakResponses: false,
     showReasoning: false,
     launchAtStartup: false,
     autoDownloadUpdates: false,
@@ -585,7 +624,7 @@ function sanitizeSettings(value) {
     codexModels: cleanModels(value?.codexModels),
     claudeModels: cleanModels(value?.claudeModels),
     voiceDeviceId: typeof value?.voiceDeviceId === 'string' ? value.voiceDeviceId.slice(0, 512) : '',
-    speakResponses: value?.speakResponses !== false,
+    speakResponses: value?.speakResponses === true,
     // Opt-in: providers' own reasoning summaries, shown labelled as model-reported.
     showReasoning: value?.showReasoning === true,
     launchAtStartup: value?.launchAtStartup === true,
@@ -1374,6 +1413,9 @@ function jobSnapshots({ persist = false, graphs = true } = {}) {
     } = job;
     return {
       id,
+      title: job.title,
+      archived: job.archived === true,
+      dismissedAttention: job.dismissedAttention,
       prompt,
       cwd,
       conversationId,
@@ -1684,7 +1726,7 @@ function setupIpc() {
   let projectWorkbench;
   ipcMain.handle('atlas:project-workbench', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
-    if (['capture', 'restore', 'preview'].includes(request.action) && jobsRunning())
+    if (['capture', 'capture-git', 'restore', 'preview'].includes(request.action) && jobsRunning())
       throw Error('Finish or stop active tasks before changing checkpoints.');
     projectWorkbench ||= require('./project-workbench').createProjectWorkbench({
       directory: app.getPath('userData'),
@@ -1703,6 +1745,13 @@ function setupIpc() {
       files: require('./project-files').createProjectFiles({ denied: () => integrations().deniedFiles() }),
     });
     return projectWorkbench.action(request);
+  });
+  ipcMain.handle('atlas:setup-assistant', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    projectFileService ||= require('./project-files').createProjectFiles({
+      denied: () => integrations().deniedFiles(),
+    });
+    return require('./setup-assistant').createSetupAssistant({ files: projectFileService }).detect(request.cwd);
   });
   ipcMain.handle('atlas:project-file', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -1829,7 +1878,11 @@ function setupIpc() {
     }
     return { provider: report.provider, phase: report.phase, output };
   });
-  ipcMain.handle('atlas:collab', (event, request) => colabJobs.start(event, request));
+  ipcMain.handle('atlas:collab', async (event, request) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    await reviewProviderAllowance(['codex', 'claude']);
+    return colabJobs.start(event, request);
+  });
   ipcMain.handle('atlas:project-knowledge', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     if (typeof request.cwd !== 'string' || !path.isAbsolute(request.cwd)) throw Error('Choose a project folder.');
@@ -1873,6 +1926,14 @@ function setupIpc() {
       return vaultSource().configure('choose', result.filePaths[0]);
     }
     return vaultSource().configure(request.action);
+  });
+  ipcMain.handle('atlas:vault-references', async (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    const query = typeof request.query === 'string' ? request.query.trim().slice(0, 200) : '';
+    if (query.length < 2) throw Error('Enter at least two characters.');
+    const result = await vaultSource().context(query, { vault: true }, { preview: true, scope: 'reference-picker' });
+    if (!result.indexed) throw Error('Choose and enable a Markdown vault in Library first.');
+    return result.indexed;
   });
   ipcMain.handle('atlas:context-preview', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -2001,6 +2062,11 @@ function setupIpc() {
       await handle.close();
     }
   });
+  const semanticSolutions = require('./semantic-solutions').createSemanticSolutions({ tasks: jobSnapshots });
+  ipcMain.handle('atlas:semantic-solutions', (event, request = {}) => {
+    if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    return semanticSolutions.action(request);
+  });
   ipcMain.handle('atlas:workflows', async (event, request = {}) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
     workflowService ||= require('./workflow-templates').createWorkflowTemplates(app.getPath('userData'));
@@ -2035,7 +2101,7 @@ function setupIpc() {
   });
   ipcMain.handle('atlas:provider-usage', async (event, request) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
-    return providerUsage().read({ refresh: request?.refresh === true });
+    return providerUsage().read({ refresh: request?.refresh === true, cachedOnly: request?.cachedOnly === true });
   });
   ipcMain.handle('atlas:provider-usage-open', async (event, provider) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
@@ -2769,8 +2835,35 @@ function setupIpc() {
     return job.promise;
   };
   ipcMain.handle('atlas:chat', startAssistant);
-  ipcMain.handle('atlas:jobs', (event, request) => {
+  const organization = require('./task-organization').createTaskOrganization({
+    jobs: () => [...activeJobs.values()],
+    approvals: () => approvals.list(),
+    save: persistJobs,
+  });
+  ipcMain.handle('atlas:jobs', async (event, request) => {
     if (!isTrustedSender(event)) throw Error('Untrusted app window.');
+    if (['organize-many', 'undo-organize'].includes(request?.action)) {
+      const result = await organization.action(request);
+      emitJobs();
+      return { ...result, jobs: jobSnapshots() };
+    }
+    if (['archive', 'unarchive', 'dismiss-attention', 'restore-attention'].includes(request?.action)) {
+      const job = activeJobs.get(request.id);
+      if (!job) throw Error('Task is unavailable.');
+      require('./task-experience').organize(job, request.action, approvals.list());
+      await persistJobs();
+      emitJobs();
+    }
+    if (request?.action === 'rename') {
+      const job = activeJobs.get(request.id);
+      if (!job) throw Error('Task is unavailable.');
+      const title = typeof request.title === 'string' ? request.title.trim() : '';
+      if (!title || title.length > 100 || /[\x00-\x1f]/.test(title))
+        throw Error('Enter a task title of 1–100 characters.');
+      job.title = title;
+      await persistJobs();
+      emitJobs();
+    }
     if (request?.action === 'stop') {
       const job = activeJobs.get(request.id);
       if (job?.status === 'running') {
@@ -2886,13 +2979,33 @@ async function handleChat(event, data, benchmark) {
   }
   const preferredProvider = route.provider;
   const availableProvider = route.provider === 'local' ? 'local' : providerHealth.choose(route.provider);
-  if (availableProvider && availableProvider !== route.provider) {
+  if (availableProvider && availableProvider !== route.provider && !benchmark) {
+    const decision = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      title: 'Choose another provider',
+      message: preferredProvider + ' is cooling down.',
+      detail:
+        'Use ' +
+        availableProvider +
+        ' for this task? Your current request and selected context will be sent to that provider.',
+      buttons: ['Cancel', 'Use ' + availableProvider],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (decision.response !== 1) throw Error('Provider switch cancelled. Your task was not sent.');
     route.provider = availableProvider;
     route.reason = 'temporarily avoiding ' + preferredProvider + ' usage limit';
   }
   if (benchmark) {
     route.provider = benchmark.config.provider;
     route.reason = 'fixed benchmark configuration';
+  }
+  if (!benchmark && route.provider !== 'local') {
+    const reviewedProvider = await reviewProviderAllowance([route.provider], { allowSwitch: !resumeJob });
+    if (reviewedProvider !== route.provider) {
+      route.provider = reviewedProvider;
+      route.reason = 'user approved allowance-aware provider choice';
+    }
   }
   const modelChoice = require('./model-policy').select(settings, prompt, {
     provider: route.provider,
@@ -3066,6 +3179,23 @@ async function handleChat(event, data, benchmark) {
     }
     providerHealth.limited(route.provider, error);
     const fallback = route.provider === 'codex' ? 'claude' : 'codex';
+    const decision = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      title: 'Provider usage limit',
+      message: route.provider + ' reached a usage limit.',
+      detail:
+        'The first attempt may have changed files. Allow ' +
+        fallback +
+        ' to inspect current progress and continue with your selected context?',
+      buttons: ['Stop here', 'Continue with ' + fallback],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (decision.response !== 1)
+      throw Error(
+        route.provider +
+          ' reached a usage limit. Provider handoff was declined; review current progress before retrying.',
+      );
     event.sender.send('atlas:response-text', { requestId: data?.requestId, reset: true, text: '' });
     reportProviderProgress(fallback, `Switching to ${fallback} after usage limit`);
     try {
@@ -3158,6 +3288,24 @@ async function createWindow() {
         '/work-sessions-ui.js',
         '/power-upgrades-ui.js',
         '/execution-tools-ui.js',
+        '/work-overview.js',
+        '/task-experience.js',
+        '/task-start-ui.js',
+        '/thinking-ui.js',
+        '/qol-model.js',
+        '/qol-ui.js',
+        '/work-overview.css',
+        '/project-home-ui.js',
+        '/composer-context-ui.js',
+        '/task-outcomes-ui.js',
+        '/task-workflow.js',
+        '/provider-recovery-ui.js',
+        '/semantic-solutions-ui.js',
+        '/setup-assistant-ui.js',
+        '/connected-workbench-ui.js',
+        '/activity-model.js',
+        '/activity-ui.js',
+        '/activity.css',
         '/benchmark-builder-ui.js',
         '/language-edits.js',
         '/hardware-ui.js',

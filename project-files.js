@@ -33,6 +33,7 @@ const textTypes = new Set([
   '.yml',
   '.yaml',
   '.toml',
+  '.mod',
   '.xml',
   '.svg',
   '.csv',

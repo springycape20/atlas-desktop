@@ -274,6 +274,7 @@
     pane.hidden = false;
     resize(width, false);
     document.body.classList.add('terminal-dock-open');
+    window.atlasDock?.activate('terminal');
     clearTimeout(timer);
     await refresh();
     void poll();
@@ -284,7 +285,11 @@
     open,
     hide,
     snapshot(cwd) {
-      return { width, kind: kind.value, count: rows.filter((row) => row.cwd === cwd && row.shell).length };
+      const definitions = rows
+        .filter((row) => row.cwd === cwd && row.shell)
+        .slice(0, 6)
+        .map((row) => ({ cwd: row.cwd }));
+      return { width, kind: kind.value, count: definitions.length, locations: definitions };
     },
     async restore(value, expectedCwd) {
       const now = power.request(),

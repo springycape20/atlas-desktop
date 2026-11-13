@@ -57,7 +57,8 @@ async function validate(root, name) {
   if (path.relative(file, real) || !within(root, real)) throw Error('Linked note refused.');
   return file;
 }
-async function searchVault(folder, query, { excluded = [], denied = [], identity } = {}) {
+async function searchVault(folder, query, { excluded = [], included = [], denied = [], identity } = {}) {
+  included = included.filter((name) => typeof name === 'string' && safeName(name) && /\.md$/i.test(name)).slice(0, 8);
   const root = await assertRoot(folder),
     rootStat = await fs.stat(root);
   if (identity && (rootStat.dev !== identity.dev || rootStat.ino !== identity.ino))
@@ -108,6 +109,7 @@ async function searchVault(folder, query, { excluded = [], denied = [], identity
         }
         if (!entry.isFile() || !/\.md$/i.test(name)) continue;
         indexed++;
+        if (included.length && !included.includes(name)) continue;
         let handle;
         try {
           const file = await validate(root, name);
@@ -162,13 +164,14 @@ async function searchVault(folder, query, { excluded = [], denied = [], identity
             }
           }
           score += words.reduce((sum, word) => sum + (name.toLowerCase().includes(word) ? 4 : 0), 0);
+          if (included.includes(name)) score += 1000;
           if (!score) continue;
           const start = Math.max(0, best - 2);
           results.push({
             path: name,
             score,
             line: start + 1,
-            reason: 'Query match in Markdown note',
+            reason: included.includes(name) ? 'Explicitly selected Markdown note' : 'Query match in Markdown note',
             version: stat,
             excerpt: lines
               .slice(start, start + 9)
@@ -192,6 +195,8 @@ async function searchVault(folder, query, { excluded = [], denied = [], identity
     }
   }
   await walk();
+  if (included.some((name) => !results.some((row) => row.path === name)))
+    limited('Some selected notes were unavailable or excluded');
   const finalRoot = await fs.lstat(root);
   if (finalRoot.isSymbolicLink() || finalRoot.dev !== rootStat.dev || finalRoot.ino !== rootStat.ino)
     throw Error('Vault folder changed. Choose it again.');

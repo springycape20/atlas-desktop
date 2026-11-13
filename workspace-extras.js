@@ -1129,6 +1129,17 @@
     $id('prompt').focus();
   }
   window.atlasWorkspace = {
+    useProfile(profile) {
+      const current = profiles.find((row) => row.id === profile.id);
+      if (!current || current.cwd !== profile.cwd) throw Error('Project profile changed. Refresh Projects first.');
+      if (document.getElementById('prompt').value.trim() && typeof cwd === 'string' && cwd !== current.cwd)
+        throw Error('Save or clear the current draft before changing projects.');
+      assistantProfile = current.id;
+      localStorage.setItem('atlas.project', assistantProfile);
+      setPath(current.cwd);
+      window.atlasColab.selectAssistant();
+      renderAttachments();
+    },
     handoverDraft: async (draft, scope) => {
       profiles = await api.projects();
       const profile = profiles.find((row) => row.id === draft.profileId);

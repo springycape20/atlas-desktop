@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.0 — 14 November 2026
+
+- Open a dedicated ATLAS Activity page on launch, with live attention/working/recent task views, project filtering, provider usage/reset information and direct navigation into existing workspaces. Supported provider usage refreshes automatically while visible, including Claude Code structured usage reports.
+
+- Add a project home and task centre with project filters, clear active/attention/history views, saved task titles and direct continuation/review actions.
+- Show context sources beside each composer, add explicit file/note/code references and editor-selection drafts, and forward Assistant context choices through the production preload.
+- Connect persistent editor and terminal panels, task changes and a sandboxed embedded local preview in a resizable workbench.
+- Show actionable provider failures and unsent retry drafts, and consolidate task reports, executed checks, outputs and review actions.
+- Convert completed tasks into reviewed reusable workflows with parameter inputs.
+- Add reviewed, optional local embedding search over completed task text, with bounded in-memory indexes and no vault indexing or cloud fallback.
+- Add a passive project setup assistant for detected commands, tool prerequisites and reviewed profile creation.
+
+See [usage and limits](docs/USABILITY-AND-POWER.md).
+
 ## 0.11.2 — 13 November 2026
 
 - Add an optional, read-only Markdown vault source under Library, compatible with ordinary Markdown folders and Obsidian vaults without additional software or dependencies.

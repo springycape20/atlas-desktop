@@ -2,6 +2,23 @@
   const power = window.atlasPower,
     api = window.atlas;
   if (!power) return;
+  window.atlasWorkflows = {
+    async fromTask(job) {
+      const template = window.atlasTaskWorkflow.fromTask(job);
+      await power.show('Workflows');
+      for (const [key, value] of Object.entries(template)) {
+        const input = document.getElementById('workflow-' + key);
+        if (input) {
+          input.value = value;
+          input.dispatchEvent(new Event('change'));
+        }
+      }
+      const mode = power.body.querySelector('[aria-label="Workflow mode"]');
+      if (mode) mode.value = template.mode;
+      power.status.textContent =
+        'Review the task, scope and commands before saving. Use {{parameter}} placeholders for inputs that change.';
+    },
+  };
   power.register('Workflows', async ({ body, status, node, button, current }) => {
     let templates = await api.workflows();
     if (!current()) return;
@@ -39,9 +56,39 @@
     }
     const modeLabel = node('label', 'Colab mode'),
       mode = node('select');
+    mode.setAttribute('aria-label', 'Workflow mode');
     for (const value of ['build', 'debug', 'plan', 'compare']) mode.append(new Option(value, value));
     modeLabel.append(mode);
     body.append(modeLabel);
+    const params = node('section');
+    params.setAttribute('aria-label', 'Workflow inputs');
+    body.append(params);
+    const parameterFields = new Map();
+    const updateParameters = () => {
+      const names = window.atlasTaskWorkflow.parameters(
+        Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value])),
+      );
+      const previous = Object.fromEntries([...parameterFields].map(([key, input]) => [key, input.value]));
+      params.replaceChildren();
+      parameterFields.clear();
+      for (const name of names) {
+        const label = node('label', name),
+          input = node('input');
+        input.setAttribute('aria-label', 'Workflow input ' + name);
+        input.value = previous[name] || '';
+        label.append(input);
+        params.append(label);
+        parameterFields.set(name, input);
+      }
+    };
+    for (const input of Object.values(fields))
+      input.addEventListener('change', () => {
+        try {
+          updateParameters();
+        } catch (error) {
+          status.textContent = error.message;
+        }
+      });
     const read = () => ({
       id: picker.value,
       ...Object.fromEntries(Object.entries(fields).map(([id, input]) => [id, input.value])),
@@ -51,6 +98,7 @@
       const value = templates.find((row) => row.id === picker.value) || {};
       for (const [id, input] of Object.entries(fields)) input.value = value[id] || '';
       mode.value = value.mode || 'build';
+      updateParameters();
     };
     const actions = node('div');
     actions.className = 'power-actions';
@@ -67,7 +115,10 @@
     button(
       'Use draft in Colab',
       () => {
-        const workflow = read();
+        const workflow = window.atlasTaskWorkflow.fill(
+          read(),
+          Object.fromEntries([...parameterFields].map(([key, input]) => [key, input.value])),
+        );
         if (!workflow.task.trim()) throw Error('Enter a task first.');
         window.atlasColab.applyWorkflow(workflow);
         power.close();

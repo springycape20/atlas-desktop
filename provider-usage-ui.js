@@ -60,7 +60,9 @@
                   ? 'No active limit cooldown recorded by ATLAS. Account allowance is unknown.'
                   : 'Limit reported · ' +
                     (current.estimated ? 'estimated retry ' : 'retry ') +
-                    new Date(current.retryAt).toLocaleString(),
+                    window.atlasQol.resetTime(current.retryAt).replace('Resets', 'Retry') +
+                    ' · ' +
+                    window.atlasQol.exactTime(current.retryAt),
             ),
           );
           actionButton(
