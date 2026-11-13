@@ -9,10 +9,35 @@
   "ownerDecision": "Owner explicitly requested publication of the Markdown vault patch after reviewing the implementation and screenshots. Publish only after passing CI and verified artifacts. Existing unsigned-release authorization remains in effect; no signing or legal approval is claimed.",
   "openItems": [],
   "verification": {
-    "unitTests": 630,
-    "electronSuites": ["vault", "vault-package"],
+    "unitTests": 631,
+    "electronSuites": [
+      "navigation",
+      "power",
+      "preview",
+      "settings",
+      "assistant",
+      "colab",
+      "graph",
+      "dispute",
+      "approvals",
+      "files",
+      "pty",
+      "pty-render",
+      "restore",
+      "recovery",
+      "data",
+      "release",
+      "vault",
+      "menu-audit",
+      "pdf-package",
+      "backup-package",
+      "debugger-package",
+      "vault-package"
+    ],
     "productionAudit": "2026-11-13: zero high/critical findings; two moderate transitive package findings (five advisories), triaged against ATLAS usage in the release review. No dependency versions changed.",
-    "package": "Fresh unsigned 0.11.2 Windows x64 installer verified: version, ASAR, private-path exclusions, binary fuses, notices/inventory, pinned speech resources and exact updater hashes. The packaged vault worker passed read-only source, review receipt, stale-note rejection and disable/remove checks. Full release gate also runs the inherited package/UI suites.",
-    "recovery": "Existing isolated restore/recovery fixture suites will run in the release gate. Live installed-app upgrade is not testable against the 0.11.2 feed before publication."
+    "package": "Full local release gate passed. The final rebuilt unsigned 0.11.2 Windows x64 installer contains the trusted vault policy and Windows alias fix, and passed version, ASAR, private-path exclusions, binary fuses, notices/inventory, pinned speech resources and exact updater-hash verification. All four packaged PDF/backup/debugger/vault smoke suites passed.",
+    "recovery": "Restore, recovery, data-safety and packaged worker fixtures passed using isolated data. The live installed-app upgrade against the 0.11.2 feed remains untested before publication; no user installation was replaced.",
+    "menuAudit": "137 surfaces, 158 clicks, zero problems; isolated fixtures with providers/network blocked and approvals refused.",
+    "localInstallerSha256": "c51a92f98fa210adc45abd7c5bfa9a2002ff70f4ce422b184c1b3b7daf128a64"
   }
 }
