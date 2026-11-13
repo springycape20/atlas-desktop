@@ -67,6 +67,7 @@ function main() {
   ok = run('menu audit', 'npm', ['run', 'test:menu-ui']) && ok;
   ok = run('installer build', 'npm', ['run', 'dist:win']) && ok;
   ok = run('installer verification', 'node', ['build/verify-release.cjs']) && ok;
+  ok = run('minified packaged renderer', 'npm', ['run', 'test:release-package-ui']) && ok;
   ok = run('packaged PDF extraction', 'npm', ['run', 'test:pdf-package-ui']) && ok;
   ok = run('packaged backup worker', 'npm', ['run', 'test:backup-package-ui']) && ok;
   ok = run('packaged Node debugger', 'npm', ['run', 'test:debugger-package-ui']) && ok;

@@ -104,6 +104,8 @@ async function prepare(root = path.resolve(__dirname, '..')) {
   await fs.copyFile(path.join(root, 'legal', 'release-review.json'), path.join(out, 'RELEASE-REVIEW.json'));
   await fs.copyFile(path.join(root, 'legal', 'license-sources.json'), path.join(out, 'LICENSE-SOURCES.json'));
   await fs.copyFile(path.join(root, 'docs', 'PRIVACY.md'), path.join(out, 'PRIVACY.md'));
+  for (const file of ['LICENSE', 'NOTICE', 'BRANDING.md'])
+    await fs.copyFile(path.join(root, file), path.join(out, file));
   console.log(`Prepared notices and a ${components.length}-component npm inventory in ${out}`);
   return { out, components };
 }

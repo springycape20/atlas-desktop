@@ -8,6 +8,46 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
     archive = path.join(resources, 'app.asar');
   const pkg = JSON.parse(asar.extractFile(archive, 'package.json'));
   assert.equal(pkg.version, require('../package.json').version);
+  const production = JSON.parse(fs.readFileSync(path.join(resources, 'compliance', 'PRODUCTION-CODE.json')));
+  assert.equal(production.licence, 'MIT');
+  assert.equal(production.sourceMaps, false);
+  const root = path.resolve(__dirname, '..');
+  const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+  const expectedCode = fs
+    .readdirSync(root)
+    .filter((name) => /\.(?:js|cjs|css)$/.test(name))
+    .sort();
+  assert.deepEqual(
+    production.files.map((entry) => entry.file),
+    expectedCode,
+    'Production code inventory is incomplete',
+  );
+  for (const entry of production.files) {
+    assert.equal(
+      entry.sourceSha256,
+      hash(fs.readFileSync(path.join(root, entry.file))),
+      'Stale production input: ' + entry.file,
+    );
+    const bytes = asar.extractFile(archive, entry.file);
+    assert.equal(entry.outputSha256, hash(bytes), 'Unminified or mismatched production code: ' + entry.file);
+    if (entry.file !== 'syntax-highlight.js')
+      assert(
+        bytes.toString('utf8').includes('Copyright (c) 2026 springycape20'),
+        'Missing ATLAS notice: ' + entry.file,
+      );
+  }
+  for (const file of ['LICENSE', 'NOTICE', 'BRANDING.md']) {
+    assert.equal(
+      hash(asar.extractFile(archive, file)),
+      hash(fs.readFileSync(path.join(root, file))),
+      'Missing or changed notice: ' + file,
+    );
+    assert.equal(
+      hash(fs.readFileSync(path.join(resources, 'compliance', file))),
+      hash(fs.readFileSync(path.join(root, file))),
+      'Missing compliance notice: ' + file,
+    );
+  }
   for (const file of [
     'local-data.js',
     'uv-runtime.js',
@@ -132,6 +172,7 @@ async function verifyPackage(directory = path.resolve(__dirname, '..', 'dist', '
   ])
     assert(asar.extractFile(archive, file).length);
   for (const file of asar.listPackage(archive)) {
+    assert(!file.endsWith('.map'), 'Source map packaged: ' + file);
     assert(
       !/(?:^|[/\\])(?:\.handover|\.setup-cache|\.aws|\.codex|\.agents|\.git|\.env(?:\.[^/\\]+)?)(?:[/\\]|$)/i.test(
         file,
