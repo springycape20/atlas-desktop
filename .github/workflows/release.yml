@@ -98,7 +98,7 @@ jobs:
           if-no-files-found: error
       - name: Sign ATLAS.exe with SignPath
         if: env.SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -122,7 +122,7 @@ jobs:
           if-no-files-found: error
       - name: Sign the installer with SignPath
         if: env.SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -145,7 +145,7 @@ jobs:
         run: npm run test:debugger-package-ui
       - name: Verify packaged read-only Markdown vault and index worker
         run: npm run test:vault-package-ui
-      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           draft: ${{ github.ref_type != 'tag' }}
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('ci-draft-{0}', github.run_id) }}
