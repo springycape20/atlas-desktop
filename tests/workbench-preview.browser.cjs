@@ -32,7 +32,7 @@ app.whenReady().then(async () => {
       );
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
-    owner = new BrowserWindow({ show: false, width: 1200, height: 800 });
+    owner = new BrowserWindow({ show: false, width: 900, height: 600 });
     await owner.loadURL(
       'data:text/html,<title>ATLAS preview verification</title><body>Isolated preview verification</body>',
     );
@@ -69,6 +69,13 @@ app.whenReady().then(async () => {
       visible: true,
     });
     assert.deepEqual(view.getBounds(), bounds);
+    const [contentWidth, contentHeight] = owner.getContentSize();
+    assert.deepEqual(bounds, {
+      x: 600,
+      y: 180,
+      width: Math.min(550, contentWidth - 600),
+      height: Math.min(500, contentHeight - 180),
+    });
     assert.equal(view.getVisible(), true);
     const context = await view.webContents.executeJavaScript(
       '({node:typeof require,api:typeof atlas,title:document.querySelector("h1").textContent})',
@@ -78,9 +85,9 @@ app.whenReady().then(async () => {
     assert.equal(requests, 0, 'Outside origin requests must stay blocked');
     await service.action({ action: 'dock-layout', cwd: root, visible: false });
     assert.equal(view.getVisible(), false);
-    assert.equal(view.getBounds().width, 550);
+    assert.equal(view.getBounds().width, bounds.width);
     const baseline = await service.action({ action: 'visual-baseline', cwd: root });
-    assert.deepEqual(baseline.size, { width: 550, height: 500 });
+    assert.deepEqual(baseline.size, { width: bounds.width, height: bounds.height });
     assert.equal(view.webContents.debugger.isAttached(), false);
     assert.equal(view.getVisible(), false);
     assert.deepEqual(view.getBounds(), bounds);

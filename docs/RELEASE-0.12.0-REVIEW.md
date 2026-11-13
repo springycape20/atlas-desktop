@@ -33,4 +33,20 @@ The first complete gate passed all 20 Electron suites and installer/package chec
 
 The first GitHub CI run also exposed an environment-dependent animation test: Windows runners prefer reduced motion, so the correct static state failed the animated-wave assertion. Explicit reduced-motion emulation reproduced the exact failure locally. The test now explicitly selects normal motion for wave/cycling assertions, then reduced motion to verify static letters/spinner and no phrase cycling. No app accessibility preference is overridden.
 
+Automated PR review flagged editor-selected reference text entering an unsent draft. The draft now separates its explanation request from a data-only policy and JSON object containing the path and selected text. A browser regression check preserves hostile end-marker/newline text inside that JSON object and confirms no provider request is sent. This is defense in depth, not deterministic prompt-injection containment; existing preview, user consent and tool permissions remain required.
+
+The motion-corrected CI run then exposed a preview test assuming a 550-pixel viewport on a smaller hosted Windows desktop. A 900 × 600 owner window reproduced the failure locally. Assertions now independently verify clamping to the owner's actual content rectangle and require hidden capture to preserve that exact size, visibility, bounds and debugger cleanup. The revised native preview suite passed locally.
+
+Final local evidence:
+
+- 663 unit/integration tests passed; formatting and production audit passed.
+- All 20 Electron UI suites passed. The subsequent reference/motion and constrained-window changes also passed their targeted work-improvements and native-preview suites.
+- Menu audit: 143 surfaces, 175 clicks, zero problems, approvals refused.
+- Installer build and verification passed, including fuses, ASAR integrity, required runtime files, private-path exclusions, pinned speech resources, notices and updater digest/size.
+- All four packaged smoke suites passed: PDF extraction, backup worker, installed-Node debugger and read-only Markdown vault.
+- Local installer: 381,469,618 bytes; SHA-256 `141a3d88bf71938146a2acfb98f1a4a7d57f00b08e436cf9f17565146c8d85aa`; SHA-512 `6hvhLOYt49AR0usp23DHQ0FSIZbXsKlD7QQMkDFDo5QhwJXCWQRp6qPnUqhp5cgc1R9NN0T9ZbrzPbrIf+jxNg==`.
+- Packaged `preload.js` and `project-editor-ui.js` match current source after line-ending normalization. Local gate logs and focused reproduction logs are retained under ignored `dist/`.
+
+The public tag workflow independently rebuilds the merged commit. Its installer can have a different digest from this local build; the published `latest.yml`, public installer size and digest must agree before publication is reported complete. Final PR CI is required to pass before merge/tagging.
+
 The live installed-app transition to the new public updater feed cannot be exercised before publication. Isolated update/recovery fixtures and packaged worker checks do not replace that live test, and no user installation is replaced during validation.
